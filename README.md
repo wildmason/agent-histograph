@@ -98,6 +98,28 @@ cargo tauri dev                              # run from source
 cargo tauri build                            # -> installer under src-tauri/target/release/bundle/
 ```
 
+**Day-to-day launcher.** Once built, start the board with the launcher at the
+repo root — it resolves the Python backend relative to itself (no hard-coded
+paths) and reads the `~/.agent-histograph` ledger:
+
+```sh
+run-histograph.cmd        # Windows  (double-click or run)
+./run-histograph.sh       # macOS / Linux
+```
+
+**Pointing at a different ledger.** Set `AGENTLOG_DIR` before launching. The
+clean way is a personal, **gitignored** `run-histograph.local.cmd` (or
+`.local.sh`) that sets it and delegates to the generic launcher:
+
+```bat
+@echo off
+set "AGENTLOG_DIR=%USERPROFILE%\.agentlog"
+call "%~dp0run-histograph.cmd"
+```
+
+`*.local.cmd` / `*.local.sh` are gitignored, so a per-machine ledger choice never
+lands in the repo.
+
 ## Configuration
 
 | Env var | Purpose | Default |

@@ -12,11 +12,20 @@ agentlog/desktop/ui/dist/
 # Node
 node_modules/
 
-# Captured ledger — never commit session content (lives in ~/.agentlog normally;
-# ignored here in case anyone runs from inside the repo or sets AGENTLOG_DIR=./)
+# Captured ledger — never commit session content (lives in ~/.agent-histograph
+# normally; ignored here in case anyone runs from inside the repo or sets
+# AGENTLOG_DIR=./). The legacy ~/.agentlog name is ignored too, belt-and-suspenders.
+.agent-histograph/
 .agentlog/
 *.jsonl
 hook.log
+
+# Personal launchers — point the board at a non-default ledger (e.g. ~/.agentlog).
+# The ledger choice is per-machine, so these stay out of the repo.
+run-histograph.local.cmd
+run-histograph.local.sh
+*.local.cmd
+*.local.sh
 
 # evidence / snapshots (not part of this extraction, but belt-and-suspenders)
 evidence/

@@ -1,0 +1,10 @@
+# Deterministic line endings across platforms (don't rely on per-clone core.autocrlf).
+* text=auto
+
+# Shell scripts MUST be LF even when checked out on Windows — bash fails on CRLF
+# with "bad interpreter: /usr/bin/env bash^M".
+*.sh text eol=lf
+
+# Windows batch/cmd MUST be CRLF.
+*.cmd text eol=crlf
+*.bat text eol=crlf
