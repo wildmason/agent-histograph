@@ -314,8 +314,10 @@ body {
 .hg-trow__status--success { color: var(--ae-color-success); }
 .hg-trow__status--muted { color: var(--ae-color-fg-subtle); }
 .hg-trow__age {
-  flex: 0 0 30px;
+  flex: 0 0 88px;
+  max-width: 100px;
   text-align: right;
+  white-space: nowrap;
   font-family: var(--hg-mono);
   font-size: var(--ae-font-size-xs);
 }
