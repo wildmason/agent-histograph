@@ -187,6 +187,24 @@ pub fn build_main_window(app: &AppHandle) -> tauri::Result<()> {
         .min_inner_size(320.0, 480.0)
         .always_on_top(true)
         .visible(false)
+        // Keep the board LIVE while it's pinned-but-unfocused/covered — its entire
+        // job is to be glanceable while you work in another window. By default
+        // WebView2 (Chromium) does two things that freeze a backgrounded window:
+        // (1) its native occlusion detection flags a covered window as `hidden`, and
+        //     the histograph's app.js deliberately `stopPolling()`s on
+        //     `document.hidden` (correct for a browser TAB, wrong for a pinned app);
+        // (2) it throttles/suspends timers in backgrounded/occluded renderers.
+        // Disabling `CalculateNativeWinOcclusion` (so `document.hidden` stays false
+        // when merely covered) + the backgrounding/throttling flags keeps the poll
+        // running. We must repeat wry's default `--disable-features=…` because this
+        // setter REPLACES it; CalculateNativeWinOcclusion is appended to that list
+        // (Chromium honors only the last `--disable-features`). No-op off Windows.
+        .additional_browser_args(
+            "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion \
+             --disable-background-timer-throttling \
+             --disable-backgrounding-occluded-windows \
+             --disable-renderer-backgrounding",
+        )
         .on_navigation(|url: &Url| {
             // Allow exactly our real origins: the bundled splash (tauri:// →
             // tauri.localhost on Windows) and the loopback sidecar (http 127.0.0.1).
