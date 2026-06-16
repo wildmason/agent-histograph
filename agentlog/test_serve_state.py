@@ -119,6 +119,32 @@ class TestStatusTransitions(unittest.TestCase):
         self.assertEqual(S.derive_status(before, _t("2026-06-10T10:01:00-04:00")), "needs-you")
         self.assertEqual(S.derive_status(after, _t("2026-06-10T10:07:00-04:00")), "active")
 
+    def test_needs_you_clears_when_agent_works_past_the_ask(self):
+        # A blocking ask, then the agent keeps working (tool_use + a later checkpoint).
+        # The human must have answered, so needs-you DROPS to active even without an
+        # explicit `agentlog ack` — before this fix the badge stuck forever.
+        cps = [_cp("s1", "2026-06-10T10:00:00-04:00", cid="chk_a",
+                   asks=[{"question": "which DB?", "blocking": True}]),
+               _cp("s1", "2026-06-10T10:08:00-04:00", cid="chk_b")]  # resumed, no ask
+        acts = [_act("stop_boundary", "s1", "2026-06-10T10:00:00-04:00"),
+                _act("tool_use", "s1", "2026-06-10T10:07:00-04:00", tool="Edit"),
+                _act("stop_boundary", "s1", "2026-06-10T10:08:00-04:00")]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        sess = led.session_state("s1", now_epoch=_t("2026-06-10T10:09:00-04:00"))
+        self.assertEqual(S.derive_status(sess, _t("2026-06-10T10:09:00-04:00")), "active")
+
+    def test_needs_you_persists_while_idle_on_the_ask(self):
+        # The blocking ask is the frontier; no work after it -> still needs-you long
+        # later. The fix must not "time out" a genuinely-unanswered ask.
+        cps = [_cp("s1", "2026-06-10T10:00:00-04:00", cid="chk_a",
+                   asks=[{"question": "which DB?", "blocking": True}])]
+        acts = [_act("stop_boundary", "s1", "2026-06-10T10:00:00-04:00")]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        sess = led.session_state("s1", now_epoch=_t("2026-06-10T10:30:00-04:00"))
+        self.assertEqual(S.derive_status(sess, _t("2026-06-10T10:30:00-04:00")), "needs-you")
+
     def test_stale_when_many_boundaries_since_checkpoint(self):
         cps = [_cp("s4", "2026-06-10T10:00:00-04:00")]
         acts = [_act("stop_boundary", "s4", t) for t in

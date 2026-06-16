@@ -208,10 +208,25 @@ class Ledger:
         last_activity_ts = max(all_ts) if all_ts else 0.0
         idle = now_epoch - last_activity_ts if last_activity_ts else 1e18
 
+        # A blocking ask is "worked past" once the agent does real work AFTER the
+        # checkpoint that raised it — the human must have unblocked it, even without an
+        # explicit `agentlog ack`. Work = a checkpoint or a non-meta activity
+        # (stop_boundary / tool_use); bounded by now so a future-stamped record can't
+        # retro-resolve a currently-open ask. This is why "needs you" no longer sticks
+        # forever after you answer and the agent resumes.
+        _NONWORK = ("session_end", "capture_attempt", "capture_result",
+                    "suspected_gap", "human_ack")
+        _work_ts = [parse_ts(c.get("captured_at")) for c in cps]
+        _work_ts += [parse_ts(a.get("ts")) for a in acts if a.get("type") not in _NONWORK]
+        _work_ts = [t for t in _work_ts if t and t <= now_epoch]
+        latest_work = max(_work_ts) if _work_ts else 0.0
+
         # needs-Matt (§11): blocking asks, un-weighed material decisions, unacked gaps.
         # Each item carries a stable `ack_id` so `agentlog ack <id>` can retire it.
         needs = []
         for c in cps:
+            if parse_ts(c.get("captured_at")) < latest_work:
+                continue   # agent worked past this checkpoint -> its asks aren't blocking
             for ask in (c.get("asks") or []):
                 if isinstance(ask, dict) and ask.get("blocking"):
                     needs.append({"kind": "blocking_ask", "detail": clean(ask.get("question"), 200),
