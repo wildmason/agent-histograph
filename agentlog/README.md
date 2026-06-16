@@ -1,19 +1,19 @@
 # agentlog — Gate-B Read Surface
 
 The cheap local read surface the **recall-aware kill experiment (§6.2)** runs against.
-It reads the hook-written JSONL at `~/.agentlog/` and renders a flat operational
+It reads the hook-written JSONL at `~/.agent-histograph/` and renders a flat operational
 digest — `agentlog since` / a regenerated Markdown digest, the spec's **default**
 read surface (the Bridge widget is the explicit fallback, not this).
 
 This is the **Gate-B setup** deliverable bundle (§6.0 allowed work). It is the
 consumer side of the [`../capture-proof/`](../capture-proof/) producer (the Stop /
-PreCompact / SessionStart hooks), reading the same `~/.agentlog/*.jsonl` they write.
+PreCompact / SessionStart hooks), reading the same `~/.agent-histograph/*.jsonl` they write.
 
 ## Scope guard (§6.0)
 
 Allowed pre-Gate-B, and this stays inside the envelope:
 
-- ✅ reads only `~/.agentlog/*.jsonl` — re-read from scratch every run
+- ✅ reads only `~/.agent-histograph/*.jsonl` — re-read from scratch every run
 - ✅ no durable **SQLite** store, no **MCP** server, no **daemon**, no **TUI/watch**
 - ✅ no Bridge polish, no multi-host abstraction
 - ✅ all four deliverables are plain Python scripts, stdlib-only (no third-party deps)
@@ -60,7 +60,7 @@ agentlog audit <transcript.jsonl> --diff git.diff --commands cmds.log
 agentlog audit --sample 5               # sample N transcripts AT RANDOM within a window (§6.3 N=5)
 agentlog audit --sample 5 --since 2026-06-01 --until 2026-06-09  # explicit window (default: now-7d → now)
 
-agentlog snapshot [--dest DIR]          # copy ~/.agentlog/*.jsonl into <repo>/evidence/ for the gate
+agentlog snapshot [--dest DIR]          # copy ~/.agent-histograph/*.jsonl into <repo>/evidence/ for the gate
 
 agentlog serve [--port 8080] [--host 127.0.0.1] [--no-browser]   # the histograph web UI (Epic→Story→Task)
 
@@ -73,7 +73,7 @@ agentlog epic list                                 # epics with DERIVED done/tot
 ### Histograph (`agentlog serve`)
 
 The **interactive surface** — a portrait, local web UI that keeps you oriented across several
-concurrent agent terminals during long sessions. It renders the same `~/.agentlog` ledger as a
+concurrent agent terminals during long sessions. It renders the same `~/.agent-histograph` ledger as a
 **3-tier hierarchy** (Terminal → **Epic** → **Story** → **Task**): a triage status mosaic of all
 terminals plus a focused **trail** for one. Design brief: [`../histograph-ux-spec.md`](../histograph-ux-spec.md);
 build contract: [`HISTOGRAPH-BUILD-PLAN.md`](HISTOGRAPH-BUILD-PLAN.md).
@@ -92,7 +92,7 @@ python agentlog.py serve        # → http://127.0.0.1:8080  (use the wrapper `a
   value (status, freshness, story-state, roadmap progress, reversal detection, integrity) so it is unit-
   tested in Python; the JS is a thin renderer of `GET /api/state`.
 - **Epic + roadmap = a human-declared layer.** The initiative tier doesn't fall out of code decisions, so
-  it's declared with `agentlog epic add/link` (stored in `~/.agentlog/epics.json`); `done`/`total`/roadmap
+  it's declared with `agentlog epic add/link` (stored in `~/.agent-histograph/epics.json`); `done`/`total`/roadmap
   progress are **derived** from the linked stories' live states, never stored. Auto extraction from scoping
   conversations is deferred — until you `epic confirm` a name it carries the `reconstructed` (◇) integrity
   glyph. With no epic declared, the focus view **degrades gracefully** to Story → Task.
@@ -146,7 +146,7 @@ had no instrumentation at all:
 
 ### Snapshot (evidence preservation)
 
-`agentlog snapshot [--dest DIR]` copies every `~/.agentlog/*.jsonl` into
+`agentlog snapshot [--dest DIR]` copies every `~/.agent-histograph/*.jsonl` into
 `<repo-root>/evidence/agentlog-<YYYYMMDD-HHMMSS>/` (default) and prints the destination,
 preserving the JSONL substrate for the gate decision.
 

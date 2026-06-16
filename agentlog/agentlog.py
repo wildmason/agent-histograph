@@ -7,7 +7,7 @@ This is the standalone "agent histograph" extraction: ONLY the live-board surfac
 apparatus from the original control-plane project (status/since/brief/audit/
 question/experiment-report/snapshot/health-drafts/…) is deliberately NOT here.
 
-Every request re-reads `~/.agentlog/*.jsonl` from scratch (stateless, like the
+Every request re-reads `~/.agent-histograph/*.jsonl` from scratch (stateless, like the
 original CLI); ALL derivation lives in serve_state / serve_epics. This file is
 just argument parsing + I/O. The desktop wrapper (`desktop/`) spawns
 `agentlog.py serve --port 0 --no-browser` and navigates a frameless webview to
@@ -17,7 +17,7 @@ of truth.
   serve                      run the histograph HTTP server (the live board)
   epic add|link|confirm|list manage the human-declared epic roadmap (epics.json)
 
-Data dir: `~/.agentlog` by default; override with the `AGENTLOG_DIR` env var.
+Data dir: `~/.agent-histograph` by default; override with the `AGENTLOG_DIR` env var.
 """
 import os
 import sys
@@ -41,7 +41,7 @@ def _fmt_ts(epoch):
 def cmd_serve(args):
     """Start the histograph: a local HTTP server that renders the live workstream
     board. Reuses the read surface verbatim (every request re-reads
-    ~/.agentlog/*.jsonl); ALL derivation lives in serve_state, so this is just I/O."""
+    ~/.agent-histograph/*.jsonl); ALL derivation lives in serve_state, so this is just I/O."""
     return SH.run_server(port=args.port, host=args.host,
                          open_browser=not args.no_browser)
 
@@ -109,7 +109,7 @@ def cmd_epic_list(args):
 def build_parser():
     p = argparse.ArgumentParser(
         prog="agentlog",
-        description="Agent histograph — the live workstream command center over ~/.agentlog JSONL")
+        description="Agent histograph — the live workstream command center over ~/.agent-histograph JSONL")
     sub = p.add_subparsers(dest="cmd")
 
     s = sub.add_parser("serve", help="run the histograph: live workstream board in the browser")

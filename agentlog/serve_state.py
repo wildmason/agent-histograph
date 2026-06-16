@@ -19,7 +19,7 @@ spec's wire shape:
 FAIL-OPEN is a hard contract requirement: a single malformed session must drop
 that lane and keep the rest, never raise. Every per-terminal derivation is wrapped.
 
-Contract field <- real ledger field mapping (verified against ~/.agentlog/*.jsonl):
+Contract field <- real ledger field mapping (verified against ~/.agent-histograph/*.jsonl):
   provider        <- checkpoint/activity `host` (claude-code|cli|codex|gemini)
   project         <- Ledger.project_of (checkpoint `project` / cwd basename)
   status          <- Ledger.session_state.status + §4 ack lifecycle + freshness

@@ -26,7 +26,7 @@ it. The research/gate/audit apparatus is intentionally left out.
 Three layers, one data source:
 
 1. **Capture** — Claude Code lifecycle hooks (`capture-proof/`) append your
-   session activity + decision checkpoints to `~/.agentlog/*.jsonl`.
+   session activity + decision checkpoints to `~/.agent-histograph/*.jsonl`.
 2. **Serve** — a tiny Python stdlib HTTP server (`agentlog/agentlog.py serve`)
    re-reads that ledger on every request and derives the board state. All logic
    lives here; it is the single source of truth.
@@ -102,7 +102,7 @@ cargo tauri build                            # -> installer under src-tauri/targ
 
 | Env var | Purpose | Default |
 |---|---|---|
-| `AGENTLOG_DIR` | Where the ledger lives / is read from | `~/.agentlog` |
+| `AGENTLOG_DIR` | Where the ledger lives / is read from | `~/.agent-histograph` |
 | `AGENTLOG_HOME` | Dir holding `agentlog.py` — **required for an installed desktop build** (point it at `<this repo>/agentlog`) | dev-relative to the crate |
 | `AGENTLOG_PYTHON` | Explicit Python interpreter for the desktop app to spawn | auto-probes `py -3` / `python` / `python3` |
 | `AGENTLOG_CAPTURE_ACTIVE` | `1` arms capture for the session | unset (passive only) |
@@ -129,7 +129,7 @@ agent-histograph/
 │   ├── serve_http.py         # stdlib HTTP server (+ CSP/security headers)
 │   ├── serve_state.py        # pure derivation of /api/state (the board)
 │   ├── serve_epics.py        # epics.json load/derive (the roadmap band)
-│   ├── agentlog_read.py      # the read surface over ~/.agentlog/*.jsonl
+│   ├── agentlog_read.py      # the read surface over ~/.agent-histograph/*.jsonl
 │   ├── histograph/           # the page: thin renderer on vendored Aegis v2 (self-contained)
 │   ├── test_serve_*.py       # view tests (stdlib unittest)
 │   └── desktop/              # the frameless Tauri 2 window
@@ -145,7 +145,7 @@ Run the view tests: `python -m unittest discover -s agentlog -p 'test_*.py'`.
 ## Notes
 
 - Keep this repo **private** — the captured ledger contains your session content.
-  `~/.agentlog` lives in your home dir and is never part of the repo (and is
+  `~/.agent-histograph` lives in your home dir and is never part of the repo (and is
   gitignored if it ever appears here).
 - The vendored Aegis v2 assets (`agentlog/histograph/static/aegis/`) are checked
   in so the board is self-contained — you do not need the Aegis source to run it.

@@ -2,7 +2,7 @@
 """
 install_hooks.py — register the agent-histograph capture hooks into Claude Code.
 
-The histograph board is a window onto the `~/.agentlog/*.jsonl` ledger; this
+The histograph board is a window onto the `~/.agent-histograph/*.jsonl` ledger; this
 installer wires the producer that fills it. It merges five hooks
 (SessionStart / Stop / PreCompact / SessionEnd / PostToolUse) into your Claude
 Code settings, pointing them at the scripts in THIS directory — so the paths are

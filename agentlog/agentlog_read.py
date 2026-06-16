@@ -3,7 +3,7 @@
 Gate-B read surface — the JSONL reader, payload sanitizer, workstream-state
 derivation, and health-page-draft mapping that `agentlog` (the CLI) renders.
 
-Scope guard (§6.0): this reads only `~/.agentlog/*.jsonl`. NO durable SQLite, NO
+Scope guard (§6.0): this reads only `~/.agent-histograph/*.jsonl`. NO durable SQLite, NO
 MCP server, NO daemon — those are forbidden before Gate B passes. Each CLI run
 re-reads the JSONL from scratch; that is deliberately the whole persistence layer
 for the experiment.

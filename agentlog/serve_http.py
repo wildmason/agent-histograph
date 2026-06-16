@@ -3,7 +3,7 @@
 serve_http — the stdlib http.server layer of `agentlog serve` (the histograph).
 
 NO business logic lives here. Every request re-reads the ledger + epics from scratch
-(stateless, exactly like the CLI: each `agentlog` run re-reads ~/.agentlog/*.jsonl)
+(stateless, exactly like the CLI: each `agentlog` run re-reads ~/.agent-histograph/*.jsonl)
 and delegates ALL derivation to serve_state / serve_epics. The handler only routes,
 serves the vendored static assets + the page shell, and sets status codes / content
 types.

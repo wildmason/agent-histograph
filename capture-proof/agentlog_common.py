@@ -9,13 +9,17 @@ Design invariants (from the spec):
   AGENTLOG_CAPTURE_ACTIVE=1 is set in that session's environment. Installed but
   un-armed, the hooks only passively log — so wiring them globally cannot disrupt
   your normal sessions. Arm it only in the controlled fixture terminal.
-- JSONL SUBSTRATE ONLY. Everything writes to ~/.agentlog/*.jsonl. No SQLite, no
-  MCP, no daemon (those are forbidden pre-Gate-B, §6.0).
+- JSONL SUBSTRATE ONLY. Everything writes to ~/.agent-histograph/*.jsonl. No
+  SQLite, no MCP, no daemon (those are forbidden pre-Gate-B, §6.0).
+- OWN LEDGER NAMESPACE. histograph captures into ~/.agent-histograph/ — its own
+  directory, fully decoupled from the agentlog-experiments ledger (~/.agentlog/).
+  Override the location with the AGENTLOG_DIR env var (shared override name; the
+  decoupling is provided by the distinct default, not the var name).
 """
 import os, sys, json, time, re
 
 HOME = os.path.expanduser("~")
-AGENTLOG_DIR = os.environ.get("AGENTLOG_DIR", os.path.join(HOME, ".agentlog"))
+AGENTLOG_DIR = os.environ.get("AGENTLOG_DIR", os.path.join(HOME, ".agent-histograph"))
 CHECKPOINTS = os.path.join(AGENTLOG_DIR, "checkpoints.jsonl")
 ACTIVITY = os.path.join(AGENTLOG_DIR, "activity.jsonl")
 STATE_DIR = os.path.join(AGENTLOG_DIR, "state")

@@ -12,7 +12,7 @@ It reads the just-completed transcript, runs a headless `claude -p` over the mes
 SINCE the last capture to produce the same structured checkpoint the inline reprompt
 would have elicited (the §6.2.1 Part-2 content pilot validated this on fresh,
 uncompacted material — which is exactly what a live boundary segment is), and appends
-it to ~/.agentlog/checkpoints.jsonl. On a PreCompact trigger with no meaningful
+it to ~/.agent-histograph/checkpoints.jsonl. On a PreCompact trigger with no meaningful
 checkpoint, it writes the suspected-gap tripwire itself (so the §11 backstop signal is
 preserved without a false positive when a capture does succeed).
 

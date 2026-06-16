@@ -1,5 +1,5 @@
 {
-  "_comment": "Install as ~/.codex/hooks.json. New/changed hooks must be trusted in Codex with /hooks. Codex 0.137 does not pass shell_environment_policy.set to hook subprocesses, so persistent arming uses ~/.agentlog/codex.capture-active (delete that file to disarm after the Gate-B experiment). AGENTLOG_DISABLE=1 still no-ops everything.",
+  "_comment": "Install as ~/.codex/hooks.json. New/changed hooks must be trusted in Codex with /hooks. Codex 0.137 does not pass shell_environment_policy.set to hook subprocesses, so persistent arming uses ~/.agent-histograph/codex.capture-active (delete that file to disarm after the Gate-B experiment). AGENTLOG_DISABLE=1 still no-ops everything.",
   "hooks": {
     "SessionStart": [
       {
