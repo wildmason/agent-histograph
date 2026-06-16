@@ -214,5 +214,42 @@ class TestConfirm(_TmpEnv):
         self.assertEqual(E.load_focus(), "term-123")
 
 
+class TestDismissalPersistence(_TmpEnv):
+    def test_missing_file_is_empty(self):
+        # fail-open: no dismissals file -> empty map, never an error.
+        self.assertEqual(E.load_dismissed(), {})
+
+    def test_dismiss_and_load_roundtrip(self):
+        E.dismiss_terminal("term-42", 1718200000.0)
+        self.assertEqual(E.load_dismissed(), {"term-42": 1718200000.0})
+
+    def test_dismiss_is_per_terminal(self):
+        E.dismiss_terminal("term-1", 100.0)
+        E.dismiss_terminal("term-2", 200.0)
+        self.assertEqual(E.load_dismissed(), {"term-1": 100.0, "term-2": 200.0})
+
+    def test_redismiss_refreshes_the_timestamp(self):
+        E.dismiss_terminal("term-1", 100.0)
+        E.dismiss_terminal("term-1", 999.0)
+        self.assertEqual(E.load_dismissed(), {"term-1": 999.0})
+
+    def test_undismiss_removes_only_that_lane(self):
+        E.dismiss_terminal("term-1", 100.0)
+        E.dismiss_terminal("term-2", 200.0)
+        E.undismiss_terminal("term-1")
+        self.assertEqual(E.load_dismissed(), {"term-2": 200.0})
+
+    def test_undismiss_unknown_is_a_noop(self):
+        E.dismiss_terminal("term-2", 200.0)
+        E.undismiss_terminal("term-nope")
+        self.assertEqual(E.load_dismissed(), {"term-2": 200.0})
+
+    def test_corrupt_values_are_dropped_not_fatal(self):
+        # a non-numeric timestamp is skipped on load; the rest survive.
+        with open(E.dismissed_path(), "w", encoding="utf-8") as f:
+            json.dump({"dismissed": {"term-good": 5.0, "term-bad": "oops"}}, f)
+        self.assertEqual(E.load_dismissed(), {"term-good": 5.0})
+
+
 if __name__ == "__main__":
     unittest.main()

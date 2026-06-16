@@ -14,7 +14,9 @@ Routes:
   GET  /api/epics        -> {"epics": serve_epics.list_epics(...)}    (application/json)
   GET  /app.css|/app.js|/render.js|/theme.js|/markers.css|/index.html -> histograph/<file>
   GET  /static/**        -> vendored aegis assets, PATH-TRAVERSAL GUARDED
-  POST /api/focus        -> persist {"terminalId": ...}; 200 {"ok": true}
+  POST /api/focus        -> persist focus {"terminalId": ...}; 200 {"ok": true}
+  POST /api/dismiss      -> close out a lane (hidden until new work); 200 {"ok": true}
+  POST /api/undismiss    -> restore a dismissed lane immediately; 200 {"ok": true}
   *                      -> 404 {"error": "not found"}
 
 Path-traversal guard: a /static/** request is resolved with os.path.realpath and
@@ -86,7 +88,9 @@ def _state_payload(now_epoch=None):
         led = R.Ledger.from_dir(A_dir())
         epics = E.list_epics(E.load(), led, now_epoch=now_epoch)
         focus_tid = E.load_focus()
-        return S.build_state(led, epics, now_epoch=now_epoch, focus_terminal_id=focus_tid)
+        dismissed = E.load_dismissed()
+        return S.build_state(led, epics, now_epoch=now_epoch,
+                             focus_terminal_id=focus_tid, dismissed=dismissed)
     except Exception:
         # per-lane bad data is already isolated inside build_state (it drops one lane);
         # reaching here means the ENVELOPE scaffolding itself threw — a real bug, not a
@@ -223,16 +227,20 @@ class HistographHandler(BaseHTTPRequestHandler):
         return self.do_GET()
 
     # ---- POST ----
+    # state-mutating POST routes and the persistence action each performs. All share
+    # the same CSRF/origin guard, body cap, and {"terminalId": "..."} payload shape.
+    _POST_ROUTES = ("/api/focus", "/api/dismiss", "/api/undismiss")
+
     def do_POST(self):
         parsed = urlparse(self.path)
         path = unquote(parsed.path)
-        if path != "/api/focus":
+        if path not in self._POST_ROUTES:
             return self._not_found()
-        # reject cross-site writes: /api/focus is an unauthenticated state-mutating
-        # endpoint on a localhost bind, so any local web page could otherwise
-        # fetch()-flip the persisted focus lane via CSRF. An Origin from anything but
-        # our own loopback origins is forbidden; same-origin requests (and non-browser
-        # clients like curl/the test harness, which send no Origin) are allowed.
+        # reject cross-site writes: these are unauthenticated state-mutating endpoints
+        # on a localhost bind, so any local web page could otherwise fetch()-flip the
+        # persisted focus/dismissal state via CSRF. An Origin from anything but our own
+        # loopback origins is forbidden; same-origin requests (and non-browser clients
+        # like curl/the test harness, which send no Origin) are allowed.
         origin = self.headers.get("Origin")
         if origin and not origin.startswith(("http://127.0.0.1", "http://localhost",
                                              "http://[::1]")):
@@ -256,7 +264,15 @@ class HistographHandler(BaseHTTPRequestHandler):
         tid = data.get("terminalId") if isinstance(data, dict) else None
         if not isinstance(tid, str) or not tid:
             return self._send_json({"error": "terminalId required"}, status=400)
-        E.save_focus(tid)
+
+        if path == "/api/focus":
+            E.save_focus(tid)
+        elif path == "/api/dismiss":
+            # stamp the dismissal now; serve_state hides the lane until it logs work
+            # newer than this (the "returns on new work" contract).
+            E.dismiss_terminal(tid, time.time())
+        else:  # /api/undismiss — restore a lane immediately.
+            E.undismiss_terminal(tid)
         return self._send_json({"ok": True, "terminalId": tid})
 
     # ---- static with the path-traversal guard ----

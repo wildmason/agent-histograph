@@ -322,6 +322,56 @@ body {
   font-size: var(--ae-font-size-xs);
 }
 
+/* close-out (×) — a row-level action sibling of the lane button. The row keeps
+   the full set of columns; the × rides alongside in a fixed-width slot, and the
+   header carries a matching spacer so columns stay aligned. Width + the wrap gap
+   are the two values the header/row alignment math depends on. */
+.hg-trow-wrap {
+  display: flex;
+  align-items: stretch;
+  gap: var(--ae-space-2);
+}
+.hg-trow-wrap .hg-trow {
+  flex: 1 1 auto;
+}
+.hg-trow__close,
+.hg-trow__close-spacer {
+  flex: 0 0 20px;
+}
+.hg-trow__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ae-color-fg-subtle);
+  font-size: var(--ae-font-size-lg);
+  line-height: 1;
+  cursor: pointer;
+  border-radius: var(--ae-radius-sm);
+  opacity: 0;
+  transition: opacity var(--ae-duration-fast) var(--ae-easing-ease-out),
+              color var(--ae-duration-fast) var(--ae-easing-ease-out),
+              background var(--ae-duration-fast) var(--ae-easing-ease-out);
+}
+/* reveal the × only when the lane is hovered or holds focus — keeps the board
+   calm at rest, surfaces the affordance exactly when the eye is on the lane. */
+.hg-trow-wrap:hover .hg-trow__close,
+.hg-trow-wrap:focus-within .hg-trow__close {
+  opacity: 1;
+}
+.hg-trow__close:hover {
+  background: var(--ae-color-hover-overlay);
+  color: var(--ae-color-danger);
+}
+.hg-trow__close:focus-visible {
+  opacity: 1;
+  outline: var(--ae-focus-ring-width) var(--ae-focus-ring-style) var(--ae-color-focus-ring);
+  outline-offset: calc(-1 * var(--ae-focus-ring-width));
+}
+
 /* quiet (stale / parked / done) lanes read dimmer. */
 .hg-trow--quiet .hg-trow__focus,
 .hg-trow--quiet .hg-trow__id {

@@ -42,6 +42,18 @@ STALE_SECS = 1800        # idle beyond this -> the lane reads danger/stale
 MIDTURN_SECS = 600       # idle under this -> "mid-turn" (the agent is actively working)
 LIVE_WINDOW_SECS = 86400 # a session older than this is no longer a live lane
 
+# Lifecycle / meta activity records that are NOT real work. They must not reset a
+# lane's freshness clock or keep it "live": a session_end fires its own ts ≈ now,
+# so without this a JUST-CLOSED lane would read as the freshest on the board (idle
+# ≈ 0 → "mid-turn") and linger a full LIVE_WINDOW before aging out.
+_META_ACT_TYPES = frozenset((
+    "session_end", "capture_attempt", "capture_result", "suspected_gap",
+))
+# session_end `source`/`reason` values that mean the human actually EXITED the
+# session (→ auto-drop the lane). "clear" is a context reset where the same
+# terminal keeps working, so it is deliberately NOT terminal.
+_TERMINAL_END_SOURCES = frozenset(("prompt_input_exit", "logout", "other"))
+
 # decision classes that warrant a "milestone" marker + needs-attention weight
 _HIGH_CLASSES = {"billing", "license", "auth", "migration", "data_loss"}
 
@@ -726,21 +738,81 @@ def session_has_substance(ledger, sid):
     return any(isinstance(a, dict) and a.get("type") == "tool_use" for a in acts)
 
 
-def live_sessions(ledger, now_epoch):
-    """Session ids with activity inside LIVE_WINDOW_SECS AND real substance,
-    newest-activity FIRST. These are the lanes the board renders; older sessions are
-    history, and empty/aborted sessions (e.g. a scheduled run that errored out before
-    acting) are noise, not lanes."""
+def last_work_ts(ledger, sid):
+    """Newest timestamp of REAL work for a session — tool_use, stop_boundary, any
+    non-meta activity, or a checkpoint. Excludes lifecycle/meta records (session_end,
+    capture_*, suspected_gap) so closing a session (which writes a session_end at
+    ≈now) can't masquerade as fresh activity. Fail-open to 0.0."""
+    ts = 0.0
+    try:
+        for a in ledger._acts(sid):
+            if isinstance(a, dict) and a.get("type") not in _META_ACT_TYPES:
+                ts = max(ts, R.parse_ts(a.get("ts")))
+    except Exception:
+        pass
+    try:
+        for c in ledger._cps(sid):
+            if isinstance(c, dict):
+                ts = max(ts, R.parse_ts(c.get("captured_at")))
+    except Exception:
+        pass
+    return ts
+
+
+def session_ended_at(ledger, sid):
+    """Epoch of a TERMINAL session_end (the human exited) with no real work after
+    it, else None. A `clear` end (context reset) is never terminal; a session_end
+    followed by fresh work has resumed and is not ended."""
+    try:
+        acts = ledger._acts(sid)
+    except Exception:
+        return None
+    ends = [R.parse_ts(a.get("ts")) for a in acts
+            if isinstance(a, dict) and a.get("type") == "session_end"
+            and (a.get("source") or a.get("reason")) in _TERMINAL_END_SOURCES]
+    if not ends:
+        return None
+    last_end = max(ends)
+    # resumed since the close (real work after it)? then it's live again.
+    return last_end if last_end >= last_work_ts(ledger, sid) else None
+
+
+def dismissed_at(dismissed, term_id):
+    """Epoch a lane was manually dismissed, or None. `dismissed` maps a stable
+    terminal id (terminal_id(sid)) → dismissed-at epoch. Fail-open to None."""
+    if not dismissed:
+        return None
+    try:
+        v = dismissed.get(term_id)
+        return float(v) if v is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def live_sessions(ledger, now_epoch, dismissed=None):
+    """Session ids the board renders, newest-WORK first. A lane is live iff it has
+    real substance, its most recent *work* is inside LIVE_WINDOW_SECS, the human has
+    not exited the session (a terminal session_end auto-drops it), and it has not
+    been manually dismissed without doing new work since. Older sessions are history;
+    empty/aborted sessions (e.g. a scheduled run that errored before acting) are
+    noise, not lanes."""
     now = time.time() if now_epoch is None else now_epoch
     rows = []
     for sid in ledger.session_ids():
         try:
-            sess = ledger.session_state(sid, now_epoch=now)
-            last = sess.get("last_activity_ts") or 0.0
+            work = last_work_ts(ledger, sid)
         except Exception:
             continue
-        if last and (now - last) <= LIVE_WINDOW_SECS and session_has_substance(ledger, sid):
-            rows.append((last, sid))
+        if not work or (now - work) > LIVE_WINDOW_SECS:
+            continue
+        if not session_has_substance(ledger, sid):
+            continue
+        if session_ended_at(ledger, sid) is not None:
+            continue                                    # human exited → auto-drop
+        d = dismissed_at(dismissed, terminal_id(sid))
+        if d is not None and work <= d:
+            continue                                    # dismissed, no new work since
+        rows.append((work, sid))
     rows.sort(key=lambda r: r[0], reverse=True)
     return [sid for _, sid in rows]
 
@@ -752,7 +824,11 @@ def _build_terminal(ledger, sid, epics, now_epoch):
     """One terminal lane. Raises on a corrupt session so build_state can drop it."""
     sess = ledger.session_state(sid, now_epoch=now_epoch)
     status = derive_status(sess, now_epoch)
-    label, tone = derive_freshness(sess, now_epoch)
+    # Freshness reflects real WORK, not lifecycle/meta records: session_state's
+    # last_activity_ts counts a session_end / capture_* / suspected_gap (which fire
+    # at ≈now), so a cleared-but-idle lane would otherwise read "mid-turn" forever.
+    label, tone = derive_freshness(
+        {**sess, "last_activity_ts": last_work_ts(ledger, sid)}, now_epoch)
     tone = reconcile_tone(status, tone)
     latest = sess.get("last_checkpoint") or {}
     story_title = ""
@@ -874,21 +950,24 @@ def _build_focus(ledger, focus_sid, epics, now_epoch):
         return None
 
 
-def build_state(ledger, epics, *, now_epoch=None, focus_terminal_id=None):
-    """Assemble the FROZEN /api/state dict. Pure over (ledger, epics, now_epoch).
+def build_state(ledger, epics, *, now_epoch=None, focus_terminal_id=None, dismissed=None):
+    """Assemble the FROZEN /api/state dict. Pure over (ledger, epics, now_epoch,
+    dismissed).
 
     Degraded/cold shapes are part of the contract:
       - cold: no live sessions      -> terminals:[] + focus:null
       - no-epic: focused standalone  -> focus.epic:null + single-element stories[]
       - live-but-empty: focus.activeStory.tasks:[]
-    Fail-open: a per-terminal derivation exception drops that lane only."""
+    `dismissed` maps a terminal id → dismissed-at epoch (manual close-out); such
+    lanes are hidden until they do new work. Fail-open: a per-terminal derivation
+    exception drops that lane only."""
     now = time.time() if now_epoch is None else now_epoch
     epics = epics if isinstance(epics, list) else []
 
     terminals = []
     sess_by_term = {}
     sid_by_term = {}
-    for sid in live_sessions(ledger, now):
+    for sid in live_sessions(ledger, now, dismissed):
         try:
             term, sess = _build_terminal(ledger, sid, epics, now)
         except Exception:

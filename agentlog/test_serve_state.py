@@ -1156,5 +1156,100 @@ class TestParseTsRobustness(unittest.TestCase):
         self.assertEqual(R.parse_ts(None), 0.0)
 
 
+# --------------------------------------------------------------------------- #
+# session close-out: a terminal session_end auto-drops a lane; a manual dismissal
+# hides it until the session does new work; lifecycle/meta records never read fresh.
+# --------------------------------------------------------------------------- #
+class TestSessionCloseOut(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def _state(self, cps, acts, *, now, dismissed=None):
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        return S.build_state(led, _epics([]), now_epoch=_t(now), dismissed=dismissed)
+
+    def _projects(self, state):
+        return {t["project"] for t in state["terminals"]}
+
+    # --- auto-drop on terminal session_end ---------------------------------- #
+    def test_terminal_session_end_drops_the_lane(self):
+        # work at 10:00, the human exits the session at 10:05 -> the lane is gone.
+        cps = [_cp("s1", "2026-06-10T10:00:00-04:00", project="Mortar")]
+        acts = [_act("tool_use", "s1", "2026-06-10T10:00:00-04:00", tool="Edit"),
+                _act("session_end", "s1", "2026-06-10T10:05:00-04:00",
+                     source="prompt_input_exit")]
+        state = self._state(cps, acts, now="2026-06-10T10:06:00-04:00")
+        self.assertEqual(state["terminals"], [])
+
+    def test_clear_end_is_not_a_close(self):
+        # /clear is a context reset, not a terminal exit -> the lane stays.
+        cps = [_cp("s1", "2026-06-10T10:00:00-04:00", project="Mortar")]
+        acts = [_act("tool_use", "s1", "2026-06-10T10:00:00-04:00", tool="Edit"),
+                _act("session_end", "s1", "2026-06-10T10:05:00-04:00", source="clear")]
+        state = self._state(cps, acts, now="2026-06-10T10:06:00-04:00")
+        self.assertIn("Mortar", self._projects(state))
+
+    def test_resumed_after_close_is_live_again(self):
+        # exit at 10:05, then real work at 10:10 -> the session resumed; show it.
+        cps = [_cp("s1", "2026-06-10T10:00:00-04:00", project="Mortar")]
+        acts = [_act("tool_use", "s1", "2026-06-10T10:00:00-04:00", tool="Edit"),
+                _act("session_end", "s1", "2026-06-10T10:05:00-04:00",
+                     source="prompt_input_exit"),
+                _act("tool_use", "s1", "2026-06-10T10:10:00-04:00", tool="Bash")]
+        state = self._state(cps, acts, now="2026-06-10T10:11:00-04:00")
+        self.assertIn("Mortar", self._projects(state))
+
+    # --- freshness reflects WORK, not lifecycle/meta records ---------------- #
+    def test_last_work_ts_ignores_meta_records(self):
+        _write(self.tmp,
+               [_cp("s1", "2026-06-10T10:00:00-04:00")],
+               [_act("tool_use", "s1", "2026-06-10T10:00:00-04:00", tool="Edit"),
+                _act("session_end", "s1", "2026-06-10T10:30:00-04:00", source="clear"),
+                _act("capture_result", "s1", "2026-06-10T10:30:05-04:00")])
+        led = R.Ledger.from_dir(self.tmp)
+        self.assertEqual(S.last_work_ts(led, "s1"), _t("2026-06-10T10:00:00-04:00"))
+
+    def test_meta_records_do_not_make_an_idle_lane_read_fresh(self):
+        # last real work 60min ago; a clear-end + capture meta fire at ~now. The lane
+        # must read its true age (danger), never "mid-turn".
+        cps = [_cp("s1", "2026-06-10T10:00:00-04:00", project="Mortar")]
+        acts = [_act("tool_use", "s1", "2026-06-10T10:00:00-04:00", tool="Edit"),
+                _act("session_end", "s1", "2026-06-10T11:00:00-04:00", source="clear"),
+                _act("capture_attempt", "s1", "2026-06-10T11:00:01-04:00"),
+                _act("capture_result", "s1", "2026-06-10T11:00:05-04:00")]
+        state = self._state(cps, acts, now="2026-06-10T11:01:00-04:00")
+        term = next(t for t in state["terminals"] if t["project"] == "Mortar")
+        self.assertNotEqual(term["freshnessLabel"], "mid-turn")
+        self.assertEqual(term["freshnessTone"], "danger")
+
+    # --- manual dismissal (returns on new work) ----------------------------- #
+    def test_dismissed_lane_is_hidden(self):
+        cps = [_cp("s1", "2026-06-10T10:00:00-04:00", project="Mortar")]
+        acts = [_act("tool_use", "s1", "2026-06-10T10:00:00-04:00", tool="Edit")]
+        # dismissed AFTER the last work -> hidden.
+        state = self._state(cps, acts, now="2026-06-10T10:06:00-04:00",
+                            dismissed={S.terminal_id("s1"): _t("2026-06-10T10:05:00-04:00")})
+        self.assertEqual(state["terminals"], [])
+
+    def test_dismissed_lane_returns_on_new_work(self):
+        cps = [_cp("s1", "2026-06-10T10:00:00-04:00", project="Mortar")]
+        acts = [_act("tool_use", "s1", "2026-06-10T10:00:00-04:00", tool="Edit"),
+                _act("tool_use", "s1", "2026-06-10T10:10:00-04:00", tool="Bash")]
+        # dismissed at 10:05, but new work at 10:10 -> back on the board.
+        state = self._state(cps, acts, now="2026-06-10T10:11:00-04:00",
+                            dismissed={S.terminal_id("s1"): _t("2026-06-10T10:05:00-04:00")})
+        self.assertIn("Mortar", self._projects(state))
+
+    def test_dismissal_is_scoped_to_its_own_lane(self):
+        cps = [_cp("s1", "2026-06-10T10:00:00-04:00", project="Mortar"),
+               _cp("s2", "2026-06-10T10:01:00-04:00", project="Bridge")]
+        acts = [_act("tool_use", "s1", "2026-06-10T10:00:00-04:00", tool="Edit"),
+                _act("tool_use", "s2", "2026-06-10T10:01:00-04:00", tool="Edit")]
+        state = self._state(cps, acts, now="2026-06-10T10:06:00-04:00",
+                            dismissed={S.terminal_id("s1"): _t("2026-06-10T10:05:00-04:00")})
+        self.assertEqual(self._projects(state), {"Bridge"})
+
+
 if __name__ == "__main__":
     unittest.main()

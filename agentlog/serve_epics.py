@@ -45,6 +45,10 @@ def focus_path():
     return os.path.join(A.AGENTLOG_DIR, "state", "histograph-focus.json")
 
 
+def dismissed_path():
+    return os.path.join(A.AGENTLOG_DIR, "state", "histograph-dismissed.json")
+
+
 # convenience module constants (snapshot at import; functions above are canonical)
 EPICS_PATH = epics_path()
 FOCUS_PATH = focus_path()
@@ -276,3 +280,68 @@ def save_focus(terminal_id):
                     pass
     except Exception:
         pass
+
+
+# --------------------------------------------------------------------------- #
+# manual dismissals (close-out). A lane the user dismisses stays hidden until it
+# does new work; keyed by the stable public terminal id, valued by the dismiss
+# epoch so serve_state can compare against last_work_ts ("returns on new work").
+# --------------------------------------------------------------------------- #
+def load_dismissed():
+    """Map of terminal-id → dismissed-at epoch (float). Fail-open to {}: a missing
+    or corrupt file, or a non-numeric value, never breaks the board."""
+    try:
+        with open(dismissed_path(), "r", encoding="utf-8") as f:
+            raw = json.load(f)
+    except Exception:
+        return {}
+    out = {}
+    for tid, ts in ((raw.get("dismissed") or {}).items()
+                    if isinstance(raw, dict) else []):
+        try:
+            out[str(tid)] = float(ts)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _write_dismissed(mapping):
+    """Persist the dismissal map atomically. Fail-open."""
+    path = dismissed_path()
+    d = os.path.dirname(path) or "."
+    try:
+        os.makedirs(d, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=d, prefix=".dismissed.", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump({"dismissed": mapping}, f)
+            os.replace(tmp, path)
+        finally:
+            if os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+
+def dismiss_terminal(terminal_id, at_epoch):
+    """Record (or refresh) a manual dismissal for a lane at `at_epoch`. The lane is
+    hidden until it logs work newer than this. Fail-open; returns the new map."""
+    m = load_dismissed()
+    try:
+        m[str(terminal_id)] = float(at_epoch)
+    except (TypeError, ValueError):
+        return m
+    _write_dismissed(m)
+    return m
+
+
+def undismiss_terminal(terminal_id):
+    """Clear a manual dismissal so the lane returns immediately. Fail-open."""
+    m = load_dismissed()
+    if str(terminal_id) in m:
+        m.pop(str(terminal_id), None)
+        _write_dismissed(m)
+    return m

@@ -1,9 +1,9 @@
 // ==========================================================================
 // Histograph — app.js
 // The thin controller: fetch /api/state, render via render.js, poll on an
-// interval, wire the theme switcher, and POST /api/focus when a triage card is
-// clicked. No derivation lives here — the backend computes everything; this
-// file only moves JSON onto the DOM and back.
+// interval, wire the theme switcher, POST /api/focus when a triage lane is
+// clicked, and POST /api/dismiss when its × is. No derivation lives here — the
+// backend computes everything; this file only moves JSON onto the DOM and back.
 // ==========================================================================
 
 import { renderTriage, renderFocus, titlebarMeta } from "/render.js";
@@ -16,6 +16,7 @@ const POLL_IDLE_MS = 4000; // calm glance cadence — this is a status mosaic
 const POLL_ACTIVE_MS = 1500; // the focused lane is working: refresh quickly
 const STATE_URL = "/api/state";
 const FOCUS_URL = "/api/focus";
+const DISMISS_URL = "/api/dismiss";
 
 // ---- element handles -----------------------------------------------------
 const els = {
@@ -106,7 +107,7 @@ function paint(state) {
   if (els.count) els.count.textContent = `${meta.count} terminal${meta.count === 1 ? "" : "s"}`;
   if (els.time) els.time.textContent = meta.time;
 
-  renderTriage(els.mosaic, state.terminals, { onFocus: requestFocus });
+  renderTriage(els.mosaic, state.terminals, { onFocus: requestFocus, onDismiss: requestDismiss });
 
   // Focus pane: only (re)build it when the focused lane SWITCHES (fresh) or its
   // content actually CHANGES. Idle polls leave the existing DOM — and the
@@ -229,6 +230,30 @@ async function requestFocus(terminalId) {
     await fetchState();
   } catch {
     // focus POST failed — the next poll will reconcile; surface the quiet strip.
+    showConnTrouble(true);
+  }
+}
+
+// ---- close-out -----------------------------------------------------------
+
+async function requestDismiss(terminalId) {
+  if (!terminalId) return;
+  // optimistic: drop the lane locally for instant feedback, then confirm. The
+  // backend hides it until it does new work; the re-fetch re-picks focus if the
+  // dismissed lane was the focused one.
+  if (lastState && Array.isArray(lastState.terminals)) {
+    paint({ ...lastState, terminals: lastState.terminals.filter((t) => t.id !== terminalId) });
+  }
+  try {
+    const res = await fetch(DISMISS_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ terminalId }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    await fetchState();
+  } catch {
+    // dismiss POST failed — the next poll restores the lane; surface the strip.
     showConnTrouble(true);
   }
 }

@@ -281,5 +281,34 @@ class TestSecurityHeaders(_Server):
         self.assertNotIn("https:", connect)
 
 
+# --------------------------------------------------------------------------- #
+# POST /api/dismiss + /api/undismiss — close-out round-trip over real HTTP
+# --------------------------------------------------------------------------- #
+class TestDismissEndpoint(_Server):
+    def _terminal_ids(self):
+        _, _, body = self._get("/api/state")
+        return [t["id"] for t in json.loads(body)["terminals"]]
+
+    def test_dismiss_hides_then_undismiss_restores(self):
+        ids = self._terminal_ids()
+        self.assertTrue(ids)            # the seeded live lane is present
+        tid = ids[0]
+
+        status, body = self._post("/api/dismiss", {"terminalId": tid})
+        self.assertEqual(status, 200)
+        self.assertTrue(json.loads(body)["ok"])
+        # the seeded lane has no work newer than the dismissal -> gone from the board.
+        self.assertNotIn(tid, self._terminal_ids())
+
+        status, _ = self._post("/api/undismiss", {"terminalId": tid})
+        self.assertEqual(status, 200)
+        self.assertIn(tid, self._terminal_ids())
+
+    def test_dismiss_requires_terminal_id(self):
+        status, body = self._post("/api/dismiss", {})
+        self.assertEqual(status, 400)
+        self.assertIn("terminalId", json.loads(body).get("error", ""))
+
+
 if __name__ == "__main__":
     unittest.main()

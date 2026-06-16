@@ -315,7 +315,7 @@ const STATUS_WORD = {
  * reuse the same --ae-* classes the old cards used. The full "id · project"
  * rides the row's title so the project survives the denser layout (hover).
  */
-function renderTriageRow(term, { onFocus } = {}) {
+function renderTriageRow(term, { onFocus, onDismiss } = {}) {
   const prov = providerOf(term.provider);
   const needsYou =
     term.status === "needs-you" || (term.statusLine && term.statusLine.kind === "needs-you");
@@ -382,7 +382,31 @@ function renderTriageRow(term, { onFocus } = {}) {
       activate();
     }
   });
-  return row;
+
+  // Close-out (×) — a SIBLING of the row, never nested inside the role="button"
+  // (nested interactives break assistive tech). It stays hidden until the lane is
+  // hovered or focus-enters, and reads danger on hover (a destructive low-emphasis
+  // ghost, per Aegis). Dismissing hides the lane until it does new work.
+  const closeBtn = el("button", {
+    class: "hg-trow__close",
+    attrs: {
+      type: "button",
+      "aria-label": `Close out ${fullLabel}`,
+      title: "Close out — hides this lane until it does new work",
+    },
+    text: "×",
+  });
+  closeBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (onDismiss) onDismiss(term.id);
+  });
+
+  return el(
+    "div",
+    { class: "hg-trow-wrap", attrs: { role: "listitem" } },
+    row,
+    closeBtn
+  );
 }
 
 /**
@@ -425,7 +449,9 @@ export function renderTriage(mountEl, terminals, opts = {}) {
       el("span", { class: "hg-trow__term", text: "term" }),
       el("span", { class: "hg-trow__focus", text: "focus" }),
       el("span", { class: "hg-trow__status", text: "status" }),
-      el("span", { class: "hg-trow__age", text: "age" })
+      el("span", { class: "hg-trow__age", text: "age" }),
+      // spacer so the header columns line up with rows, which carry a trailing × .
+      el("span", { class: "hg-trow__close-spacer", attrs: { "aria-hidden": "true" } })
     )
   );
 
@@ -435,7 +461,7 @@ export function renderTriage(mountEl, terminals, opts = {}) {
     class: "hg-triage__scroll hg-scroll",
     attrs: { role: "list", "aria-label": `${list.length} terminal${list.length === 1 ? "" : "s"}` },
   });
-  const add = (t) => body.append(el("div", { attrs: { role: "listitem" } }, renderTriageRow(t, opts)));
+  const add = (t) => body.append(renderTriageRow(t, opts));
   needs.forEach(add);
   if (needs.length && rest.length) {
     body.append(el("div", { class: "hg-triage__divider", attrs: { "aria-hidden": "true" } }));
