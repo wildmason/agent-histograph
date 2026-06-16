@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>histograph</title>
+
+    <!-- ====================================================================
+         Aegis v2 stylesheet order (per the build plan):
+         1. tokens.css FIRST  — the @layer ae-base primitives + semantics
+         2. all 20 themes/*.css — every brand + scheme + spectrum palette,
+            linked simultaneously; each is @layer-scoped (ae-scheme / ae-brand)
+            so ONLY the active data-theme/data-variant matches. Switching is a
+            single attribute flip with no FOUC and no re-fetch.
+         3. markers.css + app.css — our bespoke recipes + layout glue, last so
+            they can read every --ae-* token the themes resolve.
+         ==================================================================== -->
+    <link rel="stylesheet" href="/static/aegis/tokens.css" />
+
+    <link rel="stylesheet" href="/static/aegis/themes/light.css" />
+    <link rel="stylesheet" href="/static/aegis/themes/dark.css" />
+    <link rel="stylesheet" href="/static/aegis/themes/high-contrast.css" />
+    <link rel="stylesheet" href="/static/aegis/themes/cinnabar.css" />
+    <link rel="stylesheet" href="/static/aegis/themes/editorial.css" />
+    <link rel="stylesheet" href="/static/aegis/themes/metro.css" />
+    <link rel="stylesheet" href="/static/aegis/themes/crucible.css" />
+    <link rel="stylesheet" href="/static/aegis/themes/spectrum-base.css" />
+    <link rel="stylesheet" href="/static/aegis/themes/stone-moss.css" />
+    <link rel="stylesheet" href="/static/aegis/themes/warm-light.css" />
+    <link rel="stylesheet" href="/static/aegis/themes/neutral-light.css" />
+    <link rel="stylesheet" href="/static/aegis/themes/solarized-precision.css" />
+    <link rel="stylesheet" href="/static/aegis/themes/sage-linen.css" />
+    <link rel="stylesheet" href="/static/aegis/themes/arctic-night.css" />
+    <link rel="stylesheet" href="/static/aegis/themes/crepuscular-sky.css" />
+    <link rel="stylesheet" href="/static/aegis/themes/source-control-dark.css" />
+    <link rel="stylesheet" href="/static/aegis/themes/posh-sandalwood.css" />
+    <link rel="stylesheet" href="/static/aegis/themes/thistle-mocha.css" />
+    <link rel="stylesheet" href="/static/aegis/themes/twilight-peach.css" />
+    <link rel="stylesheet" href="/static/aegis/themes/vampires-kiss.css" />
+
+    <link rel="stylesheet" href="/markers.css" />
+    <link rel="stylesheet" href="/app.css" />
+
+    <!-- FOUC guard: stamp the persisted (or default crucible/dark) theme onto
+         <html> BEFORE first paint. Mirrors applyTheme's FULL attribute logic —
+         data-theme + data-collection + data-variant — so the page never flashes
+         an unstyled or geometry-less brand. theme.js re-applies idempotently
+         once the module graph loads.
+
+         data-collection is load-bearing: spectrum-base.css keys all of v1's
+         geometry (radius/motion/type/box-metrics) on
+         :root[data-collection="spectrum"]. Without it, a persisted spectrum
+         palette would first-paint with the right colors but the WRONG geometry
+         until hydration, then snap — the exact FOUC this guard exists to kill.
+         The boot script can't import the registry, so the brand→family map is
+         inlined: every brand is family "aegis" except spectrum. (C1) -->
+    <script>
+      (function () {
+        var FALLBACK = { theme: "crucible", variant: "dark" };
+        // brand id → collection (family). Mirror of THEME_REGISTRY[].family.
+        var COLLECTION = { spectrum: "spectrum" };
+        var sel = FALLBACK;
+        try {
+          var raw = localStorage.getItem("histograph.theme");
+          if (raw) {
+            var p = JSON.parse(raw);
+            if (p && typeof p.theme === "string") sel = p;
+          }
+        } catch (e) {}
+        var root = document.documentElement;
+        if (sel.theme && sel.theme !== "default") {
+          root.setAttribute("data-theme", sel.theme);
+          // every non-default brand is family "aegis" unless mapped otherwise;
+          // stamping data-collection="aegis" is harmless (no rules key on it)
+          // and fully mirrors applyTheme.
+          root.setAttribute("data-collection", COLLECTION[sel.theme] || "aegis");
+        }
+        if (sel.variant) {
+          root.setAttribute("data-variant", sel.variant);
+        }
+      })();
+    </script>
+
+    <!-- Register the ae-* custom elements. Module, deferred by nature. -->
+    <script type="module" src="/static/aegis/aegis.js"></script>
+  </head>
+
+  <body>
+    <div class="hg-stage">
+      <main class="hg-frame" aria-label="histograph">
+        <!-- ============ titlebar (bespoke) ============ -->
+        <header class="hg-titlebar">
+          <div class="hg-brand">
+            <span class="hg-brand__mark" aria-hidden="true">▚</span>
+            <span>histograph</span>
+          </div>
+
+          <div class="hg-titlebar__meta">
+            <span id="tb-needs" class="hg-titlebar__needs">all clear</span>
+            <span class="hg-titlebar__sep" aria-hidden="true">·</span>
+            <span id="tb-count">0 terminals</span>
+            <span class="hg-titlebar__sep" aria-hidden="true">·</span>
+            <span id="tb-time" class="hg-titlebar__time"></span>
+          </div>
+
+          <!-- ============ settings trigger (opens the theme picker modal) ============ -->
+          <ae-button
+            id="settings-btn"
+            class="hg-settings-btn"
+            variant="ghost"
+            size="sm"
+            aria-label="Settings"
+          >⚙</ae-button>
+        </header>
+
+        <!-- calm connection strip (hidden unless the poll is failing) -->
+        <div id="conn" class="hg-conn" data-visible="false" role="status">
+          <span class="hg-conn__dot" aria-hidden="true"></span>
+          <span>reconnecting — showing the last good snapshot</span>
+        </div>
+
+        <!-- ============ triage mosaic ============ -->
+        <section class="hg-triage" aria-label="Triage">
+          <p class="hg-section-label">Triage</p>
+          <div id="mosaic"></div>
+        </section>
+
+        <!-- ============ focus column ============ -->
+        <section class="hg-focus" id="focus" aria-label="Focus"></section>
+
+        <!-- ============ footer legend ============ -->
+        <footer class="hg-legend" aria-label="Legend">
+          <span class="hg-legend__item">
+            <span class="hg-legend__sw hg-legend__sw--decision" aria-hidden="true"></span>decision
+          </span>
+          <span class="hg-legend__item">
+            <span class="hg-legend__sw hg-legend__sw--reversal" aria-hidden="true"></span>reversal
+          </span>
+          <span class="hg-legend__item">
+            <span class="hg-legend__sw hg-legend__sw--milestone" aria-hidden="true"></span>milestone
+          </span>
+          <span class="hg-legend__item">
+            <span class="hg-legend__sw hg-legend__sw--step" aria-hidden="true"></span>step
+          </span>
+          <span class="hg-legend__integrity">◇ reconstructed · ◈ volunteered · ✓ confirmed · ▫ passive</span>
+        </footer>
+      </main>
+    </div>
+
+    <!-- ============ settings modal (theme picker) ============
+         BOTH axes are ae-select dropdowns. ae-modal opens a native
+         <dialog>.showModal() (top layer); ae-select now promotes its listbox to
+         the browser top layer via the Popover API, so the dropdown composes
+         ABOVE the modal (a body-portaled, z-index'd panel could not). Dropdowns
+         keep the picker compact — the 6 brands and spectrum's 12 palettes fit a
+         single column with no horizontal scroll. -->
+    <ae-modal id="settings-modal" size="md" close-on-click-outside labelledby="settings-title">
+      <h2 id="settings-title" slot="header">Settings</h2>
+      <div class="hg-settings">
+        <div class="hg-settings__control">
+          <span class="hg-settings__label" aria-hidden="true">Theme</span>
+          <ae-select id="brand-select" aria-label="Theme" placeholder="Theme"></ae-select>
+        </div>
+        <div class="hg-settings__control">
+          <span class="hg-settings__label" aria-hidden="true">Scheme</span>
+          <ae-select id="scheme-select" aria-label="Scheme" placeholder="Scheme"></ae-select>
+        </div>
+      </div>
+      <div slot="footer">
+        <ae-button variant="primary" id="settings-done">Done</ae-button>
+      </div>
+    </ae-modal>
+
+    <!-- the controller. Pulls /api/state and drives render.js. -->
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,179 @@
+/*
+ * Aegis v2 — Crepuscular Sky theme pack (Spectrum collection).
+ *
+ * A v1 Aegis port into v2's two-axis model. Crepuscular Sky is the
+ * dusk-toned brand: golden-orange accent (#c09d06, the crepuscular-ray
+ * color) struck over deep navy surfaces with a pale warm-cream text
+ * palette that steps through amber to cool blue-grey. It is a DARK-ONLY
+ * brand (v1 shipped it as `color-scheme: dark`), so this single brand
+ * block sets the full dark surface direction directly — no light variant.
+ *
+ * ── Pixel-perfect fidelity ──────────────────────────────────────────
+ * Every value here is the LITERAL v1 hex from ../aegis/themes.css
+ * (`[data-theme='crepuscular-sky']`). We deliberately do NOT convert to
+ * oklch: the rest of v2 is oklch, but converting v1's sRGB hexes would
+ * introduce gamut/rounding drift and break pixel parity with what v1
+ * actually ships. The semantic (Tier-2) tokens components consume carry
+ * the exact v1 colors; the Tier-1 navy/gold ramps are anchored to the v1
+ * surface values so any component reaching for a raw ramp stop still
+ * resolves to a real v1 color.
+ *
+ * Apply via class OR data-attribute on any ancestor (commonly :root):
+ *   <html data-theme="spectrum" data-variant="crepuscular-sky">   ← or class="spectrum crepuscular-sky"
+ *
+ * No automatic media-query activation — a brand is an explicit opt-in.
+ *
+ * v1 source-of-truth surface stack (depth: sunken→base→raised→float→fg):
+ *   sunken  #060810   base    #121523   raised  #131a28
+ *   float   #1d2338   fg-surf #2d3654   hover   #252c44
+ */
+
+@layer ae-brand {
+:root[data-theme="spectrum"][data-variant="crepuscular-sky"],
+:root.spectrum.crepuscular-sky {
+  /* ============================================================
+   * Tier 1 — Primitives.
+   * Navy gray ramp anchored to v1's exact surface hexes at the dark end
+   * (700=float, 800=raised, 900=base, 1000=sunken) and extended to light
+   * stops for inverse/on-light contexts. Golden accent ramp anchored at
+   * 400=hover, 500=accent (v1 ships no accent-readable, so 300 is a
+   * derived lighter gold sibling for accent-as-text).
+   * ============================================================ */
+
+  /* Navy neutrals — deep blue tint. Dark stops ARE v1 surfaces. */
+  --ae-color-gray-0:    #f3f0e6;
+  --ae-color-gray-50:   #e4ddc9;
+  --ae-color-gray-100:  #edd9a3;   /* = v1 text-primary   */
+  --ae-color-gray-200:  #ba9d7a;   /* = v1 text-secondary */
+  --ae-color-gray-300:  #8a7fa0;
+  --ae-color-gray-400:  #5a6888;   /* = v1 border-input   */
+  --ae-color-gray-500:  #2d3654;   /* = v1 bg-foreground  */
+  --ae-color-gray-600:  #252c44;
+  --ae-color-gray-700:  #1d2338;   /* = v1 bg-float       */
+  --ae-color-gray-800:  #131a28;   /* = v1 bg-raised      */
+  --ae-color-gray-900:  #121523;   /* = v1 bg-base        */
+  --ae-color-gray-1000: #060810;   /* = v1 bg-sunken      */
+
+  /* Golden-orange accent. 500=v1 accent, 400=v1 accent-hover. v1 ships no
+     accent-readable, so 300 is a derived lighter gold for accent-as-text. */
+  --ae-color-accent-50:  #fbf4d8;
+  --ae-color-accent-100: #f6e8a8;
+  --ae-color-accent-200: #ecd163;
+  --ae-color-accent-300: #e0bd2e;   /* derived lighter gold (accent-as-text) */
+  --ae-color-accent-400: #b15000;   /* = v1 accent-hover    */
+  --ae-color-accent-500: #c09d06;   /* = v1 accent          */
+  --ae-color-accent-600: #a08305;
+  --ae-color-accent-700: #7c6604;
+  --ae-color-accent-800: #594a03;
+  --ae-color-accent-900: #3c3202;
+
+  /* Status palettes — v1 ships a single value per status (used as both
+     text and fill). We seed 500 with the v1 value and derive 50/700. */
+  --ae-color-success-50:  #0e2418;
+  --ae-color-success-100: #143322;
+  --ae-color-success-500: #4aba80;   /* = v1 success */
+  --ae-color-success-700: #79d0a4;
+
+  --ae-color-warning-50:  #2c1c07;
+  --ae-color-warning-100: #38260a;
+  --ae-color-warning-500: #d4830a;   /* = v1 warning */
+  --ae-color-warning-700: #eba53c;
+
+  --ae-color-danger-50:  #2c1414;
+  --ae-color-danger-100: #381a1a;
+  --ae-color-danger-500: #e05c5c;    /* = v1 danger */
+  --ae-color-danger-700: #ec8989;
+
+  /* Info — v1 Crepuscular Sky ships no info color. Derived: a muted sky
+     blue (matching v1's task syntax hue #8ab4d8 family) that sits beside
+     the navy neutrals without competing with the golden accent. Used only
+     by v2-only surfaces (no v1 equivalent to match). */
+  --ae-color-info-50:  #0e1c2a;
+  --ae-color-info-100: #142636;
+  --ae-color-info-500: #8ab4d8;
+  --ae-color-info-700: #aecbe4;
+
+  /* ============================================================
+   * Scale (radius / type / motion) is SHARED across the whole Spectrum
+   * collection and lives in themes/spectrum-base.css — this file is
+   * palette-only. The one scale axis that is NOT shared is shadow: v1
+   * sets shadow alphas per-theme because they are scheme-coupled (light
+   * themes use light alphas, dark ones deep), so Crepuscular Sky's dark
+   * shadow block stays here.
+   * ============================================================ */
+
+  /* Dark-surface shadow alphas (v1 sm/md/lg seeded; xs/xl/2xl derived). */
+  --ae-shadow-xs:   0 1px 2px 0 rgba(0, 0, 0, 0.50);
+  --ae-shadow-sm:   0 1px 3px rgba(0, 0, 0, 0.60);
+  --ae-shadow-md:   0 4px 12px rgba(0, 0, 0, 0.70);
+  --ae-shadow-lg:   0 10px 30px rgba(0, 0, 0, 0.80);
+  --ae-shadow-xl:   0 20px 40px rgba(0, 0, 0, 0.85);
+  --ae-shadow-2xl:  0 25px 60px rgba(0, 0, 0, 0.90);
+  --ae-shadow-inner: inset 0 2px 4px 0 rgba(0, 0, 0, 0.50);
+
+  /* ============================================================
+   * Tier 2 — Semantic mapping (dark direction).
+   * Literal v1 hexes so the layer components consume is pixel-exact.
+   * ============================================================ */
+
+  --ae-color-bg:           #121523;   /* v1 base    */
+  --ae-color-bg-subtle:    #060810;   /* v1 sunken  — table header, code, recessed */
+  --ae-color-bg-muted:     #131a28;   /* v1 raised  — header/sidebar/panel surfaces */
+  --ae-color-bg-elevated:  #1d2338;   /* v1 float   — cards, modals, dropdowns      */
+  --ae-color-bg-inverse:   #edd9a3;   /* light cream — inverse chips/tooltip ground */
+  --ae-color-bg-overlay:   rgba(0, 0, 0, 0.60);   /* v1 backdrop-opacity 0.60 */
+
+  --ae-color-fg:           #edd9a3;   /* v1 text-primary     */
+  --ae-color-fg-muted:     #ba9d7a;   /* v1 text-secondary   */
+  --ae-color-fg-subtle:    #a094ac;   /* v1 text-muted       */
+  --ae-color-fg-inverse:   #121523;   /* dark text on light inverse surface */
+  --ae-color-fg-disabled:  #3d4d68;   /* v1 text-placeholder */
+  --ae-color-fg-on-accent: #060810;   /* v1 accent-text — near-black on gold */
+  --ae-color-fg-on-danger: #ffffff;   /* white on v1 danger #e05c5c */
+  /* Warning fill is amber so on-fill text is dark; success/danger fills are
+     mid-saturation so white reads cleanly on them. */
+  --ae-color-fg-on-warning: #060810;
+  --ae-color-fg-on-success: #060810;
+  --ae-color-fg-on-info:    #060810;
+
+  --ae-color-border:         #202a40;   /* v1 border        */
+  --ae-color-border-strong:  #5a6888;   /* v1 border-input (3:1 control border) */
+  --ae-color-border-subtle:  #54575c;   /* v1 border-subtle */
+  --ae-color-border-inverse: #8a7fa0;
+
+  /* Accent — fills/rings at 500 (#c09d06). v1 ships no accent-readable, so
+     accent-as-text emphasis uses the derived lighter gold (#e0bd2e). */
+  --ae-color-accent:          #c09d06;   /* v1 accent          */
+  --ae-color-accent-hover:    #b15000;   /* v1 accent-hover    */
+  --ae-color-accent-active:   #a08305;
+  --ae-color-accent-subtle:   #2a2613;   /* dark gold tint (≈10% accent on base) */
+  --ae-color-accent-emphasis: #e0bd2e;   /* derived lighter gold (no v1 readable) */
+
+  --ae-color-success:          #4aba80;
+  --ae-color-success-subtle:   #15291f;
+  --ae-color-success-emphasis: #79d0a4;
+
+  --ae-color-warning:          #d4830a;
+  --ae-color-warning-subtle:   #2e220f;
+  --ae-color-warning-emphasis: #eba53c;
+
+  --ae-color-danger:           #e05c5c;
+  --ae-color-danger-subtle:    #2e1c1c;
+  --ae-color-danger-emphasis:  #ec8989;
+
+  --ae-color-info:             #8ab4d8;
+  --ae-color-info-subtle:      #17242e;
+  --ae-color-info-emphasis:    #aecbe4;
+
+  --ae-color-focus-ring:     #c09d06;   /* v1 uses accent / border-hover for focus */
+  --ae-color-selection-bg:   #2d3554;   /* navy-tinted selection */
+  --ae-color-selection-fg:   #edd9a3;
+  --ae-color-hover-overlay:  rgba(255, 255, 255, 0.05);
+  --ae-color-active-overlay: rgba(255, 255, 255, 0.09);
+
+  /* Component-tier GEOMETRY (button sizing, control hover model, panel
+   * surfaces, etc.) is theme-independent and lives in spectrum-base.css.
+   * Crepuscular Sky adds no component overrides of its own — its semantic
+   * palette above feeds the shared component tokens directly. */
+}
+} /* @layer ae-brand */

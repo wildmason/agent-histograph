@@ -1,0 +1,178 @@
+/*
+ * Aegis v2 — Arctic Night theme pack (Spectrum collection).
+ *
+ * A port of v1 Aegis's Nord-flavored "Arctic Night" into v2's two-axis
+ * model. Arctic Night is cold polar twilight: deep blue-slate stone
+ * (#2e3440 base) under a soft glacial-teal accent (#8fc4d3). It is a
+ * DARK-ONLY brand (v1 shipped it as `color-scheme: dark`), so this single
+ * brand block sets the full dark surface direction directly — there is no
+ * light variant.
+ *
+ * ── Pixel-perfect fidelity ──────────────────────────────────────────
+ * Every value here is the LITERAL v1 hex from ../aegis/themes.css
+ * (`[data-theme='arctic-night']`). We deliberately do NOT convert to oklch:
+ * the rest of v2 is oklch, but converting v1's sRGB hexes would introduce
+ * gamut/rounding drift and break pixel parity with what v1 actually ships.
+ * The semantic (Tier-2) tokens components consume carry the exact v1 colors;
+ * the Tier-1 slate/teal ramps are anchored to the v1 surface values so any
+ * component reaching for a raw ramp stop still resolves to a real v1 color.
+ *
+ * Apply via class OR data-attribute on any ancestor (commonly :root):
+ *   <html data-theme="spectrum" data-variant="arctic-night">   ← or class="spectrum arctic-night"
+ *
+ * No automatic media-query activation — a brand is an explicit opt-in.
+ *
+ * v1 source-of-truth surface stack (depth: sunken→base→raised→float→fg):
+ *   sunken  #242933   base    #2e3440   raised  #3b4252
+ *   float   #434c5e   fg-surf #535e6e   hover   #4c566a (slate)
+ */
+
+@layer ae-brand {
+:root[data-theme="spectrum"][data-variant="arctic-night"],
+:root.spectrum.arctic-night {
+  color-scheme: dark;
+
+  /* ============================================================
+   * Tier 1 — Primitives.
+   * Slate gray ramp anchored to v1's exact surface hexes at the dark
+   * end (700=float, 800=raised, 900=base, 1000=sunken) and extended to
+   * light stops for inverse/on-light contexts. Glacial-teal accent ramp
+   * anchored at 400=hover, 500=accent.
+   * ============================================================ */
+
+  /* Slate neutrals — cool blue tint. Dark stops ARE v1 surfaces. */
+  --ae-color-gray-0:    #f3f5f9;
+  --ae-color-gray-50:   #e8ecf3;
+  --ae-color-gray-100:  #eceff4;   /* = v1 text-primary   */
+  --ae-color-gray-200:  #e5e9f0;   /* = v1 text-secondary */
+  --ae-color-gray-300:  #c3ccdb;
+  --ae-color-gray-400:  #8e9aa9;   /* = v1 border-input   */
+  --ae-color-gray-500:  #535e6e;   /* = v1 bg-foreground  */
+  --ae-color-gray-600:  #4c566a;   /* = v1 bg-hover       */
+  --ae-color-gray-700:  #434c5e;   /* = v1 bg-float       */
+  --ae-color-gray-800:  #3b4252;   /* = v1 bg-raised      */
+  --ae-color-gray-900:  #2e3440;   /* = v1 bg-base        */
+  --ae-color-gray-1000: #242933;   /* = v1 bg-sunken      */
+
+  /* Glacial-teal accent. 500=v1 accent, 400=v1 accent-hover.
+     300 derives a lighter teal (accent-as-text sibling). */
+  --ae-color-accent-50:  #eef6f8;
+  --ae-color-accent-100: #dcedf1;
+  --ae-color-accent-200: #c2dfe7;
+  --ae-color-accent-300: #aedbe5;   /* lighter teal — accent-as-text */
+  --ae-color-accent-400: #81a1c1;   /* = v1 accent-hover    */
+  --ae-color-accent-500: #8fc4d3;   /* = v1 accent          */
+  --ae-color-accent-600: #6fa8b9;
+  --ae-color-accent-700: #588d9d;
+  --ae-color-accent-800: #426c7a;
+  --ae-color-accent-900: #2f4f59;
+
+  /* Status palettes — v1 ships a single value per status (used as both
+     text and fill). We seed 500 with the v1 value and derive 50/700. */
+  --ae-color-success-50:  #1f2a1c;
+  --ae-color-success-100: #283823;
+  --ae-color-success-500: #b5cf9a;   /* = v1 success */
+  --ae-color-success-700: #cbe0b6;
+
+  --ae-color-warning-50:  #2e2718;
+  --ae-color-warning-100: #3a3120;
+  --ae-color-warning-500: #ebcb8b;   /* = v1 warning */
+  --ae-color-warning-700: #f0d9a8;
+
+  --ae-color-danger-50:  #2b1a1c;
+  --ae-color-danger-100: #3a2326;
+  --ae-color-danger-500: #bf616a;    /* = v1 danger */
+  --ae-color-danger-700: #d18a90;
+
+  /* Info — v1 Arctic Night ships no info color. Derived: a Nord frost
+     blue (#88c0d0 family) that sits beside the slate neutrals without
+     competing with the teal accent. Used only by v2-only surfaces. */
+  --ae-color-info-50:  #19262c;
+  --ae-color-info-100: #1f3138;
+  --ae-color-info-500: #88c0d0;
+  --ae-color-info-700: #a8d4e0;
+
+  /* ============================================================
+   * Scale (radius / type / motion) is SHARED across the whole Spectrum
+   * collection and lives in themes/spectrum-base.css — this file is
+   * palette-only. The one scale axis that is NOT shared is shadow: v1
+   * sets shadow alphas per-theme because they are scheme-coupled (light
+   * themes use light alphas, dark ones deep), so Arctic Night's dark
+   * shadow block stays here.
+   * ============================================================ */
+
+  /* Dark-surface shadow alphas (v1 sm/md/lg seeded; xs/xl/2xl derived). */
+  --ae-shadow-xs:   0 1px 2px 0 rgba(0, 0, 0, 0.18);
+  --ae-shadow-sm:   0 1px 2px rgba(0, 0, 0, 0.20);
+  --ae-shadow-md:   0 4px 6px rgba(0, 0, 0, 0.30);
+  --ae-shadow-lg:   0 10px 15px rgba(0, 0, 0, 0.40);
+  --ae-shadow-xl:   0 20px 30px rgba(0, 0, 0, 0.50);
+  --ae-shadow-2xl:  0 25px 50px rgba(0, 0, 0, 0.60);
+  --ae-shadow-inner: inset 0 2px 4px 0 rgba(0, 0, 0, 0.30);
+
+  /* ============================================================
+   * Tier 2 — Semantic mapping (dark direction).
+   * Literal v1 hexes so the layer components consume is pixel-exact.
+   * ============================================================ */
+
+  --ae-color-bg:           #2e3440;   /* v1 base    */
+  --ae-color-bg-subtle:    #242933;   /* v1 sunken  — table header, code, recessed */
+  --ae-color-bg-muted:     #3b4252;   /* v1 raised  — header/sidebar/panel surfaces */
+  --ae-color-bg-elevated:  #434c5e;   /* v1 float   — cards, modals, dropdowns      */
+  --ae-color-bg-inverse:   #eceff4;   /* light slate — inverse chips/tooltip ground */
+  --ae-color-bg-overlay:   rgba(0, 0, 0, 0.50);   /* v1 backdrop-opacity 0.5 */
+
+  --ae-color-fg:           #eceff4;   /* v1 text-primary     */
+  --ae-color-fg-muted:     #e5e9f0;   /* v1 text-secondary   */
+  --ae-color-fg-subtle:    #d8dee9;   /* v1 text-muted       */
+  --ae-color-fg-inverse:   #2e3440;   /* dark text on light inverse surface */
+  --ae-color-fg-disabled:  #adb9cb;   /* v1 text-placeholder */
+  --ae-color-fg-on-accent: #2e3440;   /* v1 accent-text — dark on light teal */
+  --ae-color-fg-on-danger: #ffffff;   /* white on v1 danger #bf616a (see note) */
+  /* Status FILLS in Arctic Night are all light (sage/gold/rose), so their
+     on-fill text must be dark. */
+  --ae-color-fg-on-warning: #161817;
+  --ae-color-fg-on-success: #161817;
+  --ae-color-fg-on-info:    #161817;
+
+  --ae-color-border:         #4c566a;   /* v1 border        */
+  --ae-color-border-strong:  #8e9aa9;   /* v1 border-input (3:1 control border) */
+  --ae-color-border-subtle:  #434c5e;   /* v1 border-subtle */
+  --ae-color-border-inverse: #c3ccdb;
+
+  /* Accent — fills/rings at 500 (#8fc4d3), accent-as-text at emphasis
+     (#aedbe5, a lighter glacial teal). */
+  --ae-color-accent:          #8fc4d3;   /* v1 accent          */
+  --ae-color-accent-hover:    #81a1c1;   /* v1 accent-hover    */
+  --ae-color-accent-active:   #6fa8b9;
+  --ae-color-accent-subtle:   #2c3b42;   /* dark teal tint (≈10% accent on base) */
+  --ae-color-accent-emphasis: #aedbe5;   /* lighter teal for accent-as-text */
+
+  --ae-color-success:          #b5cf9a;
+  --ae-color-success-subtle:   #28342a;
+  --ae-color-success-emphasis: #b5cf9a;
+
+  --ae-color-warning:          #ebcb8b;
+  --ae-color-warning-subtle:   #34301f;
+  --ae-color-warning-emphasis: #ebcb8b;
+
+  --ae-color-danger:           #bf616a;
+  --ae-color-danger-subtle:    #34272a;
+  --ae-color-danger-emphasis:  #cf8088;
+
+  --ae-color-info:             #88c0d0;
+  --ae-color-info-subtle:      #233038;
+  --ae-color-info-emphasis:    #88c0d0;
+
+  --ae-color-focus-ring:     #8fc4d3;   /* v1 uses accent / border-hover for focus */
+  --ae-color-selection-bg:   #3a4a52;   /* teal-tinted selection */
+  --ae-color-selection-fg:   #eef6f8;
+  --ae-color-hover-overlay:  rgba(255, 255, 255, 0.05);
+  --ae-color-active-overlay: rgba(255, 255, 255, 0.09);
+
+  /* Component-tier GEOMETRY (button sizing, control hover model, panel
+   * surfaces, etc.) is theme-independent and lives in spectrum-base.css.
+   * Arctic Night adds no component overrides of its own — its semantic
+   * palette above feeds the shared component tokens directly. */
+}
+} /* @layer ae-brand */

@@ -1,0 +1,601 @@
+/*
+ * Aegis v2 — Crucible theme pack.
+ *
+ * Bioluminescent glassmorphism for the one job developers uniformly dread:
+ * reviewing code. A deep GitHub-slate substrate lit by a molten amber-gold
+ * accent, frosted-glass surfaces that float over a variegated atmosphere of
+ * cool green/blue glows and a warm ember undertow, soft shadows with a subtle
+ * bioluminescent halo, and a glass edge-highlight on every raised plane. The
+ * forge made legible — a fantastical treat for the eyes wrapped around a chore.
+ *
+ * Derived from Wildmason Crucible's UI design language
+ * (`crucible/ui/src/styles/_variables.scss` + `_dashboard.scss` + `_buttons.scss`):
+ * the GitHub-Primer slate palette, the molten-amber primary action
+ * (`.btn-primary-amber`, rgba(255,170,80,…)), the Crucible-green dashboard
+ * identity (#5ec490), and the glassmorphic surface stack
+ * (rgba slate fills + faint light borders + soft elevation shadows).
+ *
+ * Apply via class OR data-attribute on any ancestor (commonly :root):
+ *   <html class="crucible">          ← class form (Molten, the dark default)
+ *   <html data-theme="crucible">     ← data-attribute form
+ *   <html data-theme="crucible" data-variant="light">  ← Quench (light)
+ *
+ * No automatic media-query activation. Crucible is a brand opt-in, not a
+ * system-preference response. The brand block below is the DARK "Molten"
+ * default; the light "Quench" variant restates the surface direction.
+ *
+ * --- Glassmorphism -------------------------------------------------
+ * Crucible is the first consumer of the design system's frosted-glass hook:
+ * `--ae-surface-backdrop-filter`. Every floating surface (popover / menu /
+ * context-menu / command-palette / modal / dialog / drawer / tooltip /
+ * select + combobox listboxes) and the card read
+ * `var(--ae-<x>-backdrop-filter, var(--ae-surface-backdrop-filter, none))`, so
+ * setting the one global token below frosts them all at once. The semantic
+ * surface tokens (`--ae-color-bg-elevated`, …) are made translucent so the
+ * blur has something to refract; other themes leave the hook unset (none) and
+ * are visually unaffected.
+ *
+ * --- Typography ----------------------------------------------------
+ * DM Sans (body/UI), Fraunces (available as the serif display stack), and
+ * JetBrains Mono (data + numerics — the technical console signature). Aegis
+ * bundles no webfonts; for full fidelity install @fontsource/dm-sans,
+ * @fontsource/fraunces, and @fontsource/jetbrains-mono (or load equivalent
+ * latin subsets). Without them the cascade falls back to system-ui / Georgia /
+ * ui-monospace, which still reads Crucible-ish but loses the exact faces.
+ *
+ * --- Contrast ------------------------------------------------------
+ * Verified by real-browser canvas pixel-readback against the COMPOSITED
+ * (post-translucency) surface colors — see scripts/verify-variant-contrast.mjs.
+ * Molten (dark) body fg gray-50 on the slate page clears AAA; the molten amber
+ * accent takes dark ink (gray-1000) for an AAA on-fill ratio; danger-500 is
+ * darkened off Crucible's bright #f85149 so white text on a danger fill crosses
+ * AA, with the bright red preserved on danger-emphasis for danger TEXT.
+ */
+
+@layer ae-brand {
+:root[data-theme="crucible"],
+:root.crucible {
+  /* ============================================================
+   * Tier 1 — Primitives: GitHub-Primer slate ramp.
+   *
+   * A single cool blue-slate ramp (lightest → darkest) serving BOTH the
+   * Molten dark direction and the Quench light direction. The dark stops
+   * (gray-700…gray-1000 + the #8b949e mid) are Crucible's verbatim Primer-dark
+   * values; the light stops (gray-0…gray-200) are Crucible's Primer-light
+   * surfaces; the middle is Primer's shared neutral. Monotonic by construction.
+   * ============================================================ */
+
+  --ae-color-gray-0:    #ffffff;   /* Quench page                       */
+  --ae-color-gray-50:   #f6f8fa;   /* Quench surface / Molten bright fg  */
+  --ae-color-gray-100:  #eaeef2;   /* Quench muted plane                 */
+  --ae-color-gray-200:  #d0d7de;   /* Quench border                      */
+  --ae-color-gray-300:  #afb8c1;   /* mid slate (light disabled / dark muted text) */
+  --ae-color-gray-400:  #8b949e;   /* Primer neutral mid (Crucible secondary text) */
+  --ae-color-gray-500:  #6e7781;   /* Primer fg.subtle                   */
+  --ae-color-gray-600:  #484f58;   /* Crucible dark text-muted           */
+  --ae-color-gray-700:  #30363d;   /* Crucible dark border               */
+  --ae-color-gray-800:  #21262d;   /* Crucible dark raised plane (tertiary) */
+  --ae-color-gray-900:  #161b22;   /* Crucible dark surface (secondary)  */
+  --ae-color-gray-1000: #0d1117;   /* Crucible dark page (primary)       */
+
+  /* ============================================================
+   * Tier 1 — Primitives: molten amber-gold accent.
+   *
+   * Centered on Crucible's molten primary action (rgba(255,170,80,…) ≈
+   * oklch(80% .155 60)). Hue pinned at ~60 (orange-amber) to keep clear
+   * separation from the yellow warning tone (~80). -300 is the bright molten
+   * link stop for dark grounds; -500 is the core fill; deep stops carry the
+   * subtle/selection surfaces.
+   * ============================================================ */
+
+  --ae-color-accent-50:  oklch(96% 0.03  62);
+  --ae-color-accent-100: oklch(92% 0.07  62);
+  --ae-color-accent-200: oklch(88% 0.11  61);
+  --ae-color-accent-300: oklch(86% 0.14  60);  /* bright molten link on dark */
+  --ae-color-accent-400: oklch(83% 0.15  60);
+  --ae-color-accent-500: oklch(80% 0.155 60);  /* molten amber ≈ #ffaa50 */
+  --ae-color-accent-600: oklch(72% 0.15  59);
+  --ae-color-accent-700: oklch(62% 0.145 58);
+  --ae-color-accent-800: oklch(46% 0.11  58);
+  --ae-color-accent-900: oklch(33% 0.08  58);
+
+  /* ============================================================
+   * Tier 1 — Primitives: Crucible status palettes.
+   *
+   *   success → green  (#3fb950 / dashboard #5ec490, hue ~152)
+   *   warning → amber  (#d29922 / #e5a91a, hue ~80)
+   *   danger  → red    (#f85149, hue ~25) — -500 darkened for AA white-on-fill
+   *   info    → blue   (#58a6ff / #6ba2ff, hue ~252)
+   *
+   * -700 stops are BRIGHTER than -500 (dark-emphasis convention, mirrors
+   * dark.css) so *-emphasis tokens read as prominent text on the dark ground.
+   * The Quench cell re-tones the -700 stops darker for cream.
+   * ============================================================ */
+
+  --ae-color-success-50:  oklch(95% 0.04 152);
+  --ae-color-success-100: oklch(88% 0.09 152);
+  --ae-color-success-500: oklch(70% 0.17 152);  /* #3fb950 */
+  --ae-color-success-700: oklch(80% 0.16 158);
+
+  --ae-color-warning-50:  oklch(96% 0.04 82);
+  --ae-color-warning-100: oklch(90% 0.09 82);
+  --ae-color-warning-500: oklch(74% 0.14 80);   /* ≈ #e5a91a */
+  --ae-color-warning-700: oklch(83% 0.14 82);
+
+  --ae-color-danger-50:  oklch(95% 0.04 25);
+  --ae-color-danger-100: oklch(88% 0.09 25);
+  --ae-color-danger-500: oklch(55% 0.22 25);    /* darkened: white-on-fill ≥ AA */
+  --ae-color-danger-700: oklch(70% 0.19 25);    /* bright #f85149-ish for danger TEXT */
+
+  --ae-color-info-50:  oklch(95% 0.03 252);
+  --ae-color-info-100: oklch(88% 0.06 252);
+  --ae-color-info-500: oklch(70% 0.15 252);     /* #58a6ff */
+  --ae-color-info-700: oklch(80% 0.13 250);
+
+  /* ============================================================
+   * Tier 1 — Primitives: typography.
+   * DM Sans (UI), Fraunces (serif display), JetBrains Mono (data).
+   * ============================================================ */
+
+  --ae-font-family-sans:
+    'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --ae-font-family-serif:
+    'Fraunces', 'Source Serif 4', Georgia, 'Times New Roman', serif;
+  --ae-font-family-mono:
+    'JetBrains Mono', 'Cascadia Code', ui-monospace, 'SF Mono',
+    Menlo, Consolas, monospace;
+
+  /* ============================================================
+   * Tier 1 — Primitives: bioluminescent shadow set (Molten / dark).
+   *
+   * Three layers compose the signature "variegated light/shadow interplay":
+   *   1. an inset top-edge HIGHLIGHT (the glass rim catching ambient light),
+   *   2. a soft, deep DROP shadow (gentle, large-blur — never hard),
+   *   3. a faint cool-teal GLOW (hue ~200) — the bioluminescence.
+   * Every raised plane (card, dropdown, modal) inherits the look for free.
+   * ============================================================ */
+
+  --ae-shadow-xs:
+    inset 0 1px 0 0 oklch(100% 0 0 / 0.04),
+    0 1px 2px 0 oklch(0% 0 0 / 0.45);
+  --ae-shadow-sm:
+    inset 0 1px 0 0 oklch(100% 0 0 / 0.05),
+    0 2px 6px -1px oklch(0% 0 0 / 0.5),
+    0 0 8px -2px oklch(72% 0.10 200 / 0.10);
+  --ae-shadow-md:
+    inset 0 1px 0 0 oklch(100% 0 0 / 0.06),
+    0 6px 16px -4px oklch(0% 0 0 / 0.55),
+    0 0 14px -2px oklch(72% 0.10 200 / 0.12);
+  --ae-shadow-lg:
+    inset 0 1px 0 0 oklch(100% 0 0 / 0.07),
+    0 12px 28px -6px oklch(0% 0 0 / 0.6),
+    0 0 22px -4px oklch(72% 0.11 200 / 0.14);
+  --ae-shadow-xl:
+    inset 0 1px 0 0 oklch(100% 0 0 / 0.08),
+    0 20px 40px -8px oklch(0% 0 0 / 0.65),
+    0 0 32px -6px oklch(72% 0.12 200 / 0.16);
+  --ae-shadow-2xl:
+    inset 0 1px 0 0 oklch(100% 0 0 / 0.09),
+    0 28px 56px -12px oklch(0% 0 0 / 0.78),
+    0 0 44px -8px oklch(72% 0.12 200 / 0.18);
+  --ae-shadow-inner: inset 0 2px 6px 0 oklch(0% 0 0 / 0.45);
+
+  /* ============================================================
+   * Tier 2 — Semantic surface direction (Molten / dark), glassmorphic.
+   *
+   * The page is opaque deep slate; the raised planes are TRANSLUCENT slate so
+   * the frosted-glass backdrop-filter (set below) has the atmosphere + content
+   * behind them to refract. Alphas track Crucible's glass stack
+   * (surface-flat .72, elevated .86, glass .55).
+   * ============================================================ */
+
+  --ae-color-bg:           var(--ae-color-gray-1000);
+  --ae-color-bg-subtle:    color-mix(in srgb, var(--ae-color-gray-900) 82%, transparent);
+  --ae-color-bg-muted:     color-mix(in srgb, var(--ae-color-gray-800) 82%, transparent);
+  --ae-color-bg-elevated:  color-mix(in srgb, var(--ae-color-gray-900) 72%, transparent);
+  --ae-color-bg-inverse:   var(--ae-color-gray-50);
+  --ae-color-bg-overlay:   oklch(8% 0.012 250 / 0.62);
+
+  --ae-color-fg:           var(--ae-color-gray-50);
+  --ae-color-fg-muted:     var(--ae-color-gray-300);
+  --ae-color-fg-subtle:    var(--ae-color-gray-400);
+  --ae-color-fg-inverse:   var(--ae-color-gray-1000);
+  --ae-color-fg-disabled:  var(--ae-color-gray-600);
+  --ae-color-fg-on-accent: var(--ae-color-gray-1000);  /* dark ink on molten amber */
+  --ae-color-fg-on-danger: var(--ae-color-gray-0);
+
+  --ae-color-border:        var(--ae-color-gray-700);
+  --ae-color-border-strong: var(--ae-color-gray-600);
+  --ae-color-border-subtle: color-mix(in srgb, var(--ae-color-gray-600) 55%, transparent);
+  --ae-color-border-inverse: var(--ae-color-gray-300);
+
+  --ae-color-accent:          var(--ae-color-accent-500);
+  --ae-color-accent-hover:    var(--ae-color-accent-400);
+  --ae-color-accent-active:   var(--ae-color-accent-300);
+  --ae-color-accent-subtle:   var(--ae-color-accent-900);
+  --ae-color-accent-emphasis: var(--ae-color-accent-300);
+
+  /* Status -subtle tints are TRANSLUCENT slate (not opaque gray-900) so the
+   * soft notice surfaces — callout / alert / toast — frost over the atmosphere.
+   * Crucible reads tone via the colored edge-strip + icon, not a tinted fill,
+   * so a neutral translucent slate keeps the design and gains the glass. */
+  --ae-color-success:          var(--ae-color-success-500);
+  --ae-color-success-subtle:   color-mix(in srgb, var(--ae-color-gray-900) 72%, transparent);
+  --ae-color-success-emphasis: var(--ae-color-success-700);
+
+  --ae-color-warning:          var(--ae-color-warning-500);
+  --ae-color-warning-subtle:   color-mix(in srgb, var(--ae-color-gray-900) 72%, transparent);
+  --ae-color-warning-emphasis: var(--ae-color-warning-700);
+
+  --ae-color-danger:          var(--ae-color-danger-500);
+  --ae-color-danger-subtle:   color-mix(in srgb, var(--ae-color-gray-900) 72%, transparent);
+  --ae-color-danger-emphasis: var(--ae-color-danger-700);
+
+  --ae-color-info:            var(--ae-color-info-500);
+  --ae-color-info-subtle:     color-mix(in srgb, var(--ae-color-gray-900) 72%, transparent);
+  --ae-color-info-emphasis:   var(--ae-color-info-700);
+
+  --ae-color-focus-ring:     var(--ae-color-accent-400);
+  --ae-color-selection-bg:   var(--ae-color-accent-800);
+  --ae-color-selection-fg:   var(--ae-color-accent-50);
+  --ae-color-hover-overlay:  oklch(100% 0 0 / 0.05);
+  --ae-color-active-overlay: oklch(100% 0 0 / 0.09);
+
+  /* Crucible's controls round at 6px (md) — slightly-rounded, never sharp. */
+  --ae-radius-default: var(--ae-radius-md);
+
+  /* ============================================================
+   * Tier 2 — Typography role routing + glass capability + atmosphere.
+   * ============================================================ */
+
+  --ae-font-family-ui:      var(--ae-font-family-sans);   /* DM Sans */
+  --ae-font-family-display: var(--ae-font-family-sans);   /* clean technical headings */
+  --ae-font-family-numeric: var(--ae-font-family-mono);   /* JetBrains Mono numerics */
+
+  /* Wide-tracked uppercase micro-labels — the Crucible technical signature. */
+  --ae-letter-spacing-eyebrow: 0.14em;
+
+  /* THE glass switch: frosts every floating surface + card at once. Other
+   * themes leave this unset → the surfaces fall back to `none`. */
+  --ae-surface-backdrop-filter: blur(16px) saturate(1.4);
+
+  /* Soft, unhurried motion (Crucible's 0.15s control feel). */
+  --ae-duration-fast:   150ms;
+  --ae-duration-normal: 200ms;
+
+  /* ============================================================
+   * Tier 2 — Crucible extras (NON-STANDARD).
+   * The dashboard-green identity + rationale-gold, exposed for Crucible-aware
+   * surfaces (dot indicators, tints). Pair with a
+   * var(--ae-color-crucible-green, var(--ae-color-success)) fallback to stay
+   * cross-theme safe. Other theme packs do NOT declare these.
+   * ============================================================ */
+
+  --ae-color-crucible-green: oklch(75% 0.12 162);  /* dashboard identity #5ec490 */
+  --ae-color-crucible-gold:  oklch(76% 0.13 95);   /* rationale gold #d4af37     */
+  --ae-color-crucible-ember: var(--ae-color-accent-500);
+
+  /* ============================================================
+   * Tier 3 — Control overrides.
+   *
+   * Molten primary button — a glowing amber gradient (lighter crest → deeper
+   * base) so the fill reads as molten metal rather than a flat chip. Dark ink
+   * text keeps it AAA-legible. The molten HALO is applied per-variant via the
+   * light-DOM rules at the end of this file (so only primary/danger glow).
+   * ============================================================ */
+
+  --ae-button-primary-bg:
+    linear-gradient(180deg, var(--ae-color-accent-400), var(--ae-color-accent-600));
+  --ae-button-primary-bg-hover:
+    linear-gradient(180deg, var(--ae-color-accent-300), var(--ae-color-accent-500));
+  --ae-button-primary-bg-active:
+    linear-gradient(180deg, var(--ae-color-accent-600), var(--ae-color-accent-700));
+
+  /* Glass form controls — translucent slate fill, faint resting border that
+   * warms to the molten accent on hover/focus. The whole control family flips
+   * together. The autofill paint-over uses an OPAQUE slate so a browser-filled
+   * field doesn't strand a translucent chip. */
+  --ae-input-bg:           color-mix(in srgb, var(--ae-color-gray-900) 55%, transparent);
+  --ae-input-bg-hover:     color-mix(in srgb, var(--ae-color-gray-800) 60%, transparent);
+  --ae-input-bg-focus:     color-mix(in srgb, var(--ae-color-gray-800) 68%, transparent);
+  --ae-input-border:       var(--ae-color-border-strong);
+  --ae-input-border-hover: var(--ae-color-accent-700);
+  --ae-input-border-focus: var(--ae-color-accent);
+  --ae-input-autofill-bg:  var(--ae-color-gray-900);
+
+  --ae-textarea-bg:           color-mix(in srgb, var(--ae-color-gray-900) 55%, transparent);
+  --ae-textarea-bg-hover:     color-mix(in srgb, var(--ae-color-gray-800) 60%, transparent);
+  --ae-textarea-bg-focus:     color-mix(in srgb, var(--ae-color-gray-800) 68%, transparent);
+  --ae-textarea-border:       var(--ae-color-border-strong);
+  --ae-textarea-border-hover: var(--ae-color-accent-700);
+  --ae-textarea-border-focus: var(--ae-color-accent);
+
+  --ae-select-bg:           color-mix(in srgb, var(--ae-color-gray-900) 55%, transparent);
+  --ae-select-bg-hover:     color-mix(in srgb, var(--ae-color-gray-800) 60%, transparent);
+  --ae-select-bg-focus:     color-mix(in srgb, var(--ae-color-gray-800) 68%, transparent);
+  --ae-select-border:       var(--ae-color-border-strong);
+  --ae-select-border-hover: var(--ae-color-accent-700);
+  --ae-select-border-focus: var(--ae-color-accent);
+
+  --ae-combobox-bg:           color-mix(in srgb, var(--ae-color-gray-900) 55%, transparent);
+  --ae-combobox-bg-hover:     color-mix(in srgb, var(--ae-color-gray-800) 60%, transparent);
+  --ae-combobox-bg-focus:     color-mix(in srgb, var(--ae-color-gray-800) 68%, transparent);
+  --ae-combobox-border:       var(--ae-color-border-strong);
+  --ae-combobox-border-hover: var(--ae-color-accent-700);
+  --ae-combobox-border-focus: var(--ae-color-accent);
+
+  /* ============================================================
+   * Tier 3 — Frosted-glass control + reading surfaces (Molten / dark).
+   *
+   * The glass capability isn't only for floating overlays — the controls a
+   * reviewer actually touches frost too. Each surface is made TRANSLUCENT so
+   * its per-component backdrop-filter hook (which falls back to
+   * --ae-surface-backdrop-filter) has the atmosphere to refract. Opacity is
+   * tuned per surface: code / table / diff stay high (legibility first), the
+   * container chrome sits lower (more glass). Other themes leave these unset →
+   * opaque, and their backdrop-filter resolves to none.
+   * ============================================================ */
+
+  /* Code + data reading surfaces — frosted, but kept legible (high opacity). */
+  --ae-code-block-bg:        color-mix(in srgb, var(--ae-color-gray-900) 80%, transparent);
+  --ae-code-block-header-bg: color-mix(in srgb, var(--ae-color-gray-800) 74%, transparent);
+  --ae-table-bg:             color-mix(in srgb, var(--ae-color-gray-900) 68%, transparent);
+  --ae-diff-bg:              color-mix(in srgb, var(--ae-color-gray-900) 72%, transparent);
+
+  /* Container chrome — more glass (lower opacity). */
+  --ae-accordion-bg:   color-mix(in srgb, var(--ae-color-gray-900) 66%, transparent);
+  --ae-segmented-bg:   color-mix(in srgb, var(--ae-color-gray-900) 58%, transparent);
+  --ae-file-input-bg:  color-mix(in srgb, var(--ae-color-gray-900) 52%, transparent);
+  --ae-date-picker-bg: color-mix(in srgb, var(--ae-color-gray-900) 55%, transparent);
+  --ae-time-picker-bg: color-mix(in srgb, var(--ae-color-gray-900) 55%, transparent);
+
+  /* Pill tabs — the raised active pill frosts + glows over the (already
+   * translucent --ae-color-bg-muted) track. */
+  --ae-tabs-pill-tab-bg-active:       color-mix(in srgb, var(--ae-color-gray-800) 72%, transparent);
+  --ae-tabs-pill-tab-backdrop-filter: var(--ae-surface-backdrop-filter);
+  --ae-tabs-pill-tab-shadow-active:
+    inset 0 1px 0 0 oklch(100% 0 0 / 0.10),
+    0 1px 4px -1px oklch(0% 0 0 / 0.5),
+    0 0 10px -3px color-mix(in srgb, var(--ae-color-accent) 45%, transparent);
+
+  /* ============================================================
+   * Tier 3 — Bioluminescent glow on the small interactive controls.
+   *
+   * The "on" state of a toggle and the filled track of a slider / progress are
+   * where the molten light lives. Each token feeds a component box-shadow hook
+   * consumed ONLY in the checked / active / filled state, so the glow appears
+   * on engagement, not at rest — blurred amber, kept subtle. --ae-color-accent
+   * resolves per-variant, so Quench inherits these with its deeper amber.
+   * ============================================================ */
+  --ae-checkbox-glow:
+    0 0 8px -1px color-mix(in srgb, var(--ae-color-accent) 55%, transparent),
+    0 0 2px 0 color-mix(in srgb, var(--ae-color-accent) 40%, transparent);
+  --ae-radio-glow: var(--ae-checkbox-glow);
+  --ae-switch-glow:
+    inset 0 1px 0 0 oklch(100% 0 0 / 0.22),
+    0 0 12px -2px color-mix(in srgb, var(--ae-color-accent) 55%, transparent);
+  --ae-slider-fill-glow:
+    0 0 10px -1px color-mix(in srgb, var(--ae-color-accent) 60%, transparent);
+  --ae-slider-thumb-shadow:
+    0 0 0 4px color-mix(in srgb, var(--ae-color-accent) 14%, transparent),
+    0 2px 6px -1px oklch(0% 0 0 / 0.5),
+    0 0 10px -2px color-mix(in srgb, var(--ae-color-accent) 50%, transparent);
+  --ae-progress-glow:
+    0 0 10px -1px color-mix(in srgb, var(--ae-color-accent) 55%, transparent);
+
+  /* Loading + standalone spinners glow molten. */
+  --ae-spinner-color: var(--ae-color-accent);
+
+  /* The atmospheric backdrop is painted OUTSIDE this @layer (below), so it can
+   * beat a consumer's unlayered `html { background }` — see the note there. */
+}
+
+/*
+ * ── Crucible · Quench (light) ───────────────────────────────────────
+ *
+ * `data-theme="crucible" data-variant="light"` (or `class="crucible light"`).
+ * The cooled forge: the same molten amber identity and frosted glass on a
+ * bright GitHub-light substrate. Direction-agnostic identity (type, radius,
+ * eyebrow tracking, motion, the molten button gradient, the glass switch, the
+ * input treatment) is inherited from the brand block; this cell restates the
+ * full LIGHT surface direction (the brand block is dark-default), light-tuned
+ * soft shadows, darker status -emphasis stops, a deeper accent for link/focus
+ * legibility on cream, and the lighter atmosphere.
+ */
+:root[data-theme="crucible"][data-variant="light"],
+:root.crucible.light {
+  /* Status -700 re-toned DARKER for light grounds. */
+  --ae-color-success-700: oklch(50% 0.17 152);
+  --ae-color-warning-700: oklch(56% 0.13 72);
+  --ae-color-danger-700:  oklch(50% 0.21 25);
+  --ae-color-info-700:    oklch(50% 0.15 252);
+
+  /* Light-surface bioluminescent shadows — soft, faint cool glow, glass rim. */
+  --ae-shadow-xs:
+    inset 0 1px 0 0 oklch(100% 0 0 / 0.6),
+    0 1px 2px 0 oklch(30% 0.02 250 / 0.06);
+  --ae-shadow-sm:
+    0 2px 6px -1px oklch(30% 0.02 250 / 0.08),
+    0 0 8px -2px oklch(70% 0.10 200 / 0.06);
+  --ae-shadow-md:
+    0 6px 16px -4px oklch(30% 0.03 250 / 0.10),
+    0 0 14px -3px oklch(70% 0.10 200 / 0.07);
+  --ae-shadow-lg:
+    0 12px 28px -6px oklch(30% 0.03 250 / 0.12),
+    0 0 22px -5px oklch(70% 0.10 200 / 0.08);
+  --ae-shadow-xl:
+    0 20px 40px -8px oklch(30% 0.04 250 / 0.14),
+    0 0 32px -7px oklch(70% 0.10 200 / 0.09);
+  --ae-shadow-2xl: 0 28px 56px -12px oklch(30% 0.05 250 / 0.22);
+  --ae-shadow-inner: inset 0 2px 4px 0 oklch(30% 0.03 250 / 0.07);
+
+  /* Light surfaces — GitHub-light, glassmorphic translucent. */
+  --ae-color-bg:           var(--ae-color-gray-0);
+  --ae-color-bg-subtle:    color-mix(in srgb, var(--ae-color-gray-50) 85%, transparent);
+  --ae-color-bg-muted:     color-mix(in srgb, var(--ae-color-gray-100) 85%, transparent);
+  --ae-color-bg-elevated:  color-mix(in srgb, var(--ae-color-gray-0) 76%, transparent);
+  --ae-color-bg-inverse:   var(--ae-color-gray-1000);
+  --ae-color-bg-overlay:   oklch(20% 0.02 250 / 0.4);
+
+  --ae-color-fg:           var(--ae-color-gray-1000);
+  /* One stop darker than GitHub-light's gray-500/400. Crucible's TRANSLUCENT
+   * Quench surfaces composite lighter than an opaque page, so the lighter
+   * muted/subtle stops dipped just below AA on bg-muted / bg-subtle / glass
+   * fields (table header, neutral callout title, inactive pill tab, field
+   * placeholders). gray-600 / gray-500 restore ≥4.5 on every Quench surface
+   * while keeping the muted › subtle hierarchy. (Molten/dark is unaffected —
+   * its stops already clear AA on the dark ground.) */
+  --ae-color-fg-muted:     var(--ae-color-gray-600);
+  --ae-color-fg-subtle:    var(--ae-color-gray-500);
+  --ae-color-fg-inverse:   var(--ae-color-gray-0);
+  --ae-color-fg-disabled:  var(--ae-color-gray-300);
+  --ae-color-fg-on-accent: var(--ae-color-gray-1000);
+  --ae-color-fg-on-danger: var(--ae-color-gray-0);
+
+  --ae-color-border:        var(--ae-color-gray-200);
+  --ae-color-border-strong: var(--ae-color-gray-300);
+  --ae-color-border-subtle: var(--ae-color-gray-100);
+  --ae-color-border-inverse: var(--ae-color-gray-700);
+
+  --ae-color-accent:          var(--ae-color-accent-600);
+  --ae-color-accent-hover:    var(--ae-color-accent-700);
+  --ae-color-accent-active:   var(--ae-color-accent-800);
+  --ae-color-accent-subtle:   var(--ae-color-accent-50);
+  --ae-color-accent-emphasis: var(--ae-color-accent-800);
+
+  /* Translucent light slate so callout / alert / toast frost on Quench too. */
+  --ae-color-success-subtle: color-mix(in srgb, var(--ae-color-gray-50) 78%, transparent);
+  --ae-color-warning-subtle: color-mix(in srgb, var(--ae-color-gray-50) 78%, transparent);
+  --ae-color-danger-subtle:  color-mix(in srgb, var(--ae-color-gray-50) 78%, transparent);
+  --ae-color-info-subtle:    color-mix(in srgb, var(--ae-color-gray-50) 78%, transparent);
+
+  --ae-color-focus-ring:     var(--ae-color-accent-600);
+  --ae-color-selection-bg:   var(--ae-color-accent-100);
+  --ae-color-selection-fg:   var(--ae-color-accent-900);
+  --ae-color-hover-overlay:  oklch(0% 0 0 / 0.04);
+  --ae-color-active-overlay: oklch(0% 0 0 / 0.07);
+
+  /* Light glass form controls. */
+  --ae-input-bg:           color-mix(in srgb, var(--ae-color-gray-50) 70%, transparent);
+  --ae-input-bg-hover:     color-mix(in srgb, var(--ae-color-gray-100) 70%, transparent);
+  --ae-input-bg-focus:     color-mix(in srgb, var(--ae-color-gray-0) 82%, transparent);
+  --ae-input-autofill-bg:  var(--ae-color-gray-0);
+
+  /* Field placeholders use the muted stop (gray-600), not the lighter subtle
+   * stop, so hint text clears AA on the bright glass fields. */
+  --ae-input-placeholder:    var(--ae-color-fg-muted);
+  --ae-textarea-placeholder: var(--ae-color-fg-muted);
+  --ae-select-placeholder:   var(--ae-color-fg-muted);
+  --ae-combobox-placeholder: var(--ae-color-fg-muted);
+
+  --ae-textarea-bg:        color-mix(in srgb, var(--ae-color-gray-50) 70%, transparent);
+  --ae-textarea-bg-hover:  color-mix(in srgb, var(--ae-color-gray-100) 70%, transparent);
+  --ae-textarea-bg-focus:  color-mix(in srgb, var(--ae-color-gray-0) 82%, transparent);
+
+  --ae-select-bg:          color-mix(in srgb, var(--ae-color-gray-50) 70%, transparent);
+  --ae-select-bg-hover:    color-mix(in srgb, var(--ae-color-gray-100) 70%, transparent);
+  --ae-select-bg-focus:    color-mix(in srgb, var(--ae-color-gray-0) 82%, transparent);
+
+  --ae-combobox-bg:        color-mix(in srgb, var(--ae-color-gray-50) 70%, transparent);
+  --ae-combobox-bg-hover:  color-mix(in srgb, var(--ae-color-gray-100) 70%, transparent);
+  --ae-combobox-bg-focus:  color-mix(in srgb, var(--ae-color-gray-0) 82%, transparent);
+
+  /* Light frosted control + reading surfaces. The code block stays the dark
+   * forge surface (inherited from the brand block) — a molten console on the
+   * cooled page — while the data/chrome surfaces frost light over the bright
+   * Quench atmosphere. The glow tokens are inherited from the brand block;
+   * --ae-color-accent resolves to Quench's deeper amber. */
+  --ae-table-bg:             color-mix(in srgb, var(--ae-color-gray-0) 70%, transparent);
+  --ae-diff-bg:              color-mix(in srgb, var(--ae-color-gray-0) 72%, transparent);
+  --ae-accordion-bg:   color-mix(in srgb, var(--ae-color-gray-0) 68%, transparent);
+  --ae-segmented-bg:   color-mix(in srgb, var(--ae-color-gray-50) 62%, transparent);
+  --ae-file-input-bg:  color-mix(in srgb, var(--ae-color-gray-50) 56%, transparent);
+  --ae-date-picker-bg: color-mix(in srgb, var(--ae-color-gray-50) 70%, transparent);
+  --ae-time-picker-bg: color-mix(in srgb, var(--ae-color-gray-50) 70%, transparent);
+  --ae-tabs-pill-tab-bg-active: color-mix(in srgb, var(--ae-color-gray-0) 76%, transparent);
+}
+} /* @layer ae-brand */
+
+/*
+ * ── Atmospheric backdrop — the bioluminescent variegation ───────────
+ *
+ * A cool Crucible-green glow top-left, a cool blue glow top-right, and a warm
+ * molten-amber undertow rising from the bottom, all at low alpha over the page
+ * floor. `background-attachment: fixed` keeps it a living ground behind
+ * scrolling content.
+ *
+ * Painted UNLAYERED (outside @layer ae-brand) and with a `:root[data-theme]`
+ * selector (specificity 0,1,1) so it beats a consumer's unlayered
+ * `html { background: … }` reset — a layered rule would lose to any such
+ * unlayered declaration regardless of specificity, wiping the atmosphere. If a
+ * surface (e.g. the document body) paints an opaque page color on top, set that
+ * surface's background to `transparent` under Crucible to let the ground show
+ * (the docs do this for `body`). Consumers can override this rule outright.
+ */
+:root[data-theme="crucible"],
+:root.crucible {
+  background-color: var(--ae-color-gray-1000);
+  background-image:
+    radial-gradient(1200px 820px at 12% -12%, oklch(72% 0.12 162 / 0.07), transparent 60%),
+    radial-gradient(1000px 720px at 102% -4%, oklch(70% 0.13 252 / 0.06), transparent 56%),
+    radial-gradient(1100px 900px at 50% 118%, oklch(80% 0.155 60 / 0.055), transparent 62%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
+:root[data-theme="crucible"][data-variant="light"],
+:root.crucible.light {
+  background-color: var(--ae-color-gray-0);
+  background-image:
+    radial-gradient(1200px 820px at 12% -12%, oklch(70% 0.12 162 / 0.05), transparent 60%),
+    radial-gradient(1000px 720px at 102% -4%, oklch(70% 0.13 252 / 0.045), transparent 56%),
+    radial-gradient(1100px 900px at 50% 118%, oklch(80% 0.155 60 / 0.05), transparent 62%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
+
+/*
+ * ── Molten halo — per-variant button glow (light-DOM targeted) ───────
+ *
+ * The glow is primary/danger only, so it can't live on a :root token (that
+ * would halo every ghost/tertiary button too). These rules set the host's
+ * --ae-button-shadow custom property on the matching buttons; the value
+ * inherits into the shadow root, where ae-button reads
+ * `box-shadow: var(--ae-button-shadow, none)`. Each is the molten/red glow +
+ * an accent rim + a top sheen — the bioluminescent edge on the action itself.
+ * Both Molten and Quench get it (the accent token resolves per-variant).
+ */
+:root[data-theme="crucible"] ae-button[variant="primary"],
+:root.crucible ae-button[variant="primary"] {
+  --ae-button-shadow:
+    0 2px 14px -3px color-mix(in srgb, var(--ae-color-accent) 60%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--ae-color-accent) 32%, transparent),
+    inset 0 1px 0 0 oklch(100% 0 0 / 0.28);
+}
+:root[data-theme="crucible"] ae-button[variant="danger"],
+:root.crucible ae-button[variant="danger"] {
+  --ae-button-shadow:
+    0 2px 14px -3px color-mix(in srgb, var(--ae-color-danger) 55%, transparent),
+    inset 0 1px 0 0 oklch(100% 0 0 / 0.22);
+}
+
+/*
+ * ── Frosted secondary button (light-DOM targeted) ───────────────────
+ *
+ * Primary / danger carry the molten gradient + halo above; the quiet SECONDARY
+ * button gets a translucent slate fill + the glass blur so non-primary actions
+ * still read as frosted glass. Ghost / tertiary stay chromeless (transparent —
+ * no surface to frost, and the component defaults --ae-button-backdrop-filter
+ * to none so they aren't frosted into floating rectangles). Set on the host;
+ * --ae-button-secondary-bg and --ae-button-backdrop-filter inherit into the
+ * shadow root, where ae-button reads them on the secondary variant.
+ */
+:root[data-theme="crucible"] ae-button[variant="secondary"],
+:root.crucible ae-button[variant="secondary"] {
+  --ae-button-secondary-bg: color-mix(in srgb, var(--ae-color-gray-900) 55%, transparent);
+  --ae-button-backdrop-filter: var(--ae-surface-backdrop-filter);
+}
+:root[data-theme="crucible"][data-variant="light"] ae-button[variant="secondary"],
+:root.crucible.light ae-button[variant="secondary"] {
+  --ae-button-secondary-bg: color-mix(in srgb, var(--ae-color-gray-50) 62%, transparent);
+}

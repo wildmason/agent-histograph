@@ -1,0 +1,180 @@
+/*
+ * Aegis v2 — Source Control Dark theme pack (Spectrum collection).
+ *
+ * A port of v1 Aegis's GitHub-flavored "Source Control Dark" into v2's
+ * two-axis model. Source Control Dark is the developer-console look: very
+ * deep near-black blue stone (#0d1117 base) under a medium emerald accent
+ * (#3fb950), with a signature link-blue hover (#58a6ff). It is a DARK-ONLY
+ * brand (v1 shipped it as `color-scheme: dark`), so this single brand block
+ * sets the full dark surface direction directly — there is no light variant.
+ *
+ * ── Pixel-perfect fidelity ──────────────────────────────────────────
+ * Every value here is the LITERAL v1 hex from ../aegis/themes.css
+ * (`[data-theme='source-control-dark']`). We deliberately do NOT convert to
+ * oklch: the rest of v2 is oklch, but converting v1's sRGB hexes would
+ * introduce gamut/rounding drift and break pixel parity with what v1 ships.
+ * The semantic (Tier-2) tokens components consume carry the exact v1 colors;
+ * the Tier-1 slate/emerald ramps are anchored to the v1 surface values so
+ * any component reaching for a raw ramp stop still resolves to a real v1
+ * color.
+ *
+ * Apply via class OR data-attribute on any ancestor (commonly :root):
+ *   <html data-theme="spectrum" data-variant="source-control-dark">   ← or class="spectrum source-control-dark"
+ *
+ * No automatic media-query activation — a brand is an explicit opt-in.
+ *
+ * v1 source-of-truth surface stack (depth: sunken→base→raised→float→fg):
+ *   sunken  #010409   base    #0d1117   raised  #161b22
+ *   float   #21262d   fg-surf #313b45   hover   #262c36 (slate)
+ */
+
+@layer ae-brand {
+:root[data-theme="spectrum"][data-variant="source-control-dark"],
+:root.spectrum.source-control-dark {
+  color-scheme: dark;
+
+  /* ============================================================
+   * Tier 1 — Primitives.
+   * Slate gray ramp anchored to v1's exact surface hexes at the dark
+   * end (700=float, 800=raised, 900=base, 1000=sunken) and extended to
+   * light stops for inverse/on-light contexts. Emerald accent ramp
+   * anchored at 500=accent.
+   * ============================================================ */
+
+  /* Slate neutrals — cool blue tint. Dark stops ARE v1 surfaces. */
+  --ae-color-gray-0:    #f6f8fa;
+  --ae-color-gray-50:   #eaeef2;
+  --ae-color-gray-100:  #f0f6fc;   /* = v1 text-primary   */
+  --ae-color-gray-200:  #c9d1d9;   /* = v1 text-secondary */
+  --ae-color-gray-300:  #9198a1;   /* = v1 text-muted     */
+  --ae-color-gray-400:  #6a6f76;   /* = v1 border-input   */
+  --ae-color-gray-500:  #313b45;   /* = v1 bg-foreground  */
+  --ae-color-gray-600:  #262c36;   /* = v1 bg-hover       */
+  --ae-color-gray-700:  #21262d;   /* = v1 bg-float       */
+  --ae-color-gray-800:  #161b22;   /* = v1 bg-raised      */
+  --ae-color-gray-900:  #0d1117;   /* = v1 bg-base        */
+  --ae-color-gray-1000: #010409;   /* = v1 bg-sunken      */
+
+  /* Emerald accent. 500=v1 accent. 400=v1 accent-hover (link-blue).
+     300 derives a lighter green (accent-as-text sibling). */
+  --ae-color-accent-50:  #e8f6ec;
+  --ae-color-accent-100: #cdeed6;
+  --ae-color-accent-200: #a3dfb3;
+  --ae-color-accent-300: #56d364;   /* lighter green — accent-as-text */
+  --ae-color-accent-400: #58a6ff;   /* = v1 accent-hover (link-blue) */
+  --ae-color-accent-500: #3fb950;   /* = v1 accent          */
+  --ae-color-accent-600: #2ea043;
+  --ae-color-accent-700: #238636;
+  --ae-color-accent-800: #196c2e;
+  --ae-color-accent-900: #104d24;
+
+  /* Status palettes — v1 ships a single value per status (used as both
+     text and fill). We seed 500 with the v1 value and derive 50/700. */
+  --ae-color-success-50:  #0f2417;
+  --ae-color-success-100: #133420;
+  --ae-color-success-500: #3fb950;   /* = v1 success */
+  --ae-color-success-700: #56d364;
+
+  --ae-color-warning-50:  #2a2008;
+  --ae-color-warning-100: #382c0d;
+  --ae-color-warning-500: #d29922;   /* = v1 warning */
+  --ae-color-warning-700: #e3b341;
+
+  --ae-color-danger-50:  #2c1414;
+  --ae-color-danger-100: #3a1a18;
+  --ae-color-danger-500: #f85149;    /* = v1 danger */
+  --ae-color-danger-700: #ff7b72;
+
+  /* Info — v1 Source Control Dark ships no info color. Derived: GitHub
+     link-blue (#58a6ff family) that sits beside the slate neutrals.
+     Used only by v2-only surfaces (no v1 equivalent to match). */
+  --ae-color-info-50:  #0d1f33;
+  --ae-color-info-100: #122a44;
+  --ae-color-info-500: #58a6ff;
+  --ae-color-info-700: #79c0ff;
+
+  /* ============================================================
+   * Scale (radius / type / motion) is SHARED across the whole Spectrum
+   * collection and lives in themes/spectrum-base.css — this file is
+   * palette-only. The one scale axis that is NOT shared is shadow: v1
+   * sets shadow alphas per-theme because they are scheme-coupled (light
+   * themes use light alphas, dark ones deep), so Source Control Dark's
+   * dark shadow block stays here.
+   * ============================================================ */
+
+  /* Dark-surface shadow alphas (v1 sm/md/lg seeded; xs/xl/2xl derived). */
+  --ae-shadow-xs:   0 1px 2px 0 rgba(0, 0, 0, 0.40);
+  --ae-shadow-sm:   0 1px 3px rgba(0, 0, 0, 0.50);
+  --ae-shadow-md:   0 4px 12px rgba(0, 0, 0, 0.60);
+  --ae-shadow-lg:   0 10px 30px rgba(0, 0, 0, 0.70);
+  --ae-shadow-xl:   0 20px 40px rgba(0, 0, 0, 0.75);
+  --ae-shadow-2xl:  0 25px 60px rgba(0, 0, 0, 0.85);
+  --ae-shadow-inner: inset 0 2px 4px 0 rgba(0, 0, 0, 0.40);
+
+  /* ============================================================
+   * Tier 2 — Semantic mapping (dark direction).
+   * Literal v1 hexes so the layer components consume is pixel-exact.
+   * ============================================================ */
+
+  --ae-color-bg:           #0d1117;   /* v1 base    */
+  --ae-color-bg-subtle:    #010409;   /* v1 sunken  — table header, code, recessed */
+  --ae-color-bg-muted:     #161b22;   /* v1 raised  — header/sidebar/panel surfaces */
+  --ae-color-bg-elevated:  #21262d;   /* v1 float   — cards, modals, dropdowns      */
+  --ae-color-bg-inverse:   #f0f6fc;   /* light slate — inverse chips/tooltip ground */
+  --ae-color-bg-overlay:   rgba(0, 0, 0, 0.50);   /* v1 backdrop-opacity 0.5 */
+
+  --ae-color-fg:           #f0f6fc;   /* v1 text-primary     */
+  --ae-color-fg-muted:     #c9d1d9;   /* v1 text-secondary   */
+  --ae-color-fg-subtle:    #9198a1;   /* v1 text-muted       */
+  --ae-color-fg-inverse:   #0d1117;   /* dark text on light inverse surface */
+  --ae-color-fg-disabled:  #636c76;   /* v1 text-placeholder */
+  --ae-color-fg-on-accent: #0d1117;   /* v1 accent-text — dark on emerald */
+  --ae-color-fg-on-danger: #ffffff;   /* white on v1 danger #f85149 (see note) */
+  /* Status FILLS in Source Control Dark are saturated mid-tones; emerald
+     success and link-blue info take dark text, gold warning + red danger
+     judged per value below. */
+  --ae-color-fg-on-warning: #161817;
+  --ae-color-fg-on-success: #161817;
+  --ae-color-fg-on-info:    #161817;
+
+  --ae-color-border:         #444c56;   /* v1 border        */
+  --ae-color-border-strong:  #6a6f76;   /* v1 border-input (3:1 control border) */
+  --ae-color-border-subtle:  #30363d;   /* v1 border-subtle */
+  --ae-color-border-inverse: #9198a1;
+
+  /* Accent — fills/rings at 500 (#3fb950), accent-as-text at emphasis
+     (#56d364, a lighter emerald). */
+  --ae-color-accent:          #3fb950;   /* v1 accent          */
+  --ae-color-accent-hover:    #58a6ff;   /* v1 accent-hover    */
+  --ae-color-accent-active:   #2ea043;
+  --ae-color-accent-subtle:   #122418;   /* dark emerald tint (≈10% accent on base) */
+  --ae-color-accent-emphasis: #56d364;   /* lighter emerald for accent-as-text */
+
+  --ae-color-success:          #3fb950;
+  --ae-color-success-subtle:   #11261a;
+  --ae-color-success-emphasis: #56d364;
+
+  --ae-color-warning:          #d29922;
+  --ae-color-warning-subtle:   #2a2210;
+  --ae-color-warning-emphasis: #e3b341;
+
+  --ae-color-danger:           #f85149;
+  --ae-color-danger-subtle:    #2e1817;
+  --ae-color-danger-emphasis:  #ff7b72;
+
+  --ae-color-info:             #58a6ff;
+  --ae-color-info-subtle:      #122a44;
+  --ae-color-info-emphasis:    #79c0ff;
+
+  --ae-color-focus-ring:     #3fb950;   /* v1 uses accent / border-hover for focus */
+  --ae-color-selection-bg:   #163a22;   /* emerald-tinted selection */
+  --ae-color-selection-fg:   #e8f6ec;
+  --ae-color-hover-overlay:  rgba(255, 255, 255, 0.05);
+  --ae-color-active-overlay: rgba(255, 255, 255, 0.09);
+
+  /* Component-tier GEOMETRY (button sizing, control hover model, panel
+   * surfaces, etc.) is theme-independent and lives in spectrum-base.css.
+   * Source Control Dark adds no component overrides of its own — its
+   * semantic palette above feeds the shared component tokens directly. */
+}
+} /* @layer ae-brand */

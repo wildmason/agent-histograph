@@ -1,0 +1,141 @@
+/*
+ * Aegis v2 — Sage Linen theme pack (Spectrum collection).
+ *
+ * A port of v1's "sage-linen" theme — a cool, low-chroma eucalyptus look:
+ * near-black forest ink (#1e2822) on a muted sage-green paper stack (#d4ded4),
+ * a deep forest-green accent (#3a5a43), and dark, readable status colours.
+ * Shadows carry the forest-ink tint rather than flat black.
+ *
+ * Palette-only: all geometry (radius / type / motion / component metrics) is
+ * shared by the whole Spectrum collection in spectrum-base.css. This file sets
+ * only the tier-1 ramps, tier-2 semantic colours, and the (scheme-coupled)
+ * shadow block. Every value is the LITERAL v1 hex from ../aegis/themes.css
+ * (`[data-theme='sage-linen']`) so the port is pixel-faithful — no oklch drift.
+ *
+ * LIGHT direction: unlike the dark Spectrum brands, the gray ramp runs
+ * light→dark as 0→1000 (surfaces live at the LIGHT end, text at the DARK end),
+ * and bg-/fg-inverse flip (a light theme's inverse bubble is dark).
+ *
+ * v1 surface stack — NOTE: sage-linen's float is its LIGHTEST surface (not
+ * sunken), so the ramp is luminance-sorted, not role-sorted (light → dark):
+ *   float #e6efe5  sunken #dde6dc  base #d4ded4  raised #c5d1c5  fg-surf #b3c1b3
+ */
+
+@layer ae-brand {
+:root[data-theme="spectrum"][data-variant="sage-linen"],
+:root.spectrum.sage-linen {
+  color-scheme: light;
+
+  /* ── Tier 1 — Primitives ─────────────────────────────────────────
+   * Light theme: gray-0 is the lightest surface, gray-1000 the darkest ink.
+   * The light stops ARE v1's surfaces (luminance-sorted — float is lightest
+   * here, not sunken); the dark stops ARE v1's text. */
+  --ae-color-gray-0:    #e6efe5;   /* = v1 bg-float (lightest surface) */
+  --ae-color-gray-50:   #dde6dc;   /* = v1 bg-sunken          */
+  --ae-color-gray-100:  #d4ded4;   /* = v1 bg-base            */
+  --ae-color-gray-200:  #c5d1c5;   /* = v1 bg-raised          */
+  --ae-color-gray-300:  #b3c1b3;   /* = v1 bg-foreground      */
+  --ae-color-gray-400:  #97a597;
+  --ae-color-gray-500:  #788876;   /* = v1 border-input       */
+  --ae-color-gray-600:  #5f6f5d;
+  --ae-color-gray-700:  #4a5b4f;   /* = v1 text-muted         */
+  --ae-color-gray-800:  #3a4a40;   /* = v1 text-secondary     */
+  --ae-color-gray-900:  #1e2822;   /* = v1 text-primary       */
+  --ae-color-gray-1000: #131a16;
+
+  /* Deep forest-green accent ramp anchored at 500 = v1 accent #3a5a43. */
+  --ae-color-accent-50:  #e7eee9;
+  --ae-color-accent-100: #cadcd0;
+  --ae-color-accent-200: #9bbba5;
+  --ae-color-accent-300: #6f9a7c;
+  --ae-color-accent-400: #4f7a5c;
+  --ae-color-accent-500: #3a5a43;   /* = v1 accent */
+  --ae-color-accent-600: #2c4733;   /* = v1 accent-hover */
+  --ae-color-accent-700: #233a29;
+  --ae-color-accent-800: #1c2e21;
+  --ae-color-accent-900: #142117;
+
+  /* Status — v1 ships one dark, light-bg-readable value each. */
+  --ae-color-success-50:  #e0ede4;
+  --ae-color-success-100: #c2dcc9;
+  --ae-color-success-500: #3a6b48;   /* = v1 success (forest green) */
+  --ae-color-success-700: #2b5036;
+
+  --ae-color-warning-50:  #f1e8d8;
+  --ae-color-warning-100: #e3d1b0;
+  --ae-color-warning-500: #8a5a1f;   /* = v1 warning (sienna) */
+  --ae-color-warning-700: #694417;
+
+  --ae-color-danger-50:  #f6e0e0;
+  --ae-color-danger-100: #ecc1c1;
+  --ae-color-danger-500: #ac3838;    /* = v1 danger (brick) */
+  --ae-color-danger-700: #842a2a;
+
+  /* Info — v1 has no info colour; reuse the completed-blue (#4a6a80) hue. */
+  --ae-color-info-50:  #e3ebf0;
+  --ae-color-info-100: #c2d2dd;
+  --ae-color-info-500: #4a6a80;
+  --ae-color-info-700: #364f60;
+
+  /* ── Tier 2 — Semantic (light direction) ─────────────────────────── */
+  --ae-color-bg:           #d4ded4;   /* v1 base    */
+  --ae-color-bg-subtle:    #dde6dc;   /* v1 sunken (lighter recessed) */
+  --ae-color-bg-muted:     #c5d1c5;   /* v1 raised  */
+  --ae-color-bg-elevated:  #e6efe5;   /* v1 float (sage-linen's lightest surface) */
+  --ae-color-bg-inverse:   #1e2822;   /* dark ink — inverse (tooltip) ground */
+  --ae-color-bg-overlay:   rgba(0, 0, 0, 0.35);   /* v1 backdrop-opacity 0.35 */
+
+  --ae-color-fg:           #1e2822;   /* v1 text-primary   */
+  --ae-color-fg-muted:     #3a4a40;   /* v1 text-secondary */
+  --ae-color-fg-subtle:    #4a5b4f;   /* v1 text-muted     */
+  --ae-color-fg-inverse:   #e6efe5;   /* light text on the dark inverse bubble */
+  --ae-color-fg-disabled:  #94a298;   /* v1 text-placeholder */
+  --ae-color-fg-on-accent: #eaf0e7;   /* v1 accent-text (off-white) */
+  --ae-color-fg-on-danger:  #ffffff;
+  --ae-color-fg-on-warning: #ffffff;
+  --ae-color-fg-on-success: #ffffff;
+  --ae-color-fg-on-info:    #ffffff;
+
+  --ae-color-border:         #bcc5b8;   /* v1 border        */
+  --ae-color-border-strong:  #788876;   /* v1 border-input  */
+  --ae-color-border-subtle:  #ccd4c8;   /* v1 border-subtle */
+  --ae-color-border-inverse: #5f6f5d;
+
+  --ae-color-accent:          #3a5a43;   /* v1 accent       */
+  --ae-color-accent-hover:    #2c4733;   /* v1 accent-hover */
+  --ae-color-accent-active:   #233a29;
+  --ae-color-accent-subtle:   #d3e1d6;   /* pale accent tint on sage paper */
+  --ae-color-accent-emphasis: #3a5a43;   /* accent reads fine on light bg */
+
+  --ae-color-success:          #3a6b48;
+  --ae-color-success-subtle:   #d6e6db;
+  --ae-color-success-emphasis: #3a6b48;
+
+  --ae-color-warning:          #8a5a1f;
+  --ae-color-warning-subtle:   #eee0c8;
+  --ae-color-warning-emphasis: #8a5a1f;
+
+  --ae-color-danger:           #ac3838;
+  --ae-color-danger-subtle:    #f1dada;
+  --ae-color-danger-emphasis:  #ac3838;
+
+  --ae-color-info:             #4a6a80;
+  --ae-color-info-subtle:      #d8e2e9;
+  --ae-color-info-emphasis:    #4a6a80;
+
+  --ae-color-focus-ring:     #3a5a43;   /* v1 focuses controls to the accent */
+  --ae-color-selection-bg:   #c4d6c9;   /* pale accent wash */
+  --ae-color-selection-fg:   #1e2822;
+  --ae-color-hover-overlay:  rgba(0, 0, 0, 0.04);
+  --ae-color-active-overlay: rgba(0, 0, 0, 0.07);
+
+  /* ── Shadows (scheme-coupled — light alphas, forest-ink tint) ────── */
+  --ae-shadow-xs:    0 1px 1px rgba(30, 40, 34, 0.05);
+  --ae-shadow-sm:    0 1px 2px rgba(30, 40, 34, 0.07);
+  --ae-shadow-md:    0 4px 8px rgba(30, 40, 34, 0.10);
+  --ae-shadow-lg:    0 10px 20px rgba(30, 40, 34, 0.12);
+  --ae-shadow-xl:    0 20px 30px rgba(30, 40, 34, 0.14);
+  --ae-shadow-2xl:   0 25px 50px -12px rgba(30, 40, 34, 0.20);
+  --ae-shadow-inner: inset 0 2px 4px 0 rgba(30, 40, 34, 0.07);
+}
+}

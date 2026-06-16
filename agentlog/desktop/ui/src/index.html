@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Histograph</title>
+    <link rel="stylesheet" href="splash.css" />
+  </head>
+  <body>
+    <!-- The injected Tauri init script (src-tauri/src/window.rs) wires this bar as
+         the frameless-window drag handle and appends pin/minimize/close controls.
+         The class name MUST match the histograph page's own `.hg-titlebar` so the
+         same injected script drives both the splash and the live page. -->
+    <header class="hg-titlebar">
+      <span class="hg-brand"><span class="hg-brand__mark" aria-hidden="true">▚</span> histograph</span>
+    </header>
+
+    <main class="splash">
+      <div class="splash__pulse" aria-hidden="true"></div>
+      <p class="splash__msg" id="msg">starting histograph…</p>
+      <p class="splash__sub" id="sub">spinning up the local serve</p>
+    </main>
+
+    <script src="splash.js"></script>
+  </body>
+</html>

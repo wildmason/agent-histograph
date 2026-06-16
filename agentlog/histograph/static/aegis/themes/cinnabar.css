@@ -1,0 +1,253 @@
+/*
+ * Aegis v2 — Cinnabar theme pack.
+ *
+ * Cinnabar is the mineral (mercury sulfide) that vermilion pigment is ground
+ * from — so the brand is named for the source of its signature accent: a
+ * vermilion / orange-red (hue ≈ 30) struck over warm-gray neutrals (hue ≈ 60)
+ * that read like the pale stone matrix the ore is mined from. Status colors
+ * keep their own identity (success green, info blue) so a warm danger still
+ * reads as danger, not as accent.
+ *
+ * Two variants, both shipped here:
+ *   Quarry  (light, default) — vermilion on a pale warm-stone ground.
+ *   Lacquer (dark)           — the deep carved-cinnabar red on dark surfaces.
+ *
+ * Apply via class OR data-attribute on any ancestor (commonly :root):
+ *   <html class="cinnabar">                            ← Quarry (default)
+ *   <html data-theme="cinnabar" data-variant="dark">   ← or class="cinnabar dark" → Lacquer
+ *
+ * No automatic media-query activation — Cinnabar is a brand opt-in, not a
+ * system-preference response.
+ *
+ * Contrast (verified by real-browser canvas pixel-readback — see
+ * scripts/verify-variant-contrast.mjs; every critical pairing passes AA):
+ *   Quarry  — fg warm-gray-900 on bg gray-0            ≈ 19.1:1 ✅ AAA
+ *             fg-on-accent gray-0 on accent-600        ≈ 6.8:1  ✅ AA
+ *               (Accent routes at 600 not 500: vermilion at L≈55 with white
+ *                text dips below 4.5:1; bumping to 600 keeps AA.)
+ *             accent-emphasis on bg                    ≈ 8.5:1  ✅ AAA
+ *             fg-on-danger gray-0 on danger-500        ≈ 5.1:1  ✅ AA
+ *   Lacquer — body 19.6:1, on-accent 5.2:1, on-danger 6.1:1 — all AA+.
+ */
+
+@layer ae-brand {
+:root[data-theme="cinnabar"],
+:root.cinnabar {
+  /* ============================================================
+   * Tier 1 — Primitives.
+   * Warm-shifted neutrals (hue 60 ≈ warm beige bias) + vermilion accent.
+   * Applies to every Cinnabar variant — the warm-gray + vermilion ramps are
+   * direction-agnostic; the dark cell below only re-tones accent/status
+   * and flips the Tier-2 surface direction.
+   * ============================================================ */
+
+  /* Warm-gray neutrals (slight warm tint via H≈60 with very low chroma). */
+  --ae-color-gray-0:    oklch(99%  0.002 60);
+  --ae-color-gray-50:   oklch(98%  0.004 60);
+  --ae-color-gray-100:  oklch(96%  0.006 60);
+  --ae-color-gray-200:  oklch(92%  0.008 60);
+  --ae-color-gray-300:  oklch(85%  0.010 60);
+  --ae-color-gray-400:  oklch(70%  0.012 60);
+  --ae-color-gray-500:  oklch(55%  0.014 60);
+  --ae-color-gray-600:  oklch(42%  0.014 60);
+  --ae-color-gray-700:  oklch(32%  0.012 60);
+  --ae-color-gray-800:  oklch(22%  0.010 60);
+  --ae-color-gray-900:  oklch(15%  0.008 60);
+  --ae-color-gray-1000: oklch(8%   0.005 60);
+
+  /* Vermilion / orange-red accent — H≈30 sits between true red (25) and
+     orange (50). Chroma is held high (0.18–0.22) for brand punch. */
+  --ae-color-accent-50:  oklch(97% 0.025 30);
+  --ae-color-accent-100: oklch(93% 0.06  30);
+  --ae-color-accent-200: oklch(86% 0.10  30);
+  --ae-color-accent-300: oklch(76% 0.15  30);
+  --ae-color-accent-400: oklch(65% 0.19  30);
+  --ae-color-accent-500: oklch(55% 0.22  30);
+  --ae-color-accent-600: oklch(48% 0.21  30);
+  --ae-color-accent-700: oklch(42% 0.19  30);
+  --ae-color-accent-800: oklch(32% 0.15  30);
+  --ae-color-accent-900: oklch(22% 0.10  30);
+
+  /* Status palettes — preserved from default so they keep their
+     semantic identity (success=green, warning=amber, etc.) and stay
+     distinguishable from the accent's warm-orange hue. */
+  --ae-color-success-50:  oklch(97% 0.025 145);
+  --ae-color-success-100: oklch(94% 0.05  145);
+  --ae-color-success-500: oklch(50% 0.15  145);  /* AA: white text on success fill >=4.5:1 */
+  --ae-color-success-700: oklch(38% 0.15  145);
+
+  /* Warning is shifted slightly cooler (hue 95, less orange-red) to
+     create separation from the vermilion accent. */
+  --ae-color-warning-50:  oklch(98% 0.03 95);
+  --ae-color-warning-100: oklch(96% 0.07 95);
+  --ae-color-warning-500: oklch(72% 0.16 95);
+  --ae-color-warning-700: oklch(50% 0.13 90);
+
+  /* Danger is pulled toward true red (hue 18) so it stays distinct from
+     the vermilion accent — accent at H=30, danger at H=18. */
+  --ae-color-danger-50:  oklch(97% 0.025 18);
+  --ae-color-danger-100: oklch(94% 0.05  18);
+  --ae-color-danger-500: oklch(56% 0.22  18);
+  --ae-color-danger-700: oklch(38% 0.19  18);
+
+  --ae-color-info-50:  oklch(97% 0.02 220);
+  --ae-color-info-100: oklch(94% 0.04 220);
+  --ae-color-info-500: oklch(49% 0.13 220);  /* AA: white text on info fill >=4.5:1 */
+  --ae-color-info-700: oklch(42% 0.12 220);
+
+  /* ============================================================
+   * Tier 2 — Semantic remaps.
+   *
+   * Accent semantic alias points at 600 not 500: at H≈30 the L=55
+   * accent-500 fails AA with white text (~3.8:1), but accent-600 at
+   * L≈48 passes (~5.4:1). Hover deepens to 700.
+   * ============================================================ */
+
+  --ae-color-bg:           var(--ae-color-gray-0);
+  --ae-color-bg-subtle:    var(--ae-color-gray-50);
+  --ae-color-bg-muted:     var(--ae-color-gray-100);
+  --ae-color-bg-elevated:  var(--ae-color-gray-0);
+  --ae-color-bg-inverse:   var(--ae-color-gray-900);
+  --ae-color-bg-overlay:   oklch(0% 0 0 / 0.4);
+
+  --ae-color-fg:           var(--ae-color-gray-900);
+  --ae-color-fg-muted:     var(--ae-color-gray-600);
+  --ae-color-fg-subtle:    var(--ae-color-gray-500);
+  --ae-color-fg-inverse:   var(--ae-color-gray-0);
+  --ae-color-fg-disabled:  var(--ae-color-gray-400);
+  --ae-color-fg-on-accent: var(--ae-color-gray-0);
+  --ae-color-fg-on-danger: var(--ae-color-gray-0);
+
+  --ae-color-border:         var(--ae-color-gray-200);
+  --ae-color-border-strong:  var(--ae-color-gray-300);
+  --ae-color-border-subtle:  var(--ae-color-gray-100);
+  --ae-color-border-inverse: var(--ae-color-gray-700);
+
+  /* Accent shifted up one rung for AA-safe white-on-vermilion. */
+  --ae-color-accent:          var(--ae-color-accent-600);
+  --ae-color-accent-hover:    var(--ae-color-accent-700);
+  --ae-color-accent-active:   var(--ae-color-accent-800);
+  --ae-color-accent-subtle:   var(--ae-color-accent-50);
+  --ae-color-accent-emphasis: var(--ae-color-accent-700);
+
+  --ae-color-success:          var(--ae-color-success-500);
+  --ae-color-success-subtle:   var(--ae-color-success-50);
+  --ae-color-success-emphasis: var(--ae-color-success-700);
+
+  --ae-color-warning:          var(--ae-color-warning-500);
+  --ae-color-warning-subtle:   var(--ae-color-warning-50);
+  --ae-color-warning-emphasis: var(--ae-color-warning-700);
+
+  --ae-color-danger:           var(--ae-color-danger-500);
+  --ae-color-danger-subtle:    var(--ae-color-danger-50);
+  --ae-color-danger-emphasis:  var(--ae-color-danger-700);
+
+  --ae-color-info:             var(--ae-color-info-500);
+  --ae-color-info-subtle:      var(--ae-color-info-50);
+  --ae-color-info-emphasis:    var(--ae-color-info-700);
+
+  --ae-color-focus-ring:     var(--ae-color-accent-400);
+  --ae-color-selection-bg:   var(--ae-color-accent-100);
+  --ae-color-selection-fg:   var(--ae-color-accent-900);
+  --ae-color-hover-overlay:  oklch(0% 0 0 / 0.04);
+  --ae-color-active-overlay: oklch(0% 0 0 / 0.08);
+}
+
+/*
+ * ── Cinnabar · Lacquer variant ──────────────────────────────────────
+ *
+ * `data-theme="cinnabar" data-variant="dark"` (or `class="cinnabar dark"`).
+ * Cinnabar's warm-gray + vermilion identity on dark surfaces — the deep
+ * carved-lacquer red. Self-contained: the Cinnabar brand block above sets a
+ * LIGHT Tier-2 mapping, so this cell must restate the full dark surface
+ * direction to override it (higher specificity, same layer). Accent + status
+ * are re-toned lighter so they stay AA against the dark warm-gray ground; the
+ * warm-gray ramp itself is inherited from the brand block (a full 0–1000
+ * scale reads correctly in both directions).
+ *
+ * Contrast (real-browser canvas readback, scripts/verify-variant-contrast.mjs):
+ *   fg gray-50 on bg gray-1000                         ≈ 19.6:1 ✅ AAA
+ *   fg-on-accent gray-1000 on accent-500 (vermilion)   ≈ 5.2:1  ✅ AA
+ *   accent-emphasis (accent-300) on bg                 ✅ AAA
+ *   fg-on-danger gray-1000 on danger-500               ≈ 6.1:1  ✅ AA
+ */
+:root[data-theme="cinnabar"][data-variant="dark"],
+:root.cinnabar.dark {
+  /* Accent (vermilion H30) re-toned for dark — brighter, slightly softened. */
+  --ae-color-accent-300: oklch(78% 0.13 30);
+  --ae-color-accent-400: oklch(70% 0.16 30);
+  --ae-color-accent-500: oklch(62% 0.18 30);
+  --ae-color-accent-600: oklch(52% 0.18 30);
+  --ae-color-accent-700: oklch(42% 0.16 30);
+  --ae-color-accent-800: oklch(32% 0.12 30);
+  --ae-color-accent-900: oklch(22% 0.08 30);
+
+  /* Status lightened for AA against the dark warm-gray ground. */
+  --ae-color-success-500: oklch(66% 0.16 145);
+  --ae-color-success-700: oklch(78% 0.14 145);
+  --ae-color-warning-500: oklch(76% 0.15 95);
+  --ae-color-warning-700: oklch(84% 0.13 95);
+  --ae-color-danger-500:  oklch(66% 0.19 18);
+  --ae-color-danger-700:  oklch(74% 0.17 18);
+  --ae-color-info-500:    oklch(68% 0.13 220);
+  --ae-color-info-700:    oklch(80% 0.11 220);
+
+  /* Dark-surface shadow alphas. */
+  --ae-shadow-xs:   0 1px 2px 0 oklch(0% 0 0 / 0.40);
+  --ae-shadow-sm:   0 1px 3px 0 oklch(0% 0 0 / 0.50), 0 1px 2px -1px oklch(0% 0 0 / 0.40);
+  --ae-shadow-md:   0 4px 6px -1px oklch(0% 0 0 / 0.55), 0 2px 4px -2px oklch(0% 0 0 / 0.45);
+  --ae-shadow-lg:   0 10px 15px -3px oklch(0% 0 0 / 0.55), 0 4px 6px -4px oklch(0% 0 0 / 0.45);
+  --ae-shadow-xl:   0 20px 25px -5px oklch(0% 0 0 / 0.60), 0 8px 10px -6px oklch(0% 0 0 / 0.50);
+  --ae-shadow-2xl:  0 25px 50px -12px oklch(0% 0 0 / 0.80);
+  --ae-shadow-inner: inset 0 2px 4px 0 oklch(0% 0 0 / 0.40);
+
+  /* Tier 2 — dark surface direction (warm-gray ramp inherited from brand). */
+  --ae-color-bg:           var(--ae-color-gray-1000);
+  --ae-color-bg-subtle:    var(--ae-color-gray-900);
+  --ae-color-bg-muted:     var(--ae-color-gray-800);
+  --ae-color-bg-elevated:  var(--ae-color-gray-900);
+  --ae-color-bg-inverse:   var(--ae-color-gray-50);
+  --ae-color-bg-overlay:   oklch(0% 0 0 / 0.6);
+
+  --ae-color-fg:           var(--ae-color-gray-50);
+  --ae-color-fg-muted:     var(--ae-color-gray-300);
+  --ae-color-fg-subtle:    var(--ae-color-gray-400);
+  --ae-color-fg-inverse:   var(--ae-color-gray-900);
+  --ae-color-fg-disabled:  var(--ae-color-gray-600);
+  --ae-color-fg-on-accent: var(--ae-color-gray-1000);
+  --ae-color-fg-on-danger: var(--ae-color-gray-1000);
+
+  --ae-color-border:         var(--ae-color-gray-700);
+  --ae-color-border-strong:  var(--ae-color-gray-600);
+  --ae-color-border-subtle:  var(--ae-color-gray-800);
+  --ae-color-border-inverse: var(--ae-color-gray-200);
+
+  --ae-color-accent:          var(--ae-color-accent-500);
+  --ae-color-accent-hover:    var(--ae-color-accent-400);
+  --ae-color-accent-active:   var(--ae-color-accent-300);
+  --ae-color-accent-subtle:   var(--ae-color-accent-900);
+  --ae-color-accent-emphasis: var(--ae-color-accent-300);
+
+  --ae-color-success:          var(--ae-color-success-500);
+  --ae-color-success-subtle:   var(--ae-color-gray-900);
+  --ae-color-success-emphasis: var(--ae-color-success-700);
+
+  --ae-color-warning:          var(--ae-color-warning-500);
+  --ae-color-warning-subtle:   var(--ae-color-gray-900);
+  --ae-color-warning-emphasis: var(--ae-color-warning-700);
+
+  --ae-color-danger:           var(--ae-color-danger-500);
+  --ae-color-danger-subtle:    var(--ae-color-gray-900);
+  --ae-color-danger-emphasis:  var(--ae-color-danger-700);
+
+  --ae-color-info:             var(--ae-color-info-500);
+  --ae-color-info-subtle:      var(--ae-color-gray-900);
+  --ae-color-info-emphasis:    var(--ae-color-info-700);
+
+  --ae-color-focus-ring:     var(--ae-color-accent-400);
+  --ae-color-selection-bg:   var(--ae-color-accent-800);
+  --ae-color-selection-fg:   var(--ae-color-accent-50);
+  --ae-color-hover-overlay:  oklch(100% 0 0 / 0.06);
+  --ae-color-active-overlay: oklch(100% 0 0 / 0.10);
+}
+} /* @layer ae-brand */

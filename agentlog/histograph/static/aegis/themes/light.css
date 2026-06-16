@@ -1,0 +1,139 @@
+/*
+ * Aegis v2 — Light SCHEME (explicit).
+ *
+ * One of the three scheme packs on the `data-variant` axis (light / dark /
+ * high-contrast). The defaults in src/tokens/tokens.css are already light, so
+ * this file exists for *explicit* opt-in — e.g. when a region uses dark by
+ * default and you want a light island, or you want to force-pin light
+ * regardless of `prefers-color-scheme`.
+ *
+ * Apply via the scheme attribute OR the class alias on any ancestor:
+ *   <html data-variant="light">     ← scheme axis
+ *   <html class="light">            ← class alias
+ *
+ * Lives in `@layer ae-scheme`, so any explicit brand (@layer ae-brand) still
+ * wins for its Tier-1 ramps + Tier-2 overrides — e.g. `cinnabar + light` keeps
+ * cinnabar's warm grays, not the cool defaults restated here. The ramps below
+ * are the DEFAULT brand's, restated so this file fully overrides a dark
+ * ancestor when applied to a sub-tree.
+ *
+ * Contrast (verified by OKLCH-lightness delta proxy; recommend a real
+ * checker pass before launch):
+ *   fg gray-900 (L≈15) on bg gray-0   (L≈99) ≈ 21:1   ✅ AAA
+ *   fg-on-accent gray-0 (L≈99) on accent-500 (L≈58)   ≈ ~6:1   ✅ AA
+ *   fg-on-danger gray-0 (L≈99) on danger-500 (L≈58)   ≈ ~5:1   ✅ AA
+ *   accent-emphasis (L≈38) on bg (L≈99)               ≈ ~10:1  ✅ AA
+ *   fg-muted gray-600 (L≈42) on bg (L≈99)             ≈ ~7:1   ✅ AAA
+ */
+
+@layer ae-scheme {
+  :root[data-variant="light"],
+  :root.light {
+    /* ============================================================
+     * Tier 1 — Primitives (default brand; mirrors tokens.css).
+     * Re-stated so this file is self-contained when applied to a
+     * sub-tree of a dark-by-default app. A named brand overrides
+     * these from @layer ae-brand.
+     * ============================================================ */
+
+    --ae-color-gray-0:    oklch(99%  0     0);
+    --ae-color-gray-50:   oklch(98%  0.002 240);
+    --ae-color-gray-100:  oklch(96%  0.004 240);
+    --ae-color-gray-200:  oklch(92%  0.005 240);
+    --ae-color-gray-300:  oklch(85%  0.007 240);
+    --ae-color-gray-400:  oklch(70%  0.009 240);
+    --ae-color-gray-500:  oklch(55%  0.011 240);
+    --ae-color-gray-600:  oklch(42%  0.011 240);
+    --ae-color-gray-700:  oklch(32%  0.009 240);
+    --ae-color-gray-800:  oklch(22%  0.007 240);
+    --ae-color-gray-900:  oklch(15%  0.005 240);
+    --ae-color-gray-1000: oklch(8%   0.003 240);
+
+    --ae-color-accent-50:  oklch(97% 0.02  255);
+    --ae-color-accent-100: oklch(94% 0.04  255);
+    --ae-color-accent-200: oklch(88% 0.07  255);
+    --ae-color-accent-300: oklch(78% 0.11  255);
+    --ae-color-accent-400: oklch(68% 0.15  255);
+    --ae-color-accent-500: oklch(54% 0.19  255);  /* AA: white text on accent fill >=4.5:1 */
+    --ae-color-accent-600: oklch(48% 0.18  255);
+    --ae-color-accent-700: oklch(38% 0.16  255);
+    --ae-color-accent-800: oklch(28% 0.12  255);
+    --ae-color-accent-900: oklch(20% 0.08  255);
+
+    --ae-color-success-50:  oklch(97% 0.025 145);
+    --ae-color-success-100: oklch(94% 0.05  145);
+    --ae-color-success-500: oklch(50% 0.15  145);  /* AA: white text on success fill >=4.5:1 */
+    --ae-color-success-700: oklch(38% 0.15  145);
+
+    --ae-color-warning-50:  oklch(98% 0.03 85);
+    --ae-color-warning-100: oklch(96% 0.07 85);
+    --ae-color-warning-500: oklch(70% 0.17 85);
+    --ae-color-warning-700: oklch(48% 0.13 75);
+
+    --ae-color-danger-50:  oklch(97% 0.025 25);
+    --ae-color-danger-100: oklch(94% 0.05  25);
+    --ae-color-danger-500: oklch(58% 0.21  25);
+    --ae-color-danger-700: oklch(40% 0.18  25);
+
+    --ae-color-info-50:  oklch(97% 0.02 220);
+    --ae-color-info-100: oklch(94% 0.04 220);
+    --ae-color-info-500: oklch(49% 0.13 220);  /* AA: white text on info fill >=4.5:1 */
+    --ae-color-info-700: oklch(42% 0.12 220);
+
+    /* ============================================================
+     * Tier 2 — Semantic mapping (light direction).
+     *
+     * Re-affirms the defaults so semantic tokens flip back to light
+     * even when a dark scheme is the document-level variant and this
+     * is applied to a sub-tree.
+     * ============================================================ */
+
+    --ae-color-bg:           var(--ae-color-gray-0);
+    --ae-color-bg-subtle:    var(--ae-color-gray-50);
+    --ae-color-bg-muted:     var(--ae-color-gray-100);
+    --ae-color-bg-elevated:  var(--ae-color-gray-0);
+    --ae-color-bg-inverse:   var(--ae-color-gray-900);
+    --ae-color-bg-overlay:   oklch(0% 0 0 / 0.4);
+
+    --ae-color-fg:           var(--ae-color-gray-900);
+    --ae-color-fg-muted:     var(--ae-color-gray-600);
+    --ae-color-fg-subtle:    var(--ae-color-gray-500);
+    --ae-color-fg-inverse:   var(--ae-color-gray-0);
+    --ae-color-fg-disabled:  var(--ae-color-gray-400);
+    --ae-color-fg-on-accent: var(--ae-color-gray-0);
+    --ae-color-fg-on-danger: var(--ae-color-gray-0);
+
+    --ae-color-border:        var(--ae-color-gray-200);
+    --ae-color-border-strong: var(--ae-color-gray-300);
+    --ae-color-border-subtle: var(--ae-color-gray-100);
+    --ae-color-border-inverse: var(--ae-color-gray-700);
+
+    --ae-color-accent:          var(--ae-color-accent-500);
+    --ae-color-accent-hover:    var(--ae-color-accent-600);
+    --ae-color-accent-active:   var(--ae-color-accent-700);
+    --ae-color-accent-subtle:   var(--ae-color-accent-50);
+    --ae-color-accent-emphasis: var(--ae-color-accent-700);
+
+    --ae-color-success:          var(--ae-color-success-500);
+    --ae-color-success-subtle:   var(--ae-color-success-50);
+    --ae-color-success-emphasis: var(--ae-color-success-700);
+
+    --ae-color-warning:          var(--ae-color-warning-500);
+    --ae-color-warning-subtle:   var(--ae-color-warning-50);
+    --ae-color-warning-emphasis: var(--ae-color-warning-700);
+
+    --ae-color-danger:          var(--ae-color-danger-500);
+    --ae-color-danger-subtle:   var(--ae-color-danger-50);
+    --ae-color-danger-emphasis: var(--ae-color-danger-700);
+
+    --ae-color-info:           var(--ae-color-info-500);
+    --ae-color-info-subtle:    var(--ae-color-info-50);
+    --ae-color-info-emphasis:  var(--ae-color-info-700);
+
+    --ae-color-focus-ring:     var(--ae-color-accent-400);
+    --ae-color-selection-bg:   var(--ae-color-accent-100);
+    --ae-color-selection-fg:   var(--ae-color-accent-900);
+    --ae-color-hover-overlay:  oklch(0% 0 0 / 0.04);
+    --ae-color-active-overlay: oklch(0% 0 0 / 0.08);
+  }
+}

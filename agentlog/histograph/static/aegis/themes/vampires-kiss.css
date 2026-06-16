@@ -1,0 +1,179 @@
+/*
+ * Aegis v2 — Vampire's Kiss theme pack (Spectrum collection).
+ *
+ * A port of v1 Aegis's Dracula-flavored "Vampire's Kiss" into v2's two-axis
+ * model. Vampire's Kiss is moonlit gothic: deep purple-slate stone
+ * (#21222c base) under a soft lavender accent (#c9a7fa), with vivid neon
+ * status colors (mint, lemon, blood-red). It is a DARK-ONLY brand (v1
+ * shipped it as `color-scheme: dark`), so this single brand block sets the
+ * full dark surface direction directly — there is no light variant.
+ *
+ * ── Pixel-perfect fidelity ──────────────────────────────────────────
+ * Every value here is the LITERAL v1 hex from ../aegis/themes.css
+ * (`[data-theme='vampires-kiss']`). We deliberately do NOT convert to oklch:
+ * the rest of v2 is oklch, but converting v1's sRGB hexes would introduce
+ * gamut/rounding drift and break pixel parity with what v1 actually ships.
+ * The semantic (Tier-2) tokens components consume carry the exact v1 colors;
+ * the Tier-1 slate/lavender ramps are anchored to the v1 surface values so
+ * any component reaching for a raw ramp stop still resolves to a real v1
+ * color.
+ *
+ * Apply via class OR data-attribute on any ancestor (commonly :root):
+ *   <html data-theme="spectrum" data-variant="vampires-kiss">   ← or class="spectrum vampires-kiss"
+ *
+ * No automatic media-query activation — a brand is an explicit opt-in.
+ *
+ * v1 source-of-truth surface stack (depth: sunken→base→raised→float→fg):
+ *   sunken  #16171e   base    #21222c   raised  #282a36
+ *   float   #44475a   fg-surf #525568   hover   #6272a4 (steel)
+ */
+
+@layer ae-brand {
+:root[data-theme="spectrum"][data-variant="vampires-kiss"],
+:root.spectrum.vampires-kiss {
+  color-scheme: dark;
+
+  /* ============================================================
+   * Tier 1 — Primitives.
+   * Slate gray ramp anchored to v1's exact surface hexes at the dark
+   * end (700=float, 800=raised, 900=base, 1000=sunken) and extended to
+   * light stops for inverse/on-light contexts. Lavender accent ramp
+   * anchored at 400=hover (pink), 500=accent.
+   * ============================================================ */
+
+  /* Slate neutrals — purple-cool tint. Dark stops ARE v1 surfaces. */
+  --ae-color-gray-0:    #f8f8f2;
+  --ae-color-gray-50:   #ebebf3;
+  --ae-color-gray-100:  #f8f8f2;   /* = v1 text-primary   */
+  --ae-color-gray-200:  #d6acff;   /* = v1 text-secondary */
+  --ae-color-gray-300:  #c5cedd;   /* = v1 text-muted     */
+  --ae-color-gray-400:  #8694b1;   /* = v1 border-input   */
+  --ae-color-gray-500:  #6272a4;   /* = v1 bg-hover       */
+  --ae-color-gray-600:  #525568;   /* = v1 bg-foreground  */
+  --ae-color-gray-700:  #44475a;   /* = v1 bg-float       */
+  --ae-color-gray-800:  #282a36;   /* = v1 bg-raised      */
+  --ae-color-gray-900:  #21222c;   /* = v1 bg-base        */
+  --ae-color-gray-1000: #16171e;   /* = v1 bg-sunken      */
+
+  /* Lavender accent. 500=v1 accent, 400=v1 accent-hover (Dracula pink).
+     300 derives a lighter lavender (accent-as-text sibling). */
+  --ae-color-accent-50:  #f3edfe;
+  --ae-color-accent-100: #e7dafd;
+  --ae-color-accent-200: #d8c4fb;
+  --ae-color-accent-300: #ddc4fc;   /* lighter lavender — accent-as-text */
+  --ae-color-accent-400: #ff79c6;   /* = v1 accent-hover (pink) */
+  --ae-color-accent-500: #c9a7fa;   /* = v1 accent          */
+  --ae-color-accent-600: #ad88e6;
+  --ae-color-accent-700: #916bc9;
+  --ae-color-accent-800: #6f4fa0;
+  --ae-color-accent-900: #4f3873;
+
+  /* Status palettes — v1 ships a single value per status (used as both
+     text and fill). We seed 500 with the v1 value and derive 50/700. */
+  --ae-color-success-50:  #122a18;
+  --ae-color-success-100: #173a21;
+  --ae-color-success-500: #50fa7b;   /* = v1 success */
+  --ae-color-success-700: #7dfb9c;
+
+  --ae-color-warning-50:  #2c2c12;
+  --ae-color-warning-100: #393917;
+  --ae-color-warning-500: #f1fa8c;   /* = v1 warning */
+  --ae-color-warning-700: #f6fcae;
+
+  --ae-color-danger-50:  #2e1212;
+  --ae-color-danger-100: #3d1717;
+  --ae-color-danger-500: #ff5555;    /* = v1 danger */
+  --ae-color-danger-700: #ff8484;
+
+  /* Info — v1 Vampire's Kiss ships no info color. Derived: Dracula cyan
+     (#8be9fd family) that sits beside the slate neutrals without competing
+     with the lavender accent. Used only by v2-only surfaces. */
+  --ae-color-info-50:  #122a2e;
+  --ae-color-info-100: #17383d;
+  --ae-color-info-500: #8be9fd;
+  --ae-color-info-700: #b0f0fe;
+
+  /* ============================================================
+   * Scale (radius / type / motion) is SHARED across the whole Spectrum
+   * collection and lives in themes/spectrum-base.css — this file is
+   * palette-only. The one scale axis that is NOT shared is shadow: v1
+   * sets shadow alphas per-theme because they are scheme-coupled (light
+   * themes use light alphas, dark ones deep), so Vampire's Kiss's dark
+   * shadow block stays here.
+   * ============================================================ */
+
+  /* Dark-surface shadow alphas (v1 sm/md/lg seeded; xs/xl/2xl derived). */
+  --ae-shadow-xs:   0 1px 2px 0 rgba(0, 0, 0, 0.32);
+  --ae-shadow-sm:   0 1px 3px rgba(0, 0, 0, 0.40);
+  --ae-shadow-md:   0 4px 12px rgba(0, 0, 0, 0.50);
+  --ae-shadow-lg:   0 10px 30px rgba(0, 0, 0, 0.60);
+  --ae-shadow-xl:   0 20px 40px rgba(0, 0, 0, 0.65);
+  --ae-shadow-2xl:  0 25px 60px rgba(0, 0, 0, 0.75);
+  --ae-shadow-inner: inset 0 2px 4px 0 rgba(0, 0, 0, 0.40);
+
+  /* ============================================================
+   * Tier 2 — Semantic mapping (dark direction).
+   * Literal v1 hexes so the layer components consume is pixel-exact.
+   * ============================================================ */
+
+  --ae-color-bg:           #21222c;   /* v1 base    */
+  --ae-color-bg-subtle:    #16171e;   /* v1 sunken  — table header, code, recessed */
+  --ae-color-bg-muted:     #282a36;   /* v1 raised  — header/sidebar/panel surfaces */
+  --ae-color-bg-elevated:  #44475a;   /* v1 float   — cards, modals, dropdowns      */
+  --ae-color-bg-inverse:   #f8f8f2;   /* light foam — inverse chips/tooltip ground */
+  --ae-color-bg-overlay:   rgba(0, 0, 0, 0.50);   /* v1 backdrop-opacity 0.5 */
+
+  --ae-color-fg:           #f8f8f2;   /* v1 text-primary     */
+  --ae-color-fg-muted:     #d6acff;   /* v1 text-secondary   */
+  --ae-color-fg-subtle:    #c5cedd;   /* v1 text-muted       */
+  --ae-color-fg-inverse:   #21222c;   /* dark text on light inverse surface */
+  --ae-color-fg-disabled:  #8b93a8;   /* v1 text-placeholder */
+  --ae-color-fg-on-accent: #282a36;   /* v1 accent-text — dark on lavender */
+  --ae-color-fg-on-danger: #161817;   /* near-black on bright v1 danger #ff5555 */
+  /* Status FILLS in Vampire's Kiss are all bright neon (mint/lemon/red),
+     so their on-fill text must be dark. */
+  --ae-color-fg-on-warning: #161817;
+  --ae-color-fg-on-success: #161817;
+  --ae-color-fg-on-info:    #161817;
+
+  --ae-color-border:         #6272a4;   /* v1 border        */
+  --ae-color-border-strong:  #8694b1;   /* v1 border-input (3:1 control border) */
+  --ae-color-border-subtle:  #44475a;   /* v1 border-subtle */
+  --ae-color-border-inverse: #c5cedd;
+
+  /* Accent — fills/rings at 500 (#c9a7fa), accent-as-text at emphasis
+     (#ddc4fc, a lighter lavender). */
+  --ae-color-accent:          #c9a7fa;   /* v1 accent          */
+  --ae-color-accent-hover:    #ff79c6;   /* v1 accent-hover    */
+  --ae-color-accent-active:   #ad88e6;
+  --ae-color-accent-subtle:   #2f2940;   /* dark lavender tint (≈10% accent on base) */
+  --ae-color-accent-emphasis: #ddc4fc;   /* lighter lavender for accent-as-text */
+
+  --ae-color-success:          #50fa7b;
+  --ae-color-success-subtle:   #173324;
+  --ae-color-success-emphasis: #50fa7b;
+
+  --ae-color-warning:          #f1fa8c;
+  --ae-color-warning-subtle:   #33321f;
+  --ae-color-warning-emphasis: #f1fa8c;
+
+  --ae-color-danger:           #ff5555;
+  --ae-color-danger-subtle:    #3a2026;
+  --ae-color-danger-emphasis:  #ff7676;
+
+  --ae-color-info:             #8be9fd;
+  --ae-color-info-subtle:      #1f3338;
+  --ae-color-info-emphasis:    #8be9fd;
+
+  --ae-color-focus-ring:     #c9a7fa;   /* v1 uses accent / border-hover for focus */
+  --ae-color-selection-bg:   #44475a;   /* steel-tinted selection */
+  --ae-color-selection-fg:   #f3edfe;
+  --ae-color-hover-overlay:  rgba(255, 255, 255, 0.05);
+  --ae-color-active-overlay: rgba(255, 255, 255, 0.09);
+
+  /* Component-tier GEOMETRY (button sizing, control hover model, panel
+   * surfaces, etc.) is theme-independent and lives in spectrum-base.css.
+   * Vampire's Kiss adds no component overrides of its own — its semantic
+   * palette above feeds the shared component tokens directly. */
+}
+} /* @layer ae-brand */

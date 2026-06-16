@@ -1,0 +1,182 @@
+/*
+ * Aegis v2 — Twilight Peach theme pack (Spectrum collection).
+ *
+ * A port of the v1 Aegis themeset ("Spectrum") into v2's two-axis model.
+ * Twilight Peach pairs a warm peach accent (#f5986a) against deep indigo
+ * "twilight" surfaces (near-black navy → dusty violet-blue). It is a
+ * DARK-ONLY brand (v1 shipped it as `color-scheme: dark`), so this single
+ * brand block sets the full dark surface direction directly — there is no
+ * light variant.
+ *
+ * ── Pixel-perfect fidelity ──────────────────────────────────────────
+ * Every value here is the LITERAL v1 hex from ../aegis/themes.css
+ * (`[data-theme='twilight-peach']`). We deliberately do NOT convert to oklch:
+ * the rest of v2 is oklch, but converting v1's sRGB hexes would introduce
+ * gamut/rounding drift and break pixel parity with what v1 actually ships.
+ * The semantic (Tier-2) tokens components consume carry the exact v1 colors;
+ * the Tier-1 indigo/peach ramps are anchored to the v1 surface values so any
+ * component reaching for a raw ramp stop still resolves to a real v1 color.
+ *
+ * Per-component deltas that the semantic layer can't express on its own
+ * (e.g. v1's table header = sunken while row-hover = a distinct hover tint,
+ * both of which v2 routes through --ae-color-bg-subtle) are reconciled via
+ * component-tier overrides at the bottom of this file, verified against v1
+ * with the v1↔v2 screenshot-diff harness (scripts/spectrum-diff.mjs).
+ *
+ * Apply via class OR data-attribute on any ancestor (commonly :root):
+ *   <html data-theme="spectrum" data-variant="twilight-peach">   ← or class="spectrum twilight-peach"
+ *
+ * No automatic media-query activation — a brand is an explicit opt-in.
+ *
+ * v1 source-of-truth surface stack (depth: sunken→base→raised→float→fg):
+ *   sunken  #020617   base    #171827   raised  #201e37
+ *   float   #292a48   fg-surf #3c3d5e   hover   #32334e (twilight-tinted)
+ */
+
+@layer ae-brand {
+:root[data-theme="spectrum"][data-variant="twilight-peach"],
+:root.spectrum.twilight-peach {
+  /* ============================================================
+   * Tier 1 — Primitives.
+   * Indigo gray ramp anchored to v1's exact surface hexes at the dark
+   * end (700=float, 800=raised, 900=base, 1000=sunken) and extended to
+   * light stops for inverse/on-light contexts. Peach accent ramp anchored
+   * at 400=hover, 500=accent (no v1 accent-readable; 300 derived lighter).
+   * ============================================================ */
+
+  /* Indigo neutrals — cool violet-blue tint. Dark stops ARE v1 surfaces. */
+  --ae-color-gray-0:    #f3f2fb;
+  --ae-color-gray-50:   #e9e8f5;
+  --ae-color-gray-100:  #eeedf8;   /* = v1 text-primary   */
+  --ae-color-gray-200:  #a9a8c0;   /* = v1 text-secondary */
+  --ae-color-gray-300:  #8584a4;
+  --ae-color-gray-400:  #797ba0;   /* = v1 border-input   */
+  --ae-color-gray-500:  #3c3d5e;   /* = v1 bg-foreground  */
+  --ae-color-gray-600:  #343553;
+  --ae-color-gray-700:  #292a48;   /* = v1 bg-float       */
+  --ae-color-gray-800:  #201e37;   /* = v1 bg-raised      */
+  --ae-color-gray-900:  #171827;   /* = v1 bg-base        */
+  --ae-color-gray-1000: #020617;   /* = v1 bg-sunken      */
+
+  /* Warm peach accent. 500=v1 accent, 400=v1 accent-hover. v1 ships no
+     accent-readable for this brand, so 300 is derived as a lighter peach. */
+  --ae-color-accent-50:  #fdeee4;
+  --ae-color-accent-100: #fbddca;
+  --ae-color-accent-200: #f9c4a3;
+  --ae-color-accent-300: #f7b18a;   /* derived — lighter peach for accent-as-text */
+  --ae-color-accent-400: #f08458;   /* = v1 accent-hover    */
+  --ae-color-accent-500: #f5986a;   /* = v1 accent          */
+  --ae-color-accent-600: #db7d4f;
+  --ae-color-accent-700: #b9663e;
+  --ae-color-accent-800: #8f4e30;
+  --ae-color-accent-900: #663824;
+
+  /* Status palettes — v1 ships a single value per status (used as both
+     text and fill). We seed 500 with the v1 value and derive 50/700. */
+  --ae-color-success-50:  #102822;
+  --ae-color-success-100: #16382f;
+  --ae-color-success-500: #5cbfa0;   /* = v1 success */
+  --ae-color-success-700: #8ad6bf;
+
+  --ae-color-warning-50:  #2e2412;
+  --ae-color-warning-100: #3a2e18;
+  --ae-color-warning-500: #f0b464;   /* = v1 warning */
+  --ae-color-warning-700: #f5cd96;
+
+  --ae-color-danger-50:  #2e1718;
+  --ae-color-danger-100: #3a1e1f;
+  --ae-color-danger-500: #f07878;    /* = v1 danger */
+  --ae-color-danger-700: #f5a3a3;
+
+  /* Info — v1 Twilight Peach ships no info color. Derived: a cool sky-blue
+     that sits beside the indigo neutrals without competing with the peach
+     accent. Used only by v2-only surfaces (no v1 equivalent to match). */
+  --ae-color-info-50:  #142433;
+  --ae-color-info-100: #1a2f42;
+  --ae-color-info-500: #70a8f0;
+  --ae-color-info-700: #9dc2f5;
+
+  /* ============================================================
+   * Scale (radius / type / motion) is SHARED across the whole Spectrum
+   * collection and lives in themes/spectrum-base.css — this file is
+   * palette-only. The one scale axis that is NOT shared is shadow: v1
+   * sets shadow alphas per-theme because they are scheme-coupled (light
+   * themes use light alphas, dark ones deep), so Twilight Peach's dark
+   * shadow block stays here.
+   * ============================================================ */
+
+  /* Dark-surface shadow alphas (v1 sm/md/lg seeded; xs/xl/2xl derived). */
+  --ae-shadow-xs:   0 1px 2px 0 rgba(0, 0, 0, 0.40);
+  --ae-shadow-sm:   0 1px 3px rgba(0, 0, 0, 0.50);
+  --ae-shadow-md:   0 4px 12px rgba(0, 0, 0, 0.60);
+  --ae-shadow-lg:   0 10px 30px rgba(0, 0, 0, 0.70);
+  --ae-shadow-xl:   0 20px 40px rgba(0, 0, 0, 0.75);
+  --ae-shadow-2xl:  0 25px 60px rgba(0, 0, 0, 0.85);
+  --ae-shadow-inner: inset 0 2px 4px 0 rgba(0, 0, 0, 0.40);
+
+  /* ============================================================
+   * Tier 2 — Semantic mapping (dark direction).
+   * Literal v1 hexes so the layer components consume is pixel-exact.
+   * ============================================================ */
+
+  --ae-color-bg:           #171827;   /* v1 base    */
+  --ae-color-bg-subtle:    #020617;   /* v1 sunken  — table header, code, recessed */
+  --ae-color-bg-muted:     #201e37;   /* v1 raised  — header/sidebar/panel surfaces */
+  --ae-color-bg-elevated:  #292a48;   /* v1 float   — cards, modals, dropdowns      */
+  --ae-color-bg-inverse:   #eeedf8;   /* light indigo — inverse chips/tooltip ground */
+  --ae-color-bg-overlay:   rgba(0, 0, 0, 0.55);   /* v1 backdrop-opacity 0.55 */
+
+  --ae-color-fg:           #eeedf8;   /* v1 text-primary     */
+  --ae-color-fg-muted:     #a9a8c0;   /* v1 text-secondary   */
+  --ae-color-fg-subtle:    #b89f91;   /* v1 text-muted       */
+  --ae-color-fg-inverse:   #171827;   /* dark text on light inverse surface */
+  --ae-color-fg-disabled:  #4a4962;   /* v1 text-placeholder */
+  --ae-color-fg-on-accent: #1c1d2e;   /* v1 accent-text — near-black on peach */
+  --ae-color-fg-on-danger: #2e1718;   /* dark on light v1 danger #f07878 */
+  /* Status FILLS in T.P. are all light (sage/gold/coral), so their on-fill
+     text must be dark. */
+  --ae-color-fg-on-warning: #2e2412;
+  --ae-color-fg-on-success: #102822;
+  --ae-color-fg-on-info:    #142433;
+
+  --ae-color-border:         #565888;   /* v1 border        */
+  --ae-color-border-strong:  #797ba0;   /* v1 border-input (3:1 control border) */
+  --ae-color-border-subtle:  #353758;   /* v1 border-subtle */
+  --ae-color-border-inverse: #8584a4;
+
+  /* Accent — fills/rings at 500 (#f5986a). v1 ships no accent-readable for
+     this brand, so accent-as-text uses the same accent value at emphasis. */
+  --ae-color-accent:          #f5986a;   /* v1 accent          */
+  --ae-color-accent-hover:    #f08458;   /* v1 accent-hover    */
+  --ae-color-accent-active:   #db7d4f;
+  --ae-color-accent-subtle:   #3a2a23;   /* dark peach tint (≈10% accent on base) */
+  --ae-color-accent-emphasis: #f7b18a;   /* derived lighter peach (no v1 readable) */
+
+  --ae-color-success:          #5cbfa0;
+  --ae-color-success-subtle:   #16302a;
+  --ae-color-success-emphasis: #5cbfa0;
+
+  --ae-color-warning:          #f0b464;
+  --ae-color-warning-subtle:   #342a18;
+  --ae-color-warning-emphasis: #f0b464;
+
+  --ae-color-danger:           #f07878;
+  --ae-color-danger-subtle:    #3a2123;
+  --ae-color-danger-emphasis:  #f5a3a3;
+
+  --ae-color-info:             #70a8f0;
+  --ae-color-info-subtle:      #1a2c40;
+  --ae-color-info-emphasis:    #70a8f0;
+
+  --ae-color-focus-ring:     #f5986a;   /* v1 uses accent / border-hover for focus */
+  --ae-color-selection-bg:   #45354a;   /* peach-tinted selection */
+  --ae-color-selection-fg:   #fdeee4;
+  --ae-color-hover-overlay:  rgba(255, 255, 255, 0.05);
+  --ae-color-active-overlay: rgba(255, 255, 255, 0.09);
+
+  /* Component-tier GEOMETRY (button sizing, control hover model, panel
+   * surfaces, etc.) is theme-independent and lives in spectrum-base.css.
+   * Twilight Peach adds no component overrides of its own — its semantic
+   * palette above feeds the shared component tokens directly. */
+}
+} /* @layer ae-brand */

@@ -1,0 +1,872 @@
+/* ==========================================================================
+   Histograph — markers.css
+   Bespoke marker recipes that no off-the-shelf component models: the segmented
+   roadmap bar, the continuous story rail + nested task sub-rail, the typed
+   task-node markers (decision square / amber reversal stitch / hollow
+   milestone / step dot / live pulse+wash / dashed pending), the provider
+   glyphs, and the triage-card status dots.
+
+   Painted ENTIRELY from --ae-* tokens. Every color is a token or a
+   color-mix() over a token so a theme swap recolors all of it. ZERO hex.
+
+   Color-role map (semantic token per the contract's vocabulary):
+     done / live / success ........... --ae-color-success
+     active / in-progress ............ --ae-color-info       (the "blue" beat)
+     decision ........................ --ae-color-info
+     reversal / supersedes ........... --ae-color-warning    (the amber stitch)
+     milestone / step / neutral ...... --ae-color-fg-muted / --ae-color-fg-subtle
+     pending / not-started ........... --ae-color-border-strong (dashed ghost)
+     accent / focus ring ............. --ae-color-accent
+
+   Provider-tint anchors are chosen so no two collapse even when a theme's
+   accent IS blue-ish (default/Aegis indigo, spectrum neutral-light royal-blue,
+   arctic-night teal). claude=accent, codex=info, gemini=success+warning mix —
+   three hue families that the catalog keeps mutually separated regardless of
+   scheme. Tint is reinforcement; the ✳ ❯ ✦ glyph + label are the primary
+   discriminators (H2).
+   ========================================================================== */
+
+@keyframes hgPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--ae-color-success) 50%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 6px color-mix(in oklch, var(--ae-color-success) 0%, transparent);
+  }
+}
+
+@keyframes hgBlink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@keyframes hgSeg {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ==========================================================================
+   PROVIDER GLYPHS (triage identity line)
+   One tinted chip per agent provider. Tints are color-mix() over a semantic
+   token so they re-tone with the theme but stay distinguishable:
+     claude  → accent (the brand-action hue; molten amber in crucible)
+     codex   → info   (cool blue)
+     gemini  → a violet derived by mixing info + danger (never accent, so it
+               can't collapse into the claude chip under a blue-accent theme)
+     unknown → neutral fg-muted
+   ========================================================================== */
+.hg-provider {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--ae-radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--hg-mono);
+  font-size: 0.625rem;
+  line-height: 1;
+}
+
+.hg-provider--claude {
+  color: var(--ae-color-accent);
+  background: color-mix(in oklch, var(--ae-color-accent) 16%, transparent);
+}
+.hg-provider--codex {
+  color: var(--ae-color-info);
+  background: color-mix(in oklch, var(--ae-color-info) 16%, transparent);
+}
+.hg-provider--gemini {
+  /* a violet anchored on info+danger (NOT accent), so it never collapses into
+     the claude chip when a theme's accent is itself blue-ish. info+danger lands
+     magenta/violet — separated from both the info-blue (codex) and any accent
+     hue. (H2) */
+  color: color-mix(in oklch, var(--ae-color-info) 50%, var(--ae-color-danger));
+  background: color-mix(
+    in oklch,
+    color-mix(in oklch, var(--ae-color-info) 50%, var(--ae-color-danger)) 16%,
+    transparent
+  );
+}
+.hg-provider--unknown {
+  color: var(--ae-color-fg-muted);
+  background: var(--ae-color-bg-muted);
+}
+
+/* ==========================================================================
+   TRIAGE CARD internals (ae-card hosts these)
+   ========================================================================== */
+.hg-card-body {
+  display: block;
+}
+
+.hg-card__identity {
+  display: flex;
+  align-items: center;
+  gap: var(--ae-space-2);
+  margin-bottom: var(--ae-space-2);
+}
+
+.hg-card__name {
+  font-family: var(--hg-mono);
+  font-size: var(--ae-font-size-xs);
+  color: var(--ae-color-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* dimmed name for stale/parked lanes */
+.hg-card--quiet .hg-card__name,
+.hg-card--quiet .hg-card__story {
+  color: var(--ae-color-fg-muted);
+}
+
+.hg-statusdot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--ae-radius-full);
+}
+.hg-statusdot--active {
+  background: var(--ae-color-success);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--ae-color-success) 16%, transparent);
+}
+.hg-statusdot--needs-you {
+  background: var(--ae-color-danger);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--ae-color-danger) 16%, transparent);
+  animation: hgBlink 1.6s var(--ae-easing-ease-in-out) infinite;
+}
+.hg-statusdot--stale {
+  background: var(--ae-color-fg-subtle);
+}
+.hg-statusdot--parked,
+.hg-statusdot--done {
+  background: var(--ae-color-border-strong);
+}
+
+.hg-card__fresh {
+  margin-left: auto;
+  font-family: var(--hg-mono);
+  font-size: var(--ae-font-size-xs);
+}
+.hg-card__fresh--muted {
+  color: var(--ae-color-fg-subtle);
+}
+.hg-card__fresh--warning {
+  color: var(--ae-color-warning);
+}
+.hg-card__fresh--danger {
+  color: var(--ae-color-danger);
+}
+
+.hg-card__story {
+  font-size: var(--ae-font-size-md);
+  font-weight: var(--ae-font-weight-bold);
+  color: var(--ae-color-fg);
+  line-height: var(--ae-line-height-tight);
+  margin-bottom: var(--ae-space-1);
+  /* the "story title" is the latest checkpoint summary (degraded data, up to
+     160 chars) — clamp to 2 lines so a long summary can't blow out the card. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.hg-card__epic {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ae-space-1);
+  font-family: var(--hg-mono);
+  font-size: var(--ae-font-size-xs);
+  color: var(--ae-color-info);
+}
+
+.hg-card__epic--standalone {
+  color: var(--ae-color-fg-subtle);
+}
+
+.hg-card__statusline {
+  font-size: var(--ae-font-size-sm);
+  color: var(--ae-color-fg-muted);
+  line-height: var(--ae-line-height-snug);
+  /* the status line is the latest task/ask summary (unbounded prose) — clamp to
+     2 lines so it can't blow out the triage card height (it was uncapped). */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.hg-card__midturn {
+  color: var(--ae-color-warning);
+}
+
+/* The "needs you" callout — owns the eye on a blocked lane (ae-tag handles
+   the chip; this is the spacing only) */
+.hg-card__needs {
+  margin-top: var(--ae-space-1);
+}
+
+/* ==========================================================================
+   SEGMENTED ROADMAP BAR (tier 1, bespoke)
+   done = success, active = info (pulsing), remaining = muted track,
+   blocked = danger.
+   ========================================================================== */
+.hg-roadmap {
+  display: flex;
+  gap: var(--ae-space-1);
+  margin-top: var(--ae-space-3);
+}
+
+.hg-roadmap__seg {
+  flex: 1 1 0;
+  height: 4px;
+  border-radius: var(--ae-radius-sm);
+  background: var(--ae-color-bg-muted);
+}
+.hg-roadmap__seg--done {
+  background: var(--ae-color-success);
+}
+.hg-roadmap__seg--active {
+  background: var(--ae-color-info);
+  animation: hgSeg 2.2s var(--ae-easing-ease-in-out) infinite;
+}
+.hg-roadmap__seg--not-started {
+  background: var(--ae-color-border);
+}
+/* blocked carries a non-color cue (a hatched stripe) on top of the danger fill,
+   so done-green vs blocked-red is distinguishable without color too (WCAG 1.4.1
+   belt-and-suspenders; the story rows already carry the "!" + "blocked" text). */
+.hg-roadmap__seg--blocked {
+  background-color: var(--ae-color-danger);
+  background-image: repeating-linear-gradient(
+    45deg,
+    color-mix(in oklch, var(--ae-color-fg-inverse) 35%, transparent) 0,
+    color-mix(in oklch, var(--ae-color-fg-inverse) 35%, transparent) 1.5px,
+    transparent 1.5px,
+    transparent 4px
+  );
+}
+
+/* ==========================================================================
+   CONTINUOUS STORY RAIL (tier 2)
+   One vertical hairline threads done → active → remaining. Nodes punch a
+   "halo" via a box-shadow ring in the page background so the line reads as
+   passing behind each marker.
+   ========================================================================== */
+.hg-rail {
+  position: relative;
+}
+
+/* the rail line */
+.hg-rail::before {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 8px;
+  bottom: 10px;
+  width: 1.5px;
+  background: var(--ae-color-border);
+  z-index: 0;
+}
+
+.hg-story {
+  position: relative;
+  z-index: 1;
+}
+
+/* done / not-started story rows — single muted line */
+.hg-story--row {
+  display: flex;
+  gap: var(--ae-space-4);
+  align-items: center;
+  padding: var(--ae-space-2) 0;
+}
+
+.hg-story__marker {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--ae-radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--hg-mono);
+  font-size: 0.625rem;
+  background: var(--ae-color-bg);
+  /* halo punches the rail behind the marker */
+  box-shadow: 0 0 0 4px var(--ae-color-bg);
+}
+
+.hg-story__marker--done {
+  color: var(--ae-color-success);
+  border: var(--ae-border-width-1) solid
+    color-mix(in oklch, var(--ae-color-success) 45%, transparent);
+}
+
+.hg-story__marker--not-started {
+  width: 13px;
+  height: 13px;
+  border: 1.5px dashed var(--ae-color-border-strong);
+}
+
+.hg-story__marker--blocked {
+  color: var(--ae-color-danger);
+  border: var(--ae-border-width-2) solid var(--ae-color-danger);
+}
+
+.hg-story__title {
+  font-size: var(--ae-font-size-md);
+  font-weight: var(--ae-font-weight-medium);
+  color: var(--ae-color-fg-muted);
+  /* single-line ellipsis: a 160-char degraded summary must not push the
+     margin-left:auto crumb ("N decisions") off the row. min-width:0 lets the
+     flex item actually shrink. (m3) */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hg-story--row.hg-story--not-started .hg-story__title {
+  color: var(--ae-color-fg-subtle);
+}
+
+.hg-story__crumb {
+  margin-left: auto;
+  font-family: var(--hg-mono);
+  font-size: var(--ae-font-size-xs);
+  color: var(--ae-color-fg-subtle);
+}
+
+/* the ACTIVE story blooms open inline off the rail */
+.hg-story--active {
+  margin: var(--ae-space-4) 0 var(--ae-space-4) -8px;
+}
+
+.hg-story__head {
+  display: flex;
+  gap: var(--ae-space-3);
+  align-items: center;
+  padding-left: var(--ae-space-2);
+  margin-bottom: var(--ae-space-5);
+  /* Pin the tier-2 active-story head (UX §10.2: pin BOTH the epic band and the
+     active-story header). It stays threaded in rail order (continuous rail
+     preserved) but sticks to the top of the scroll viewport so the task trail
+     scrolls UNDER the current story title instead of dragging it off-screen.
+     The padded background + halo keep the rail line from showing through, and
+     it sits above the trail (z-index). */
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding-top: var(--ae-space-3);
+  padding-bottom: var(--ae-space-2);
+  background: var(--ae-color-bg);
+  box-shadow: 0 4px 6px -4px color-mix(in oklch, var(--ae-color-fg) 16%, transparent);
+}
+
+.hg-story__pulse {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--ae-radius-full);
+  background: var(--ae-color-success);
+  box-shadow: 0 0 0 4px var(--ae-color-bg);
+}
+.hg-story__pulse.hg-pulse {
+  animation: hgPulse 1.9s var(--ae-easing-ease-out) infinite;
+}
+
+.hg-story__active-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--ae-font-size-xl);
+  font-weight: var(--ae-font-weight-bold);
+  letter-spacing: var(--ae-letter-spacing-tight);
+  color: var(--ae-color-fg);
+  line-height: var(--ae-line-height-tight);
+  /* tier-2 head is one clean line in the mockup; the title is a degraded 160-
+     char summary, so clamp to 2 lines and keep the index crumb on its baseline
+     instead of being shoved down. (m2) */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.hg-story__index {
+  flex: 0 0 auto;
+  font-family: var(--hg-mono);
+  font-size: var(--ae-font-size-xs);
+  color: var(--ae-color-success);
+  letter-spacing: var(--ae-letter-spacing-wide);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.hg-story__index--blocked {
+  color: var(--ae-color-danger);
+}
+
+/* ==========================================================================
+   TASK TRAIL (tier 3) — the active story's nested indented sub-rail
+   summary-left, metadata-right. Fixed 22px marker column.
+   ========================================================================== */
+.hg-trail {
+  position: relative;
+  margin-left: 23px;
+}
+
+.hg-trail::before {
+  content: "";
+  position: absolute;
+  left: 11px;
+  top: 6px;
+  bottom: 6px;
+  width: 1.5px;
+  background: var(--ae-color-border);
+  z-index: 0;
+}
+
+.hg-task {
+  display: flex;
+  gap: var(--ae-space-3);
+  align-items: flex-start;
+  margin-bottom: var(--ae-space-5);
+  position: relative;
+}
+.hg-task:last-child {
+  margin-bottom: 0;
+}
+
+.hg-task__gutter-left {
+  flex: 0 0 22px;
+  display: flex;
+  justify-content: center;
+  position: relative;
+  z-index: 1;
+}
+
+.hg-task__body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.hg-task__summary {
+  font-size: var(--ae-font-size-sm);
+  color: var(--ae-color-fg);
+  line-height: var(--ae-line-height-snug);
+}
+
+/* metadata gutter (integrity glyph + timestamp), right-aligned, fixed width */
+.hg-task__meta {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--ae-space-2);
+  margin-top: 2px;
+}
+
+.hg-task__time {
+  font-family: var(--hg-mono);
+  font-size: var(--ae-font-size-xs);
+  /* tabular figures so the fixed 34px column never shifts as the digits change
+     poll-to-poll, independent of whether the theme's mono stack defaults to
+     tabular. (H1) */
+  font-feature-settings: var(--ae-font-feature-settings-numeric);
+  color: var(--ae-color-fg-subtle);
+  width: 34px;
+  text-align: right;
+}
+
+/* integrity glyph — quiet, in the right gutter; tooltip via ae-tooltip */
+.hg-integrity {
+  font-family: var(--hg-mono);
+  font-size: var(--ae-font-size-xs);
+  cursor: default;
+}
+.hg-integrity--reconstructed {
+  color: var(--ae-color-fg-subtle);
+}
+.hg-integrity--passive {
+  color: var(--ae-color-border-strong);
+}
+.hg-integrity--volunteered {
+  color: color-mix(in oklch, var(--ae-color-warning) 70%, var(--ae-color-fg-muted));
+}
+.hg-integrity--human-confirmed {
+  color: var(--ae-color-success);
+}
+
+/* ----- node markers (type by shape) ----- */
+
+/* decision — filled square, accent-info */
+.hg-node {
+  box-shadow: 0 0 0 4px var(--ae-color-bg);
+}
+
+.hg-node--decision {
+  width: 12px;
+  height: 12px;
+  background: var(--ae-color-info);
+  border-radius: var(--ae-radius-xs);
+  margin-top: 3px;
+}
+
+/* step — small dot, lightest weight */
+.hg-node--step {
+  width: 6px;
+  height: 6px;
+  background: var(--ae-color-fg-subtle);
+  border-radius: var(--ae-radius-full);
+  margin-top: 6px;
+}
+.hg-task--step .hg-task__summary {
+  font-size: var(--ae-font-size-sm);
+  color: var(--ae-color-fg-muted);
+}
+
+/* milestone — hollow ring */
+.hg-node--milestone {
+  width: 11px;
+  height: 11px;
+  border: var(--ae-border-width-2) solid var(--ae-color-fg-muted);
+  border-radius: var(--ae-radius-full);
+  background: var(--ae-color-bg);
+  margin-top: 4px;
+}
+.hg-task--milestone .hg-task__summary {
+  color: var(--ae-color-fg-muted);
+}
+
+/* reversal — amber ring with a recycle glyph; the one node that keeps detail */
+.hg-node--reversal {
+  width: 15px;
+  height: 15px;
+  border: var(--ae-border-width-2) solid var(--ae-color-warning);
+  background: color-mix(in oklch, var(--ae-color-warning) 12%, var(--ae-color-bg));
+  border-radius: var(--ae-radius-full);
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ae-color-warning);
+  font-family: var(--hg-mono);
+  font-size: 0.5625rem;
+}
+
+/* the struck superseded line */
+.hg-reversal__superseded {
+  font-size: var(--ae-font-size-xs);
+  color: var(--ae-color-fg-subtle);
+  line-height: var(--ae-line-height-snug);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in oklch, var(--ae-color-warning) 60%, transparent);
+  margin-bottom: var(--ae-space-2);
+}
+
+.hg-reversal__rel {
+  display: flex;
+  align-items: center;
+  gap: var(--ae-space-2);
+  margin-bottom: var(--ae-space-1);
+}
+
+/* the "supersedes" label — outline-amber pill (bespoke, not ae-tag, so the
+   amber tone is exact and inline with the reversibility note) */
+.hg-reversal__label {
+  font-family: var(--hg-mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ae-color-warning);
+  background: color-mix(in oklch, var(--ae-color-warning) 15%, transparent);
+  border-radius: var(--ae-radius-sm);
+  padding: 2px var(--ae-space-2);
+}
+
+.hg-reversal__reversibility {
+  font-size: var(--ae-font-size-xs);
+  color: color-mix(in oklch, var(--ae-color-warning) 65%, var(--ae-color-fg-muted));
+  white-space: nowrap;
+}
+
+/* the surviving successor line — warm, emphasized */
+.hg-reversal__successor {
+  font-size: var(--ae-font-size-sm);
+  color: color-mix(in oklch, var(--ae-color-warning-emphasis) 35%, var(--ae-color-fg));
+  line-height: var(--ae-line-height-snug);
+  font-weight: var(--ae-font-weight-semibold);
+}
+
+/* live tip — pulsing pin + green wash */
+.hg-node--live {
+  width: 14px;
+  height: 14px;
+  background: var(--ae-color-success);
+  border-radius: var(--ae-radius-full);
+  margin-top: 3px;
+}
+.hg-node--live.hg-pulse {
+  animation: hgPulse 1.9s var(--ae-easing-ease-out) infinite;
+}
+
+.hg-task--live .hg-task__body {
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklch, var(--ae-color-success) 12%, transparent),
+    transparent
+  );
+  border-radius: var(--ae-radius-lg);
+  padding: var(--ae-space-2) var(--ae-space-3);
+  margin-top: -4px;
+}
+.hg-task--live .hg-task__summary {
+  font-size: var(--ae-font-size-md);
+  font-weight: var(--ae-font-weight-semibold);
+  color: var(--ae-color-fg);
+  line-height: var(--ae-line-height-snug);
+}
+
+.hg-task__nowtag {
+  font-family: var(--hg-mono);
+  font-size: var(--ae-font-size-xs);
+  font-weight: var(--ae-font-weight-bold);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ae-color-success);
+  margin-top: var(--ae-space-1);
+}
+
+/* ----- in-flight tool activity (the live work stream) ----- */
+/* Faint, compact nodes that thread the same sub-rail as decisions but read as
+   telemetry, not history — a small tool glyph in the gutter + a muted mono
+   "tool · target" line. Tighter vertical rhythm than a decision so a burst of
+   activity stays scannable. */
+.hg-task--activity {
+  align-items: center;
+  margin-bottom: var(--ae-space-3);
+}
+
+.hg-node--activity {
+  width: 15px;
+  height: 15px;
+  margin-top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--ae-radius-full);
+  background: var(--ae-color-bg);
+  font-family: var(--hg-mono);
+  font-size: 0.6875rem;
+  line-height: 1;
+  color: var(--ae-color-fg-subtle);
+}
+
+.hg-activity__line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--ae-space-2);
+  min-width: 0;
+  font-size: var(--ae-font-size-xs);
+  color: var(--ae-color-fg-subtle);
+}
+
+.hg-activity__tool {
+  flex: 0 0 auto;
+  font-family: var(--hg-mono);
+  font-weight: var(--ae-font-weight-medium);
+  color: var(--ae-color-fg-muted);
+}
+
+.hg-activity__target {
+  min-width: 0;
+  font-family: var(--hg-mono);
+  color: var(--ae-color-fg-subtle);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* the live edge — the most recent tool action: green-pulsing node + "● now" */
+.hg-node--activity-now {
+  color: var(--ae-color-success);
+  background: color-mix(in oklch, var(--ae-color-success) 14%, var(--ae-color-bg));
+}
+.hg-node--activity-now.hg-pulse {
+  animation: hgPulse 1.9s var(--ae-easing-ease-out) infinite;
+}
+.hg-task--activity-now .hg-activity__line {
+  color: var(--ae-color-fg);
+}
+.hg-task--activity-now .hg-activity__tool {
+  color: var(--ae-color-fg);
+  font-weight: var(--ae-font-weight-semibold);
+}
+.hg-activity__now {
+  flex: 0 0 auto;
+  font-family: var(--hg-mono);
+  font-size: var(--ae-font-size-xs);
+  font-weight: var(--ae-font-weight-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ae-color-success);
+}
+
+/* ----- completed-turn tool calls (the click-to-expand accordion) ----- */
+/* Each finished task folds its turn's tool stream behind a disclosure: the trail
+   reads as decisions, but any past task opens to reveal exactly what the agent did
+   inside it. Faint + mono so it reads as telemetry, consistent with the live nodes. */
+.hg-tools {
+  margin-top: var(--ae-space-2);
+}
+.hg-tools__summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ae-space-2);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  padding: 2px 0;
+  font-family: var(--hg-mono);
+  font-size: var(--ae-font-size-xs);
+  color: var(--ae-color-fg-subtle);
+  transition: color 120ms var(--ae-easing-ease-out);
+}
+/* hide the native disclosure triangle (we draw our own caret) */
+.hg-tools__summary::-webkit-details-marker {
+  display: none;
+}
+.hg-tools__summary::marker {
+  content: "";
+}
+.hg-tools__summary:hover {
+  color: var(--ae-color-fg-muted);
+}
+.hg-tools__caret {
+  display: inline-block;
+  transition: transform 120ms var(--ae-easing-ease-out);
+}
+.hg-tools[open] .hg-tools__caret {
+  transform: rotate(90deg);
+}
+.hg-tools__count {
+  letter-spacing: 0.02em;
+}
+.hg-tools__list {
+  margin-top: var(--ae-space-2);
+  padding-left: var(--ae-space-3);
+  border-left: 1px solid var(--ae-color-border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ae-space-1);
+}
+.hg-tools__row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--ae-space-2);
+  min-width: 0;
+  font-family: var(--hg-mono);
+  font-size: var(--ae-font-size-xs);
+  color: var(--ae-color-fg-subtle);
+}
+.hg-tools__glyph {
+  flex: 0 0 auto;
+  color: var(--ae-color-fg-muted);
+}
+.hg-tools__tool {
+  flex: 0 0 auto;
+  color: var(--ae-color-fg-muted);
+  font-weight: var(--ae-font-weight-medium);
+}
+.hg-tools__target {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hg-tools__time {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding-left: var(--ae-space-2);
+  opacity: 0.7;
+}
+.hg-tools__more {
+  font-family: var(--hg-mono);
+  font-size: var(--ae-font-size-xs);
+  color: var(--ae-color-fg-subtle);
+  opacity: 0.7;
+}
+
+/* pending — dashed ghost ring */
+.hg-node--pending {
+  width: 11px;
+  height: 11px;
+  border: 1.5px dashed var(--ae-color-border-strong);
+  border-radius: var(--ae-radius-full);
+  background: var(--ae-color-bg);
+  margin-top: 4px;
+}
+.hg-task--pending .hg-task__summary {
+  font-size: var(--ae-font-size-sm);
+  color: var(--ae-color-fg-subtle);
+}
+
+.hg-task__next {
+  flex: 0 0 auto;
+  font-family: var(--hg-mono);
+  font-size: var(--ae-font-size-xs);
+  color: var(--ae-color-border-strong);
+  margin-top: 2px;
+}
+
+/* live-but-empty trail — a calm, quiet line, not an error */
+.hg-trail--empty {
+  margin-left: 23px;
+  padding: var(--ae-space-3) 0;
+  font-size: var(--ae-font-size-sm);
+  color: var(--ae-color-fg-subtle);
+  font-style: italic;
+}
+
+/* ==========================================================================
+   FOOTER LEGEND swatches (node-shape key)
+   ========================================================================== */
+.hg-legend__sw {
+  display: inline-block;
+}
+.hg-legend__sw--decision {
+  width: 9px;
+  height: 9px;
+  background: var(--ae-color-info);
+  border-radius: var(--ae-radius-xs);
+}
+.hg-legend__sw--reversal {
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid var(--ae-color-warning);
+  border-radius: var(--ae-radius-full);
+}
+.hg-legend__sw--milestone {
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--ae-color-fg-muted);
+  border-radius: var(--ae-radius-full);
+}
+.hg-legend__sw--step {
+  width: 6px;
+  height: 6px;
+  background: var(--ae-color-fg-subtle);
+  border-radius: var(--ae-radius-full);
+}

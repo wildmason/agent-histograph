@@ -1,0 +1,248 @@
+/*
+ * Aegis v2 — Dark SCHEME.
+ *
+ * One of the three scheme packs on the `data-variant` axis. Provides the
+ * dark luminance direction for the DEFAULT brand, and the shared dark
+ * skeleton (shadow/overlay alphas, focus stops) that every brand's dark
+ * variant builds on.
+ *
+ * Apply via the scheme attribute OR the class alias:
+ *   <html data-variant="dark">      ← scheme axis
+ *   <html class="dark">             ← class alias
+ *
+ * Also activates automatically via `@media (prefers-color-scheme: dark)`
+ * when no explicit scheme is chosen.
+ *
+ * ── Composition note ────────────────────────────────────────────────
+ * This file lives in `@layer ae-scheme`. The Tier-2 surface remap below
+ * references `--ae-color-gray-NNN` etc., which the ACTIVE brand supplies in
+ * `@layer ae-brand` — so the dark direction composes with any brand. The
+ * Tier-1 status lightening below is the DEFAULT brand's dark palette; a named
+ * brand overrides those hues from ae-brand (brand beats scheme), so e.g.
+ * `cinnabar + dark` keeps cinnabar's danger hue, not the hue-25 red restated here.
+ *
+ * The auto-activator is now a plain `:root:not([data-variant])` — an explicit
+ * brand in ae-brand wins by LAYER order, so the old O(themes) `:not()` opt-out
+ * chain (one entry per brand) is gone. Only the three scheme CLASS aliases are
+ * excluded, because a bare `class="light"` carries no `data-variant` attribute
+ * for `:not([data-variant])` to catch.
+ *
+ * Contrast (verified by OKLCH-lightness delta proxy; recommend a real
+ * checker pass before launch):
+ *   fg gray-50  (L≈98) on bg gray-1000 (L≈8)  ≈ 17:1   ✅ AAA
+ *   fg-on-accent gray-1000 on accent-300 (L≈78) ≈ ~12:1 ✅ AAA
+ *   accent-emphasis (accent-300, L≈78) on bg (L≈8) ≈ ~13:1 ✅ AAA
+ *   fg-muted gray-300 (L≈85) on bg (L≈8)           ≈ ~14:1 ✅ AAA
+ *   danger-500 → danger lightened to L≈68 for AA on dark bg
+ *   fg-on-danger uses gray-1000 (dark text on lightened red) ✅ AA
+ */
+
+@layer ae-scheme {
+  :root[data-variant="dark"],
+  :root.dark {
+    /* ============================================================
+     * Tier 1 — Primitives (default brand's dark palette).
+     * Gray palette stays the same numerically; the semantic layer
+     * flips which end means "background" vs "foreground". Status
+     * colors are slightly lightened so AA still holds as fills
+     * against the dark background. A named brand overrides these.
+     * ============================================================ */
+
+    --ae-color-gray-0:    oklch(99%  0     0);
+    --ae-color-gray-50:   oklch(98%  0.002 240);
+    --ae-color-gray-100:  oklch(96%  0.004 240);
+    --ae-color-gray-200:  oklch(92%  0.005 240);
+    --ae-color-gray-300:  oklch(85%  0.007 240);
+    --ae-color-gray-400:  oklch(70%  0.009 240);
+    --ae-color-gray-500:  oklch(55%  0.011 240);
+    --ae-color-gray-600:  oklch(42%  0.011 240);
+    --ae-color-gray-700:  oklch(32%  0.009 240);
+    --ae-color-gray-800:  oklch(22%  0.007 240);
+    --ae-color-gray-900:  oklch(15%  0.005 240);
+    --ae-color-gray-1000: oklch(8%   0.003 240);
+
+    /* Accent — slightly desaturated for dark surfaces. */
+    --ae-color-accent-50:  oklch(97% 0.02  255);
+    --ae-color-accent-100: oklch(94% 0.04  255);
+    --ae-color-accent-200: oklch(88% 0.07  255);
+    --ae-color-accent-300: oklch(78% 0.11  255);
+    --ae-color-accent-400: oklch(70% 0.14  255);
+    --ae-color-accent-500: oklch(62% 0.16  255);
+    --ae-color-accent-600: oklch(52% 0.16  255);
+    --ae-color-accent-700: oklch(42% 0.14  255);
+    --ae-color-accent-800: oklch(32% 0.10  255);
+    --ae-color-accent-900: oklch(22% 0.07  255);
+
+    /* Status — desaturated/lightened to remain WCAG AA on dark surfaces. */
+    --ae-color-success-50:  oklch(97% 0.025 145);
+    --ae-color-success-100: oklch(94% 0.05  145);
+    --ae-color-success-500: oklch(66% 0.16  145);
+    --ae-color-success-700: oklch(78% 0.14  145);
+
+    --ae-color-warning-50:  oklch(98% 0.03 85);
+    --ae-color-warning-100: oklch(96% 0.07 85);
+    --ae-color-warning-500: oklch(76% 0.15 85);
+    --ae-color-warning-700: oklch(84% 0.13 85);
+
+    --ae-color-danger-50:  oklch(97% 0.025 25);
+    --ae-color-danger-100: oklch(94% 0.05  25);
+    --ae-color-danger-500: oklch(66% 0.19 25);
+    --ae-color-danger-700: oklch(74% 0.17 25);
+
+    --ae-color-info-50:  oklch(97% 0.02 220);
+    --ae-color-info-100: oklch(94% 0.04 220);
+    --ae-color-info-500: oklch(68% 0.13 220);
+    --ae-color-info-700: oklch(80% 0.11 220);
+
+    /* Lower-alpha shadows so they don't crush dark surfaces. */
+    --ae-shadow-xs:   0 1px 2px 0 oklch(0% 0 0 / 0.40);
+    --ae-shadow-sm:   0 1px 3px 0 oklch(0% 0 0 / 0.50), 0 1px 2px -1px oklch(0% 0 0 / 0.40);
+    --ae-shadow-md:   0 4px 6px -1px oklch(0% 0 0 / 0.55), 0 2px 4px -2px oklch(0% 0 0 / 0.45);
+    --ae-shadow-lg:   0 10px 15px -3px oklch(0% 0 0 / 0.55), 0 4px 6px -4px oklch(0% 0 0 / 0.45);
+    --ae-shadow-xl:   0 20px 25px -5px oklch(0% 0 0 / 0.60), 0 8px 10px -6px oklch(0% 0 0 / 0.50);
+    --ae-shadow-2xl:  0 25px 50px -12px oklch(0% 0 0 / 0.80);
+    --ae-shadow-inner: inset 0 2px 4px 0 oklch(0% 0 0 / 0.40);
+
+    /* ============================================================
+     * Tier 2 — Semantic remap (dark direction).
+     * In light, bg → gray-0 (lightest) and fg → gray-900 (darkest).
+     * In dark we flip both. References the active brand's ramps.
+     * ============================================================ */
+
+    --ae-color-bg:           var(--ae-color-gray-1000);
+    --ae-color-bg-subtle:    var(--ae-color-gray-900);
+    --ae-color-bg-muted:     var(--ae-color-gray-800);
+    --ae-color-bg-elevated:  var(--ae-color-gray-900);
+    --ae-color-bg-inverse:   var(--ae-color-gray-50);
+    --ae-color-bg-overlay:   oklch(0% 0 0 / 0.6);
+
+    --ae-color-fg:           var(--ae-color-gray-50);
+    --ae-color-fg-muted:     var(--ae-color-gray-300);
+    --ae-color-fg-subtle:    var(--ae-color-gray-400);
+    --ae-color-fg-inverse:   var(--ae-color-gray-900);
+    --ae-color-fg-disabled:  var(--ae-color-gray-600);
+    /* Accent at 500 in dark is L≈62 — light enough that we want dark text. */
+    --ae-color-fg-on-accent: var(--ae-color-gray-1000);
+    /* Danger at 500 in dark is L≈66 — same story. */
+    --ae-color-fg-on-danger: var(--ae-color-gray-1000);
+
+    --ae-color-border:         var(--ae-color-gray-700);
+    --ae-color-border-strong:  var(--ae-color-gray-600);
+    --ae-color-border-subtle:  var(--ae-color-gray-800);
+    --ae-color-border-inverse: var(--ae-color-gray-200);
+
+    /* Accent emphasis lifts to a brighter swatch on dark. */
+    --ae-color-accent:          var(--ae-color-accent-500);
+    --ae-color-accent-hover:    var(--ae-color-accent-400);
+    --ae-color-accent-active:   var(--ae-color-accent-300);
+    --ae-color-accent-subtle:   var(--ae-color-accent-900);
+    --ae-color-accent-emphasis: var(--ae-color-accent-300);
+
+    --ae-color-success:          var(--ae-color-success-500);
+    --ae-color-success-subtle:   var(--ae-color-gray-900);
+    --ae-color-success-emphasis: var(--ae-color-success-700);
+
+    --ae-color-warning:          var(--ae-color-warning-500);
+    --ae-color-warning-subtle:   var(--ae-color-gray-900);
+    --ae-color-warning-emphasis: var(--ae-color-warning-700);
+
+    --ae-color-danger:           var(--ae-color-danger-500);
+    --ae-color-danger-subtle:    var(--ae-color-gray-900);
+    --ae-color-danger-emphasis:  var(--ae-color-danger-700);
+
+    --ae-color-info:             var(--ae-color-info-500);
+    --ae-color-info-subtle:      var(--ae-color-gray-900);
+    --ae-color-info-emphasis:    var(--ae-color-info-700);
+
+    --ae-color-focus-ring:     var(--ae-color-accent-400);
+    --ae-color-selection-bg:   var(--ae-color-accent-800);
+    --ae-color-selection-fg:   var(--ae-color-accent-50);
+    --ae-color-hover-overlay:  oklch(100% 0 0 / 0.06);
+    --ae-color-active-overlay: oklch(100% 0 0 / 0.10);
+  }
+
+  /*
+   * Automatic activation via prefers-color-scheme.
+   *
+   * `:root:not([data-variant])` skips anyone who picked a scheme on the
+   * attribute axis. The three `:not(.scheme)` guards skip the class aliases
+   * (a bare `class="light"` carries no data-variant attribute). An explicit
+   * BRAND is NOT enumerated here — it wins by ae-brand layer order over this
+   * ae-scheme block, which is what retired the old per-theme opt-out chain.
+   * `src/theme-auto-activation.test.ts` locks this contract.
+   */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-variant]):not(.light):not(.dark):not(.high-contrast) {
+      --ae-color-accent-400: oklch(70% 0.14  255);
+      --ae-color-accent-500: oklch(62% 0.16  255);
+      --ae-color-accent-600: oklch(52% 0.16  255);
+      --ae-color-accent-700: oklch(42% 0.14  255);
+      --ae-color-accent-800: oklch(32% 0.10  255);
+      --ae-color-accent-900: oklch(22% 0.07  255);
+
+      --ae-color-success-500: oklch(66% 0.16  145);
+      --ae-color-success-700: oklch(78% 0.14  145);
+      --ae-color-warning-500: oklch(76% 0.15 85);
+      --ae-color-warning-700: oklch(84% 0.13 85);
+      --ae-color-danger-500:  oklch(66% 0.19 25);
+      --ae-color-danger-700:  oklch(74% 0.17 25);
+      --ae-color-info-500:    oklch(68% 0.13 220);
+      --ae-color-info-700:    oklch(80% 0.11 220);
+
+      --ae-shadow-xs:   0 1px 2px 0 oklch(0% 0 0 / 0.40);
+      --ae-shadow-sm:   0 1px 3px 0 oklch(0% 0 0 / 0.50), 0 1px 2px -1px oklch(0% 0 0 / 0.40);
+      --ae-shadow-md:   0 4px 6px -1px oklch(0% 0 0 / 0.55), 0 2px 4px -2px oklch(0% 0 0 / 0.45);
+      --ae-shadow-lg:   0 10px 15px -3px oklch(0% 0 0 / 0.55), 0 4px 6px -4px oklch(0% 0 0 / 0.45);
+      --ae-shadow-xl:   0 20px 25px -5px oklch(0% 0 0 / 0.60), 0 8px 10px -6px oklch(0% 0 0 / 0.50);
+      --ae-shadow-2xl:  0 25px 50px -12px oklch(0% 0 0 / 0.80);
+      --ae-shadow-inner: inset 0 2px 4px 0 oklch(0% 0 0 / 0.40);
+
+      --ae-color-bg:           var(--ae-color-gray-1000);
+      --ae-color-bg-subtle:    var(--ae-color-gray-900);
+      --ae-color-bg-muted:     var(--ae-color-gray-800);
+      --ae-color-bg-elevated:  var(--ae-color-gray-900);
+      --ae-color-bg-inverse:   var(--ae-color-gray-50);
+      --ae-color-bg-overlay:   oklch(0% 0 0 / 0.6);
+
+      --ae-color-fg:           var(--ae-color-gray-50);
+      --ae-color-fg-muted:     var(--ae-color-gray-300);
+      --ae-color-fg-subtle:    var(--ae-color-gray-400);
+      --ae-color-fg-inverse:   var(--ae-color-gray-900);
+      --ae-color-fg-disabled:  var(--ae-color-gray-600);
+      --ae-color-fg-on-accent: var(--ae-color-gray-1000);
+      --ae-color-fg-on-danger: var(--ae-color-gray-1000);
+
+      --ae-color-border:         var(--ae-color-gray-700);
+      --ae-color-border-strong:  var(--ae-color-gray-600);
+      --ae-color-border-subtle:  var(--ae-color-gray-800);
+      --ae-color-border-inverse: var(--ae-color-gray-200);
+
+      --ae-color-accent:          var(--ae-color-accent-500);
+      --ae-color-accent-hover:    var(--ae-color-accent-400);
+      --ae-color-accent-active:   var(--ae-color-accent-300);
+      --ae-color-accent-subtle:   var(--ae-color-accent-900);
+      --ae-color-accent-emphasis: var(--ae-color-accent-300);
+
+      --ae-color-success:          var(--ae-color-success-500);
+      --ae-color-success-subtle:   var(--ae-color-gray-900);
+      --ae-color-success-emphasis: var(--ae-color-success-700);
+
+      --ae-color-warning:          var(--ae-color-warning-500);
+      --ae-color-warning-subtle:   var(--ae-color-gray-900);
+      --ae-color-warning-emphasis: var(--ae-color-warning-700);
+
+      --ae-color-danger:           var(--ae-color-danger-500);
+      --ae-color-danger-subtle:    var(--ae-color-gray-900);
+      --ae-color-danger-emphasis:  var(--ae-color-danger-700);
+
+      --ae-color-info:             var(--ae-color-info-500);
+      --ae-color-info-subtle:      var(--ae-color-gray-900);
+      --ae-color-info-emphasis:    var(--ae-color-info-700);
+
+      --ae-color-selection-bg:   var(--ae-color-accent-800);
+      --ae-color-selection-fg:   var(--ae-color-accent-50);
+      --ae-color-hover-overlay:  oklch(100% 0 0 / 0.06);
+      --ae-color-active-overlay: oklch(100% 0 0 / 0.10);
+    }
+  }
+}

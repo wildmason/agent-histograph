@@ -1,0 +1,50 @@
+Before you finish, record an end-of-session CHECKPOINT of the work since your last checkpoint.
+
+Output EXACTLY ONE fenced ```json code block and NOTHING else — no preamble, no explanation
+after it. The block must match this schema:
+
+```json
+{
+  "type": "checkpoint",
+  "schema_version": "0.1",
+  "summary": "<one sentence: what materially progressed since the last checkpoint>",
+  "touched_paths": ["<repo-relative paths you created/edited/deleted>"],
+  "verification": ["<commands you ran and what the result actually means, e.g. 'cargo test -> 12/12 pass'>"],
+  "decisions": [
+    {
+      "topic": "<the choice you faced>",
+      "choice": "<what you decided>",
+      "rationale": "<why — the reasoning a future reader needs>",
+      "alternatives": ["<options you did not take>"],
+      "reversibility": "low | medium | high",
+      "confidence": "low | medium | high",
+      "class": "billing | license | auth | migration | public_api | dependency | data_loss | local | none",
+      "materiality": "ask_now | record | suppress",
+      "human_involved": true
+    }
+  ],
+  "risks": [{"summary": "<open risk you are leaving behind>", "severity": "low | medium | high"}],
+  "asks": [{"question": "<anything that needs the human>", "blocking": false}],
+  "next_action": "<the single next thing you would do>",
+  "health_draft": {
+    "topic": "<short topic>",
+    "decision": "<the decision in one line>",
+    "reason": "<why, for the project Health page Decisions table>",
+    "human_involved": true
+  }
+}
+```
+
+Rules for what to record:
+- A DECISION is a non-trivial choice with alternatives and consequences. Record every decision you
+  made this session. Do NOT record routine mechanics (formatting, obvious edits, running a test).
+- Set "class" honestly. If a choice touched billing, licensing, auth, a migration, a public API, a
+  dependency major version, or risked data loss, it is MATERIAL — you must record it and set
+  "materiality" to "ask_now" if it is irreversible/high-blast-radius or "record" otherwise.
+- "materiality": "suppress" is only for genuinely routine choices not worth the human's attention.
+- If you made NO real decisions and changed no real state since the last checkpoint, output a
+  checkpoint with an empty "decisions" array and a "summary" saying so — do not invent decisions.
+- Be truthful about verification: "exit code 0" is NOT proof a test suite is relevant or passed the
+  right thing. Say what the command actually demonstrated.
+
+Output only the json block, then stop.

@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "histograph-remote",
+  "description": "Authorize ONLY frameless-window chrome from the agentlog histograph page, served over loopback at an OS-ephemeral port (`agentlog serve --port 0`). This is the ONLY thing that makes the injected window-driver script's IPC accepted from a remote origin. Four action commands (drag / pin / minimize / close) plus one read-only getter (is-always-on-top, so the pin glyph reflects real state). The remote origin gets NOTHING else — no core:default, no fs, no shell, no dialog. Host is 127.0.0.1 ONLY (the sidecar binds --host 127.0.0.1); the port is wildcarded because --port 0 is OS-assigned and unknowable at static-config time — an accepted trade-off bounded by this cosmetic-only command set.",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["http://127.0.0.1:*"]
+  },
+  "permissions": [
+    "core:window:allow-start-dragging",
+    "core:window:allow-set-always-on-top",
+    "core:window:allow-is-always-on-top",
+    "core:window:allow-minimize",
+    "core:window:allow-close"
+  ]
+}

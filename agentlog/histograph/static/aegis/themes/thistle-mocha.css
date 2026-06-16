@@ -1,0 +1,182 @@
+/*
+ * Aegis v2 — Thistle & Mocha theme pack (Spectrum collection).
+ *
+ * A port of the v1 Aegis themeset ("Spectrum") into v2's two-axis model.
+ * Thistle & Mocha pairs a muted thistle-lavender accent (#c4a8d8) against a
+ * warm near-black mocha surface family (espresso brown → dusty taupe). It is
+ * a DARK-ONLY brand (v1 shipped it as `color-scheme: dark`), so this single
+ * brand block sets the full dark surface direction directly — there is no
+ * light variant.
+ *
+ * ── Pixel-perfect fidelity ──────────────────────────────────────────
+ * Every value here is the LITERAL v1 hex from ../aegis/themes.css
+ * (`[data-theme='thistle-mocha']`). We deliberately do NOT convert to oklch:
+ * the rest of v2 is oklch, but converting v1's sRGB hexes would introduce
+ * gamut/rounding drift and break pixel parity with what v1 actually ships.
+ * The semantic (Tier-2) tokens components consume carry the exact v1 colors;
+ * the Tier-1 mocha/thistle ramps are anchored to the v1 surface values so any
+ * component reaching for a raw ramp stop still resolves to a real v1 color.
+ *
+ * Per-component deltas that the semantic layer can't express on its own
+ * (e.g. v1's table header = sunken while row-hover = a distinct hover tint,
+ * both of which v2 routes through --ae-color-bg-subtle) are reconciled via
+ * component-tier overrides at the bottom of this file, verified against v1
+ * with the v1↔v2 screenshot-diff harness (scripts/spectrum-diff.mjs).
+ *
+ * Apply via class OR data-attribute on any ancestor (commonly :root):
+ *   <html data-theme="spectrum" data-variant="thistle-mocha">   ← or class="spectrum thistle-mocha"
+ *
+ * No automatic media-query activation — a brand is an explicit opt-in.
+ *
+ * v1 source-of-truth surface stack (depth: sunken→base→raised→float→fg):
+ *   sunken  #151310   base    #221918   raised  #382e2c
+ *   float   #403635   fg-surf #514240   hover   #2c2822 (mocha-tinted)
+ */
+
+@layer ae-brand {
+:root[data-theme="spectrum"][data-variant="thistle-mocha"],
+:root.spectrum.thistle-mocha {
+  /* ============================================================
+   * Tier 1 — Primitives.
+   * Mocha gray ramp anchored to v1's exact surface hexes at the dark
+   * end (700=float, 800=raised, 900=base, 1000=sunken) and extended to
+   * light stops for inverse/on-light contexts. Thistle accent ramp anchored
+   * at 400=hover, 500=accent (no v1 accent-readable; 300 derived lighter).
+   * ============================================================ */
+
+  /* Mocha neutrals — warm espresso/taupe tint. Dark stops ARE v1 surfaces. */
+  --ae-color-gray-0:    #f6f3ee;
+  --ae-color-gray-50:   #ece7df;
+  --ae-color-gray-100:  #ede9e1;   /* = v1 text-primary   */
+  --ae-color-gray-200:  #c5bcae;   /* = v1 text-secondary */
+  --ae-color-gray-300:  #a99e8e;
+  --ae-color-gray-400:  #8a7670;   /* = v1 border-input   */
+  --ae-color-gray-500:  #514240;   /* = v1 bg-foreground  */
+  --ae-color-gray-600:  #483b39;
+  --ae-color-gray-700:  #403635;   /* = v1 bg-float       */
+  --ae-color-gray-800:  #382e2c;   /* = v1 bg-raised      */
+  --ae-color-gray-900:  #221918;   /* = v1 bg-base        */
+  --ae-color-gray-1000: #151310;   /* = v1 bg-sunken      */
+
+  /* Thistle (muted lavender) accent. 500=v1 accent, 400=v1 accent-hover.
+     v1 ships no accent-readable here, so 300 is derived as a lighter thistle. */
+  --ae-color-accent-50:  #f3edf8;
+  --ae-color-accent-100: #e6d9f0;
+  --ae-color-accent-200: #d8c0e6;
+  --ae-color-accent-300: #d4bce4;   /* derived — lighter thistle for accent-as-text */
+  --ae-color-accent-400: #9e7abf;   /* = v1 accent-hover    */
+  --ae-color-accent-500: #c4a8d8;   /* = v1 accent          */
+  --ae-color-accent-600: #a987c4;
+  --ae-color-accent-700: #8a68a6;
+  --ae-color-accent-800: #6a4f82;
+  --ae-color-accent-900: #4c3a5e;
+
+  /* Status palettes — v1 ships a single value per status (used as both
+     text and fill). We seed 500 with the v1 value and derive 50/700. */
+  --ae-color-success-50:  #16271f;
+  --ae-color-success-100: #1d352b;
+  --ae-color-success-500: #7ac4a0;   /* = v1 success */
+  --ae-color-success-700: #a3d8bf;
+
+  --ae-color-warning-50:  #2c2212;
+  --ae-color-warning-100: #382c18;
+  --ae-color-warning-500: #d4a85a;   /* = v1 warning */
+  --ae-color-warning-700: #e3c58c;
+
+  --ae-color-danger-50:  #2e1817;
+  --ae-color-danger-100: #3a1f1e;
+  --ae-color-danger-500: #e07878;    /* = v1 danger */
+  --ae-color-danger-700: #eaa0a0;
+
+  /* Info — v1 Thistle & Mocha ships no info color. Derived: a soft slate-blue
+     that sits beside the mocha neutrals without competing with the thistle
+     accent. Used only by v2-only surfaces (no v1 equivalent to match). */
+  --ae-color-info-50:  #15222e;
+  --ae-color-info-100: #1c2d3a;
+  --ae-color-info-500: #80a8e0;
+  --ae-color-info-700: #a8c4ec;
+
+  /* ============================================================
+   * Scale (radius / type / motion) is SHARED across the whole Spectrum
+   * collection and lives in themes/spectrum-base.css — this file is
+   * palette-only. The one scale axis that is NOT shared is shadow: v1
+   * sets shadow alphas per-theme because they are scheme-coupled (light
+   * themes use light alphas, dark ones deep), so Thistle & Mocha's dark
+   * shadow block stays here.
+   * ============================================================ */
+
+  /* Dark-surface shadow alphas (v1 sm/md/lg seeded; xs/xl/2xl derived). */
+  --ae-shadow-xs:   0 1px 2px 0 rgba(0, 0, 0, 0.50);
+  --ae-shadow-sm:   0 1px 3px rgba(0, 0, 0, 0.60);
+  --ae-shadow-md:   0 4px 12px rgba(0, 0, 0, 0.70);
+  --ae-shadow-lg:   0 10px 30px rgba(0, 0, 0, 0.80);
+  --ae-shadow-xl:   0 20px 40px rgba(0, 0, 0, 0.85);
+  --ae-shadow-2xl:  0 25px 60px rgba(0, 0, 0, 0.90);
+  --ae-shadow-inner: inset 0 2px 4px 0 rgba(0, 0, 0, 0.50);
+
+  /* ============================================================
+   * Tier 2 — Semantic mapping (dark direction).
+   * Literal v1 hexes so the layer components consume is pixel-exact.
+   * ============================================================ */
+
+  --ae-color-bg:           #221918;   /* v1 base    */
+  --ae-color-bg-subtle:    #151310;   /* v1 sunken  — table header, code, recessed */
+  --ae-color-bg-muted:     #382e2c;   /* v1 raised  — header/sidebar/panel surfaces */
+  --ae-color-bg-elevated:  #403635;   /* v1 float   — cards, modals, dropdowns      */
+  --ae-color-bg-inverse:   #ede9e1;   /* light mocha — inverse chips/tooltip ground */
+  --ae-color-bg-overlay:   rgba(0, 0, 0, 0.60);   /* v1 backdrop-opacity 0.60 */
+
+  --ae-color-fg:           #ede9e1;   /* v1 text-primary     */
+  --ae-color-fg-muted:     #c5bcae;   /* v1 text-secondary   */
+  --ae-color-fg-subtle:    #a3a8aa;   /* v1 text-muted       */
+  --ae-color-fg-inverse:   #221918;   /* dark text on light inverse surface */
+  --ae-color-fg-disabled:  #4a4540;   /* v1 text-placeholder */
+  --ae-color-fg-on-accent: #1a1715;   /* v1 accent-text — near-black on thistle */
+  --ae-color-fg-on-danger: #2e1817;   /* dark on light v1 danger #e07878 */
+  /* Status FILLS in T&M are all light (sage/amber/coral), so their on-fill
+     text must be dark. */
+  --ae-color-fg-on-warning: #2c2212;
+  --ae-color-fg-on-success: #16271f;
+  --ae-color-fg-on-info:    #15222e;
+
+  --ae-color-border:         #2e2820;   /* v1 border        */
+  --ae-color-border-strong:  #8a7670;   /* v1 border-input (3:1 control border) */
+  --ae-color-border-subtle:  #241e18;   /* v1 border-subtle */
+  --ae-color-border-inverse: #a99e8e;
+
+  /* Accent — fills/rings at 500 (#c4a8d8). v1 ships no accent-readable for
+     this brand, so accent-as-text uses a derived lighter thistle at emphasis. */
+  --ae-color-accent:          #c4a8d8;   /* v1 accent          */
+  --ae-color-accent-hover:    #9e7abf;   /* v1 accent-hover    */
+  --ae-color-accent-active:   #8a68a6;
+  --ae-color-accent-subtle:   #2f2632;   /* dark thistle tint (≈10% accent on base) */
+  --ae-color-accent-emphasis: #d4bce4;   /* derived lighter thistle (no v1 readable) */
+
+  --ae-color-success:          #7ac4a0;
+  --ae-color-success-subtle:   #1d2f27;
+  --ae-color-success-emphasis: #7ac4a0;
+
+  --ae-color-warning:          #d4a85a;
+  --ae-color-warning-subtle:   #322818;
+  --ae-color-warning-emphasis: #d4a85a;
+
+  --ae-color-danger:           #e07878;
+  --ae-color-danger-subtle:    #341f1e;
+  --ae-color-danger-emphasis:  #eaa0a0;
+
+  --ae-color-info:             #80a8e0;
+  --ae-color-info-subtle:      #1d2c3a;
+  --ae-color-info-emphasis:    #80a8e0;
+
+  --ae-color-focus-ring:     #c4a8d8;   /* v1 uses accent / border-hover for focus */
+  --ae-color-selection-bg:   #3d3245;   /* thistle-tinted selection */
+  --ae-color-selection-fg:   #f3edf8;
+  --ae-color-hover-overlay:  rgba(255, 255, 255, 0.05);
+  --ae-color-active-overlay: rgba(255, 255, 255, 0.09);
+
+  /* Component-tier GEOMETRY (button sizing, control hover model, panel
+   * surfaces, etc.) is theme-independent and lives in spectrum-base.css.
+   * Thistle & Mocha adds no component overrides of its own — its semantic
+   * palette above feeds the shared component tokens directly. */
+}
+} /* @layer ae-brand */

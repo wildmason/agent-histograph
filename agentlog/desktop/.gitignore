@@ -1,0 +1,9 @@
+# Rust / Tauri build artifacts
+src-tauri/target/
+src-tauri/gen/
+
+# Generated splash bundle (rebuilt by beforeBuildCommand every build)
+ui/dist/
+
+# Node
+ui/node_modules/

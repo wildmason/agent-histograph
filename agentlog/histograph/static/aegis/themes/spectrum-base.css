@@ -1,0 +1,240 @@
+/*
+ * Aegis v2 — Spectrum collection BASE layer.
+ *
+ * The v1 Aegis design system expresses geometry ONCE, theme-independently:
+ * radius, motion, type, and every component's box metrics live in `:root` /
+ * the component CSS, while the 12 themes override only COLOR. This file is the
+ * v2 mirror of that split. It carries the shared v1 geometry that EVERY
+ * Spectrum brand (Stone & Moss + the other 11) reuses, so a theme file holds
+ * nothing but its palette (tier-1 ramps + tier-2 semantic + its scheme-coupled
+ * shadow alphas).
+ *
+ * ── How it activates ────────────────────────────────────────────────
+ * `applyTheme()` stamps `data-collection="spectrum"` on :root next to
+ * `data-theme="<brand>"` (see src/tokens/theme-registry.ts). This file keys on
+ * that stamp, so adding a new Spectrum theme needs ZERO wiring here — register
+ * the brand with `family: 'spectrum'` and it inherits all of this for free.
+ * A `.spectrum` class alias is honored too, for class-based theming.
+ *
+ * ── The hex rule ────────────────────────────────────────────────────
+ * NOTHING in this file is a literal palette color. Every value is either pure
+ * geometry (px / weight / radius / duration) or a `var(--ae-color-*)` semantic
+ * reference that resolves to the ACTIVE theme's palette. The two universal
+ * constants v1 hardcodes regardless of theme — the white checkbox checkmark
+ * and white switch thumb — are the only literal colors, and they are flagged
+ * as such. This is what keeps the base genuinely theme-independent.
+ *
+ * Reconciled against v1 with scripts/spectrum-diff.mjs (computed-metric diff,
+ * piercing the v2 shadow DOM). v1 ground truth: ../aegis/src/<comp>/<comp>.css
+ * + ../aegis/inputs.css; geometry scale = ../aegis/themes.css `:root`.
+ */
+
+@layer ae-brand {
+:root[data-collection="spectrum"],
+:root.spectrum {
+  /* ============================================================
+   * Scale — v1 `:root` constants, shared by all 12 themes.
+   * (Shadows are NOT here: v1 sets shadow alphas per-theme because they
+   *  are scheme-coupled — light themes use light alphas, dark themes deep
+   *  ones — so each Spectrum theme file ships its own shadow block.)
+   * ============================================================ */
+
+  /* Radius — v1 xs/sm/md/lg = 4/6/8/12, full = 9999. v2's default scale is
+     tighter (md 6 / sm 4 / lg 8); shifting it onto v1's lands every
+     radius-consuming component pixel-correct. */
+  --ae-radius-xs:   4px;
+  --ae-radius-sm:   6px;
+  --ae-radius-md:   8px;
+  --ae-radius-lg:   12px;
+  --ae-radius-xl:   12px;
+  --ae-radius-2xl:  16px;
+  --ae-radius-default: var(--ae-radius-md);
+
+  /* Type — Inter-first sans. v1's design TOKEN is system-ui, but every v1
+     product + the v1 docs render Inter (font-family:inherit + Inter-loaded
+     body), so the faithful "real Wildmason look" across the whole Spectrum
+     collection is Inter. A theme needing a different face overrides in its
+     own file. Mono matches v1's --wm-font-mono verbatim. */
+  --ae-font-family-sans:
+    "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --ae-font-family-mono:
+    "Cascadia Code", "Fira Code", Consolas, "Courier New", monospace;
+
+  /* Motion — v1 150 / 200 / 300ms. */
+  --ae-duration-fast:   150ms;
+  --ae-duration-normal: 200ms;
+  --ae-duration-slow:   300ms;
+
+  /* Disabled controls dim to 0.45 across v1 (v2 default is 0.55). */
+  --ae-opacity-disabled: 0.45;
+
+  /* ============================================================
+   * Button — v1 `.wm-btn` (inputs.css). Theme-independent geometry:
+   * 600 weight, 6px icon gap, sizes sm 28 / md 36 / lg 40 with
+   * 0-vertical / tight-horizontal padding, sm rounds 6px while md/lg
+   * round 8px, and `secondary` is a transparent OUTLINE button.
+   * ============================================================ */
+  --ae-button-font-weight: var(--ae-font-weight-semibold);   /* 600 */
+  --ae-button-gap: 6px;
+  --ae-button-secondary-bg: transparent;
+
+  --ae-button-height-sm: 28px;
+  --ae-button-height-md: 36px;
+  --ae-button-height-lg: 40px;
+
+  --ae-button-padding-sm: 0 10px;
+  --ae-button-padding-md: 0 14px;
+  --ae-button-padding-lg: 0 18px;
+
+  --ae-button-font-size-sm: 0.8125rem;   /* 13px */
+  --ae-button-font-size-md: 0.875rem;    /* 14px */
+  --ae-button-font-size-lg: 0.9375rem;   /* 15px */
+
+  --ae-button-radius-sm: var(--ae-radius-sm);   /* 6px (md/lg inherit 8px) */
+
+  /* ============================================================
+   * Text fields — v1 `.wm-input` / `.wm-input-group` (inputs.css).
+   * Resting box already matches via the semantic surface + radius
+   * mapping (36px / 0 12px pad / 8px radius / border-input). v1 adds a
+   * hover step v2 leaves flat: the field DARKENS to the sunken surface
+   * and the border shifts to moss accent. Resolves per-theme.
+   * ============================================================ */
+  --ae-input-bg-hover: var(--ae-color-bg-subtle);
+  --ae-input-border-hover: var(--ae-color-accent);
+  --ae-textarea-bg-hover: var(--ae-color-bg-subtle);
+  --ae-textarea-border-hover: var(--ae-color-accent);
+  /* v1 placeholder = --wm-text-placeholder (the dim disabled-grey), NOT the
+     bright fg-subtle v2 defaults to. */
+  --ae-input-placeholder: var(--ae-color-fg-disabled);
+
+  /* ============================================================
+   * Select — v1 `.wm-select-trigger` (select.css). Resting box matches
+   * (36px / 0 12px / 8px / border-input). v1's hover is DIFFERENT from a
+   * text field's: it shifts ONLY the border to the readable accent and
+   * does NOT darken the surface. So we pin bg-hover back to the resting
+   * surface (neutralizing v2's darken) and set the border to emphasis.
+   * ============================================================ */
+  --ae-select-padding: 0 var(--ae-space-3);   /* v1 0 0.75rem (no vertical pad) */
+  --ae-select-placeholder: var(--ae-color-fg-disabled);   /* v1 dim placeholder */
+  --ae-select-listbox-radius: var(--ae-radius-lg);   /* v1 panel rounds 12px */
+  --ae-select-bg-hover: var(--ae-color-bg);
+  --ae-select-border-hover: var(--ae-color-accent-emphasis);
+
+  /* ============================================================
+   * Combobox — v1 `.wm-cb-trigger` (combobox.css). Same hover model as
+   * select. NOTE v1 combobox rounds at radius-sm (6px), not the md (8px)
+   * select/inputs use.
+   * ============================================================ */
+  --ae-combobox-radius: var(--ae-radius-sm);   /* 6px */
+  --ae-combobox-gap: var(--ae-space-1);        /* 4px (v2 8px) */
+  --ae-combobox-padding: 0 var(--ae-space-2);  /* v1 8px horizontal */
+  --ae-combobox-placeholder: var(--ae-color-fg-disabled);
+  --ae-combobox-listbox-radius: var(--ae-radius-lg);   /* 12px */
+  --ae-combobox-bg-hover: var(--ae-color-bg);
+  --ae-combobox-border-hover: var(--ae-color-accent-emphasis);
+
+  /* ============================================================
+   * Checkbox — v1 `.wm-checkbox-box` (checkbox.css). 18px box (matches),
+   * but v1 rounds 4px (not v2's sm), borders 2px (not 1px), fills the
+   * check WHITE (not on-accent dark), and outlines the checked box with
+   * the readable accent (not the fill color). Icon is 12px (not 14px).
+   * ============================================================ */
+  --ae-checkbox-radius: var(--ae-radius-xs);                    /* 4px */
+  --ae-checkbox-border-width: 2px;                             /* v2 default 1px */
+  --ae-checkbox-icon-size: 0.75rem;                           /* 12px (v2 14px) */
+  --ae-checkbox-border-checked: var(--ae-color-accent-emphasis);
+  --ae-checkbox-fg: #ffffff;   /* v1 hardcodes a white checkmark, all themes */
+
+  /* ============================================================
+   * Radio — v1 ships NO radio. Kept on v2-native geometry, aligned to the
+   * checkbox CONVENTION for visual consistency within the collection: same
+   * 2px control border and white indicator are NOT applied (a radio dot
+   * reads as the accent fill in v1's sibling controls). Only the checked
+   * border tracks the readable accent, matching the checkbox.
+   * ============================================================ */
+  --ae-radio-border-checked: var(--ae-color-accent-emphasis);
+
+  /* ============================================================
+   * Switch — v1 `.wm-toggle` (toggle.css). 40×22 track (v2 is 36×20),
+   * 3px thumb inset, WHITE thumb (v2 uses the dark surface), 18px travel.
+   * ============================================================ */
+  --ae-switch-track-width: 2.5rem;     /* 40px (v2 36px) */
+  --ae-switch-track-height: 1.375rem;  /* 22px (v2 20px) → derives a 16px thumb */
+  --ae-switch-thumb-inset: 3px;        /* v2 2px */
+  --ae-switch-thumb: #ffffff;          /* v1 hardcodes a white thumb */
+  --ae-switch-thumb-checked: #ffffff;
+  --ae-switch-thumb-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);   /* v1 toggle.css */
+
+  /* ============================================================
+   * Popover — v1 `.wm-popover-panel` (popover.css). Sits on the RAISED
+   * surface (v2 defaults to float/elevated) and rounds at radius-lg.
+   * ============================================================ */
+  --ae-popover-bg: var(--ae-color-bg-muted);   /* v1 bg-raised */
+  --ae-popover-radius: var(--ae-radius-lg);    /* 12px */
+
+  /* ============================================================
+   * Tabs — v1 `.wm-tab` (tabs.css). Tighter, heavier tab type (13px/600),
+   * tall+narrow line-tab padding with a wide 24px line-tablist gap, and the
+   * pill track sits on the sunken surface with a subtle border + float-raised
+   * active chip. Active text + underline use the readable accent.
+   * ============================================================ */
+  --ae-tabs-tab-padding: 0.625rem 0.25rem;     /* v1 10px / 4px */
+  --ae-tabs-tab-font-size: 0.8125rem;          /* 13px (v2 14px) */
+  --ae-tabs-tab-font-weight: var(--ae-font-weight-semibold);   /* 600 */
+  --ae-tabs-tab-gap: 6px;                      /* v2 8px */
+  --ae-tabs-tablist-gap: 1.5rem;               /* v1 line gap 24px (v2 4px) */
+  --ae-tabs-tab-fg-inactive: var(--ae-color-fg-subtle);   /* v1 text-muted */
+  --ae-tabs-indicator-color: var(--ae-color-accent-emphasis);  /* readable underline */
+  --ae-tabs-pill-tab-padding: 0.375rem 0.75rem;   /* v1 6px / 12px */
+  --ae-tabs-pill-tablist-gap: 0.125rem;        /* 2px (matches, restated) */
+  --ae-tabs-pill-tablist-bg: var(--ae-color-bg-subtle);   /* v1 sunken track */
+  --ae-tabs-pill-tablist-border-width: 1px;    /* v1 pill track has a border */
+  --ae-tabs-tab-bg-active: var(--ae-color-bg-elevated);   /* v1 float active chip */
+
+  /* ============================================================
+   * Tag — v1 `.wm-chip` (inputs.css). 11px/600 pill, slightly tighter
+   * vertical padding than v2's default. Radius already pill via the scale.
+   * ============================================================ */
+  --ae-tag-padding: 0.1875rem 0.5rem;          /* v1 3px / 8px */
+  --ae-tag-font-size: 0.6875rem;               /* 11px (v2 12px) */
+  --ae-tag-font-weight: var(--ae-font-weight-semibold);   /* 600 */
+  --ae-tag-line-height: 1.4;
+
+  /* ============================================================
+   * Toast — v1 `.wm-toast` (toast-container.css). 13px text, tighter box,
+   * narrower min/max width, rounds at radius-sm, and a lighter shadow-md
+   * (v2 toast defaults to the heavier shadow-lg).
+   * ============================================================ */
+  --ae-toast-gap: 0.625rem;                    /* v1 10px (v2 12px) */
+  --ae-toast-padding: 0.625rem 0.875rem;       /* v1 10px / 14px */
+  --ae-toast-font-size: 0.8125rem;             /* 13px */
+  --ae-toast-line-height: 1.4;
+  --ae-toast-min-width: 13.75rem;              /* 220px (v2 256px) */
+  --ae-toast-max-width: 22.5rem;               /* 360px (v2 448px) */
+  --ae-toast-radius: var(--ae-radius-sm);      /* 6px */
+  --ae-toast-shadow: var(--ae-shadow-md);      /* v1 toast is shadow-md, not lg */
+
+  /* ============================================================
+   * Tooltip — v1 `[data-tooltip]::after`. Inverse light bubble (already
+   * matched via --ae-color-bg/fg-inverse) with NO shadow and a 6px radius.
+   * ============================================================ */
+  --ae-tooltip-shadow: none;
+  --ae-tooltip-radius: var(--ae-radius-sm);    /* 6px */
+  --ae-tooltip-padding: 3px 8px;               /* v1 3px / 8px (v2 4px / 8px) */
+  --ae-tooltip-font-size: 0.71875rem;          /* 11.5px (v2 12px) */
+  --ae-tooltip-line-height: 1.4;
+
+  /* ============================================================
+   * Modal + dialog — v1 `.wm-dialog` (dialog.css). v2 panels are
+   * borderless; v1's panel has a defined 1px edge on the float surface and a
+   * 16px (not 18px) title. Radius (12px) already matches via the scale. Panel
+   * WIDTH stays v2's — v1's exact widths sit behind a per-size :host token that
+   * a brand can't reach, and the surface sizing is a soft design choice, not a
+   * control's pixel geometry.
+   * ============================================================ */
+  --ae-modal-border: var(--ae-color-border);
+  --ae-modal-title-font-size: var(--ae-font-size-md);   /* 16px (v2 18px) */
+  --ae-dialog-border: var(--ae-color-border);
+  --ae-dialog-title-font-size: var(--ae-font-size-md);
+}
+}

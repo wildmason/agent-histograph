@@ -1,0 +1,58 @@
+[package]
+name = "histograph"
+version = "0.1.0"
+description = "Low-chrome desktop wrapper for the agentlog histograph"
+authors = ["Matthew MacKinnon"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "histograph_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# Lower bound >= 2.11.1 is MANDATORY here: the 2.0.0–2.11.0 line carries
+# CVE-2026-42184 / GHSA-7gmj-67g7-phm9 — an is_local_url() origin-confusion bug
+# on Windows where a remote origin in a WebView can bypass the local-origin IPC
+# gate and invoke any granted command. Histograph deliberately grants IPC to a
+# remote (loopback) origin on Windows, which is *exactly* that threat model, so
+# the older `tauri = "2"` pin the rest of the fleet uses is NOT safe here.
+tauri = { version = ">=2.11.1, <3", features = [] }
+tauri-plugin-log = "2"
+tokio = { version = "1", features = ["full"] }
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+url = "2"
+
+# Desktop-only: persists window position/size across launches (a pinned utility
+# should reopen where you left it). No other Wildmason app uses this yet.
+[target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
+tauri-plugin-window-state = "2"
+
+# Windows Job Object so a force-kill / crash of Histograph still terminates the
+# python serve child (kill_on_drop + RunEvent::Exit only cover graceful exits).
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_System_JobObjects",
+  "Win32_System_Threading",
+] }
+
+[features]
+# devtools is opt-in for debugging only; lib.rs has a compile_error! guard that
+# refuses to build a RELEASE binary with this feature on (shipping devtools would
+# hand a debugger + the IPC bridge to any XSS).
+devtools = ["tauri/devtools"]
+
+[profile.release]
+opt-level       = "z"
+lto             = "fat"
+codegen-units   = 1
+strip           = "symbols"
+overflow-checks = true
+panic           = "unwind"

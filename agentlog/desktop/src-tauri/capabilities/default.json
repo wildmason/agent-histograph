@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Local (bundled splash) capabilities for the Histograph window. No `remote` field, so these permissions apply ONLY to the tauri:// splash origin, never to the navigated loopback histograph page.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "window-state:default"
+  ]
+}

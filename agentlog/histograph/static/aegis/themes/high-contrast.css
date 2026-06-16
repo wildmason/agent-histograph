@@ -1,0 +1,210 @@
+/*
+ * Aegis v2 — High-contrast SCHEME.
+ *
+ * The third scheme pack on the `data-variant` axis. Targets WCAG AAA (7:1
+ * body, 4.5:1 large text) and is tuned for `prefers-contrast: more` (Windows
+ * High Contrast, macOS Increase Contrast). Pure-black foreground on
+ * pure-white background; status colors at their darkest legible swatch; focus
+ * ring widened and `solid`.
+ *
+ * Apply via the scheme attribute OR the class alias:
+ *   <html data-variant="high-contrast">
+ *   <html class="high-contrast">
+ *
+ * Also activates automatically via `@media (prefers-contrast: more)` when no
+ * explicit scheme is chosen.
+ *
+ * Lives in `@layer ae-scheme`. Per the per-brand-scheme decision, this is the
+ * DEFAULT brand's high-contrast palette; a brand that ships its own
+ * high-contrast variant overrides from ae-brand. Most brands inherit this
+ * pure-black/white treatment as-is, which is the safest AAA default.
+ *
+ * Contrast (verified by OKLCH-lightness delta proxy; recommend a real
+ * checker pass before launch):
+ *   fg pure black on bg pure white                    21:1   ✅ AAA
+ *   fg-on-accent pure white on accent-700 (L≈30)     ≈ 10:1  ✅ AAA
+ *   fg-on-danger  pure white on danger-700 (L≈35)    ≈ 8:1   ✅ AAA
+ *   accent-emphasis (L≈25) on white (L≈100)          ≈ 14:1  ✅ AAA
+ *   fg-muted (L≈25, near-black) on white             ≈ 14:1  ✅ AAA
+ */
+
+@layer ae-scheme {
+  :root[data-variant="high-contrast"],
+  :root.high-contrast {
+    /* ============================================================
+     * Tier 1 — Primitives.
+     * Pure black/white at the extremes; intermediate grays pulled
+     * toward the nearest endpoint so subtle UI stops being subtle.
+     * ============================================================ */
+
+    --ae-color-gray-0:    oklch(100% 0 0);
+    --ae-color-gray-50:   oklch(100% 0 0);
+    --ae-color-gray-100:  oklch(98%  0 0);
+    --ae-color-gray-200:  oklch(75%  0 0);
+    --ae-color-gray-300:  oklch(55%  0 0);
+    --ae-color-gray-400:  oklch(40%  0 0);
+    --ae-color-gray-500:  oklch(30%  0 0);
+    --ae-color-gray-600:  oklch(20%  0 0);
+    --ae-color-gray-700:  oklch(12%  0 0);
+    --ae-color-gray-800:  oklch(6%   0 0);
+    --ae-color-gray-900:  oklch(0%   0 0);
+    --ae-color-gray-1000: oklch(0%   0 0);
+
+    /* Accent — saturated indigo pulled darker for AAA against white. */
+    --ae-color-accent-50:  oklch(96% 0.03  255);
+    --ae-color-accent-100: oklch(90% 0.06  255);
+    --ae-color-accent-200: oklch(80% 0.10  255);
+    --ae-color-accent-300: oklch(60% 0.16  255);
+    --ae-color-accent-400: oklch(45% 0.20  255);
+    --ae-color-accent-500: oklch(35% 0.20  255);
+    --ae-color-accent-600: oklch(30% 0.18  255);
+    --ae-color-accent-700: oklch(25% 0.16  255);
+    --ae-color-accent-800: oklch(18% 0.12  255);
+    --ae-color-accent-900: oklch(12% 0.08  255);
+
+    /* Status — darkest legible variants. */
+    --ae-color-success-50:  oklch(95% 0.04 145);
+    --ae-color-success-100: oklch(88% 0.08 145);
+    --ae-color-success-500: oklch(38% 0.18 145);
+    --ae-color-success-700: oklch(28% 0.14 145);
+
+    --ae-color-warning-50:  oklch(96% 0.05 85);
+    --ae-color-warning-100: oklch(90% 0.10 85);
+    --ae-color-warning-500: oklch(45% 0.15 75);
+    --ae-color-warning-700: oklch(35% 0.12 70);
+
+    --ae-color-danger-50:  oklch(95% 0.04 25);
+    --ae-color-danger-100: oklch(88% 0.08 25);
+    --ae-color-danger-500: oklch(40% 0.22 25);
+    --ae-color-danger-700: oklch(32% 0.18 25);
+
+    --ae-color-info-50:  oklch(95% 0.03 220);
+    --ae-color-info-100: oklch(88% 0.07 220);
+    --ae-color-info-500: oklch(40% 0.16 220);
+    --ae-color-info-700: oklch(28% 0.13 220);
+
+    /* ============================================================
+     * Tier 2 — Semantic remaps.
+     * ============================================================ */
+
+    --ae-color-bg:           var(--ae-color-gray-0);
+    --ae-color-bg-subtle:    var(--ae-color-gray-50);
+    --ae-color-bg-muted:     var(--ae-color-gray-100);
+    --ae-color-bg-elevated:  var(--ae-color-gray-0);
+    --ae-color-bg-inverse:   var(--ae-color-gray-900);
+    --ae-color-bg-overlay:   oklch(0% 0 0 / 0.7);
+
+    --ae-color-fg:           var(--ae-color-gray-900);
+    --ae-color-fg-muted:     var(--ae-color-gray-700);
+    --ae-color-fg-subtle:    var(--ae-color-gray-600);
+    --ae-color-fg-inverse:   var(--ae-color-gray-0);
+    --ae-color-fg-disabled:  var(--ae-color-gray-400);
+    --ae-color-fg-on-accent: var(--ae-color-gray-0);
+    --ae-color-fg-on-danger: var(--ae-color-gray-0);
+    /* Unlike the other packs, high-contrast's warning fill is a DARK brown, so
+       its on-fill text must be light (not the default dark gray-900). */
+    --ae-color-fg-on-warning: var(--ae-color-gray-0);
+    --ae-color-fg-on-success: var(--ae-color-gray-0);
+    --ae-color-fg-on-info:    var(--ae-color-gray-0);
+
+    /* Borders use the strongest neutral so divisions are never ambiguous. */
+    --ae-color-border:         var(--ae-color-gray-900);
+    --ae-color-border-strong:  var(--ae-color-gray-900);
+    --ae-color-border-subtle:  var(--ae-color-gray-700);
+    --ae-color-border-inverse: var(--ae-color-gray-0);
+
+    /* Wider default border + focus ring without breaking the 1px primitive. */
+    --ae-border-default-width: var(--ae-border-width-2);
+    --ae-focus-ring-width:     4px;
+    --ae-focus-ring-offset:    2px;
+    --ae-focus-ring-style:     solid;
+
+    --ae-color-accent:          var(--ae-color-accent-700);
+    --ae-color-accent-hover:    var(--ae-color-accent-800);
+    --ae-color-accent-active:   var(--ae-color-accent-900);
+    --ae-color-accent-subtle:   var(--ae-color-accent-50);
+    --ae-color-accent-emphasis: var(--ae-color-accent-800);
+
+    --ae-color-success:          var(--ae-color-success-700);
+    --ae-color-success-subtle:   var(--ae-color-success-50);
+    --ae-color-success-emphasis: var(--ae-color-success-700);
+
+    --ae-color-warning:          var(--ae-color-warning-700);
+    --ae-color-warning-subtle:   var(--ae-color-warning-50);
+    --ae-color-warning-emphasis: var(--ae-color-warning-700);
+
+    --ae-color-danger:           var(--ae-color-danger-700);
+    --ae-color-danger-subtle:    var(--ae-color-danger-50);
+    --ae-color-danger-emphasis:  var(--ae-color-danger-700);
+
+    --ae-color-info:             var(--ae-color-info-700);
+    --ae-color-info-subtle:      var(--ae-color-info-50);
+    --ae-color-info-emphasis:    var(--ae-color-info-700);
+
+    --ae-color-focus-ring:     var(--ae-color-accent-700);
+    --ae-color-selection-bg:   var(--ae-color-accent-900);
+    --ae-color-selection-fg:   var(--ae-color-gray-0);
+    --ae-color-hover-overlay:  oklch(0% 0 0 / 0.12);
+    --ae-color-active-overlay: oklch(0% 0 0 / 0.20);
+  }
+
+  /*
+   * Automatic activation via prefers-contrast: more.
+   * Same opt-out shape as dark.css — a plain `:root:not([data-variant])`
+   * plus the three scheme class aliases. Brands win by ae-brand layer order,
+   * so no per-brand enumeration is needed.
+   */
+  @media (prefers-contrast: more) {
+    :root:not([data-variant]):not(.light):not(.dark):not(.high-contrast) {
+      --ae-color-gray-0:    oklch(100% 0 0);
+      --ae-color-gray-50:   oklch(100% 0 0);
+      --ae-color-gray-100:  oklch(98%  0 0);
+      --ae-color-gray-200:  oklch(75%  0 0);
+      --ae-color-gray-300:  oklch(55%  0 0);
+      --ae-color-gray-400:  oklch(40%  0 0);
+      --ae-color-gray-500:  oklch(30%  0 0);
+      --ae-color-gray-600:  oklch(20%  0 0);
+      --ae-color-gray-700:  oklch(12%  0 0);
+      --ae-color-gray-800:  oklch(6%   0 0);
+      --ae-color-gray-900:  oklch(0%   0 0);
+      --ae-color-gray-1000: oklch(0%   0 0);
+
+      --ae-color-accent-500: oklch(35% 0.20 255);
+      --ae-color-accent-600: oklch(30% 0.18 255);
+      --ae-color-accent-700: oklch(25% 0.16 255);
+      --ae-color-accent-800: oklch(18% 0.12 255);
+      --ae-color-accent-900: oklch(12% 0.08 255);
+
+      --ae-color-success-500: oklch(38% 0.18 145);
+      --ae-color-success-700: oklch(28% 0.14 145);
+      --ae-color-warning-500: oklch(45% 0.15 75);
+      --ae-color-warning-700: oklch(35% 0.12 70);
+      --ae-color-danger-500:  oklch(40% 0.22 25);
+      --ae-color-danger-700:  oklch(32% 0.18 25);
+      --ae-color-info-500:    oklch(40% 0.16 220);
+      --ae-color-info-700:    oklch(28% 0.13 220);
+
+      --ae-color-border:         var(--ae-color-gray-900);
+      --ae-color-border-strong:  var(--ae-color-gray-900);
+      --ae-color-border-subtle:  var(--ae-color-gray-700);
+      --ae-border-default-width: var(--ae-border-width-2);
+      --ae-focus-ring-width:     4px;
+      --ae-focus-ring-style:     solid;
+
+      --ae-color-fg-muted:       var(--ae-color-gray-700);
+      --ae-color-fg-subtle:      var(--ae-color-gray-600);
+
+      --ae-color-accent:          var(--ae-color-accent-700);
+      --ae-color-accent-hover:    var(--ae-color-accent-800);
+      --ae-color-accent-active:   var(--ae-color-accent-900);
+      --ae-color-accent-emphasis: var(--ae-color-accent-800);
+
+      --ae-color-success:    var(--ae-color-success-700);
+      --ae-color-warning:    var(--ae-color-warning-700);
+      --ae-color-danger:     var(--ae-color-danger-700);
+      --ae-color-info:       var(--ae-color-info-700);
+
+      --ae-color-focus-ring: var(--ae-color-accent-700);
+    }
+  }
+}

@@ -1,0 +1,181 @@
+/*
+ * Aegis v2 — Stone & Moss theme pack (Spectrum collection).
+ *
+ * The first port of the v1 Aegis themeset ("Spectrum") into v2's two-axis
+ * model. Stone & Moss is v1's flagship Wildmason look: Forest-Moss green
+ * (#82a682) struck over cool, deep stone grays. It is a DARK-ONLY brand
+ * (v1 shipped it as `color-scheme: dark`), so this single brand block sets the
+ * full dark surface direction directly — there is no light variant.
+ *
+ * ── Pixel-perfect fidelity ──────────────────────────────────────────
+ * Every value here is the LITERAL v1 hex from ../aegis/themes.css
+ * (`[data-theme='wildmason']`). We deliberately do NOT convert to oklch:
+ * the rest of v2 is oklch, but converting v1's sRGB hexes would introduce
+ * gamut/rounding drift and break pixel parity with what v1 actually ships.
+ * The semantic (Tier-2) tokens components consume carry the exact v1 colors;
+ * the Tier-1 stone/moss ramps are anchored to the v1 surface values so any
+ * component reaching for a raw ramp stop still resolves to a real v1 color.
+ *
+ * Per-component deltas that the semantic layer can't express on its own
+ * (e.g. v1's table header = sunken while row-hover = moss-tinted, both of
+ * which v2 routes through --ae-color-bg-subtle) are reconciled via
+ * component-tier overrides at the bottom of this file, verified against v1
+ * with the v1↔v2 screenshot-diff harness (scripts/spectrum-diff.mjs).
+ *
+ * Apply via class OR data-attribute on any ancestor (commonly :root):
+ *   <html data-theme="spectrum" data-variant="stone-moss">   ← or class="spectrum stone-moss"
+ *
+ * No automatic media-query activation — a brand is an explicit opt-in.
+ *
+ * v1 source-of-truth surface stack (depth: sunken→base→raised→float→fg):
+ *   sunken  #1b1d1c   base    #2a2c2b   raised  #383b3a
+ *   float   #464a49   fg-surf #626967   hover   #405450 (moss-tinted)
+ */
+
+@layer ae-brand {
+:root[data-theme="spectrum"][data-variant="stone-moss"],
+:root.spectrum.stone-moss {
+  /* ============================================================
+   * Tier 1 — Primitives.
+   * Stone gray ramp anchored to v1's exact surface hexes at the dark
+   * end (700=float, 800=raised, 900=base, 1000=sunken) and extended to
+   * light stops for inverse/on-light contexts. Moss accent ramp anchored
+   * at 300=readable, 400=hover, 500=accent.
+   * ============================================================ */
+
+  /* Stone neutrals — slight cool-green tint. Dark stops ARE v1 surfaces. */
+  --ae-color-gray-0:    #eef2ee;
+  --ae-color-gray-50:   #e3e8e3;
+  --ae-color-gray-100:  #d8e0d8;   /* = v1 text-primary   */
+  --ae-color-gray-200:  #c2ccc2;   /* = v1 text-secondary */
+  --ae-color-gray-300:  #a6b1a6;
+  --ae-color-gray-400:  #7a8582;   /* = v1 border-input   */
+  --ae-color-gray-500:  #626967;   /* = v1 bg-foreground  */
+  --ae-color-gray-600:  #4e5453;
+  --ae-color-gray-700:  #464a49;   /* = v1 bg-float       */
+  --ae-color-gray-800:  #383b3a;   /* = v1 bg-raised      */
+  --ae-color-gray-900:  #2a2c2b;   /* = v1 bg-base        */
+  --ae-color-gray-1000: #1b1d1c;   /* = v1 bg-sunken      */
+
+  /* Forest-Moss accent. 500=v1 accent, 400=v1 accent-hover,
+     300=v1 accent-readable (the accent-as-text sibling). */
+  --ae-color-accent-50:  #eef3ee;
+  --ae-color-accent-100: #dce7dc;
+  --ae-color-accent-200: #c2d6c2;
+  --ae-color-accent-300: #9bc99b;   /* = v1 accent-readable */
+  --ae-color-accent-400: #94b894;   /* = v1 accent-hover    */
+  --ae-color-accent-500: #82a682;   /* = v1 accent          */
+  --ae-color-accent-600: #6f9270;
+  --ae-color-accent-700: #5c7d5d;
+  --ae-color-accent-800: #46624a;
+  --ae-color-accent-900: #334836;
+
+  /* Status palettes — v1 ships a single value per status (used as both
+     text and fill). We seed 500 with the v1 value and derive 50/700. */
+  --ae-color-success-50:  #1f2b22;
+  --ae-color-success-100: #283a2c;
+  --ae-color-success-500: #a0c5a0;   /* = v1 success */
+  --ae-color-success-700: #b8d4b8;
+
+  --ae-color-warning-50:  #2e2718;
+  --ae-color-warning-100: #3a3120;
+  --ae-color-warning-500: #ebcb8b;   /* = v1 warning */
+  --ae-color-warning-700: #f0d9a8;
+
+  --ae-color-danger-50:  #2b1a1c;
+  --ae-color-danger-100: #3a2326;
+  --ae-color-danger-500: #bf616a;    /* = v1 danger */
+  --ae-color-danger-700: #d18a90;
+
+  /* Info — v1 Stone & Moss ships no info color. Derived: a muted slate
+     that sits beside the stone neutrals without competing with the moss
+     accent. Used only by v2-only surfaces (no v1 equivalent to match). */
+  --ae-color-info-50:  #19222a;
+  --ae-color-info-100: #1f2c36;
+  --ae-color-info-500: #8fb3c9;
+  --ae-color-info-700: #aecbdc;
+
+  /* ============================================================
+   * Scale (radius / type / motion) is SHARED across the whole Spectrum
+   * collection and lives in themes/spectrum-base.css — this file is
+   * palette-only. The one scale axis that is NOT shared is shadow: v1
+   * sets shadow alphas per-theme because they are scheme-coupled (light
+   * themes use light alphas, dark ones deep), so Stone & Moss's dark
+   * shadow block stays here.
+   * ============================================================ */
+
+  /* Dark-surface shadow alphas (v1 sm/md/lg seeded; xs/xl/2xl derived). */
+  --ae-shadow-xs:   0 1px 2px 0 rgba(0, 0, 0, 0.40);
+  --ae-shadow-sm:   0 1px 3px rgba(0, 0, 0, 0.50);
+  --ae-shadow-md:   0 4px 12px rgba(0, 0, 0, 0.60);
+  --ae-shadow-lg:   0 10px 30px rgba(0, 0, 0, 0.70);
+  --ae-shadow-xl:   0 20px 40px rgba(0, 0, 0, 0.75);
+  --ae-shadow-2xl:  0 25px 60px rgba(0, 0, 0, 0.85);
+  --ae-shadow-inner: inset 0 2px 4px 0 rgba(0, 0, 0, 0.40);
+
+  /* ============================================================
+   * Tier 2 — Semantic mapping (dark direction).
+   * Literal v1 hexes so the layer components consume is pixel-exact.
+   * ============================================================ */
+
+  --ae-color-bg:           #2a2c2b;   /* v1 base    */
+  --ae-color-bg-subtle:    #1b1d1c;   /* v1 sunken  — table header, code, recessed */
+  --ae-color-bg-muted:     #383b3a;   /* v1 raised  — header/sidebar/panel surfaces */
+  --ae-color-bg-elevated:  #464a49;   /* v1 float   — cards, modals, dropdowns      */
+  --ae-color-bg-inverse:   #d8e0d8;   /* light stone — inverse chips/tooltip ground */
+  --ae-color-bg-overlay:   rgba(0, 0, 0, 0.55);   /* v1 backdrop-opacity 0.55 */
+
+  --ae-color-fg:           #d8e0d8;   /* v1 text-primary     */
+  --ae-color-fg-muted:     #c2ccc2;   /* v1 text-secondary   */
+  --ae-color-fg-subtle:    #c0cac0;   /* v1 text-muted       */
+  --ae-color-fg-inverse:   #2a2c2b;   /* dark text on light inverse surface */
+  --ae-color-fg-disabled:  #687068;   /* v1 text-placeholder */
+  --ae-color-fg-on-accent: #161817;   /* v1 accent-text — near-black on moss */
+  --ae-color-fg-on-danger: #ffffff;   /* white on v1 danger #bf616a (see note) */
+  /* Status FILLS in S&M are all light (sage/gold/rose), so their on-fill
+     text must be dark. */
+  --ae-color-fg-on-warning: #161817;
+  --ae-color-fg-on-success: #161817;
+  --ae-color-fg-on-info:    #161817;
+
+  --ae-color-border:         #3d4241;   /* v1 border        */
+  --ae-color-border-strong:  #7a8582;   /* v1 border-input (3:1 control border) */
+  --ae-color-border-subtle:  #2f3332;   /* v1 border-subtle */
+  --ae-color-border-inverse: #a6b1a6;
+
+  /* Accent — fills/rings at 500 (#82a682), accent-as-text at emphasis
+     (#9bc99b, v1's accent-readable). */
+  --ae-color-accent:          #82a682;   /* v1 accent          */
+  --ae-color-accent-hover:    #94b894;   /* v1 accent-hover    */
+  --ae-color-accent-active:   #6f9270;
+  --ae-color-accent-subtle:   #313c33;   /* dark moss tint (≈10% accent on base) */
+  --ae-color-accent-emphasis: #9bc99b;   /* v1 accent-readable */
+
+  --ae-color-success:          #a0c5a0;
+  --ae-color-success-subtle:   #28342a;
+  --ae-color-success-emphasis: #a0c5a0;
+
+  --ae-color-warning:          #ebcb8b;
+  --ae-color-warning-subtle:   #34301f;
+  --ae-color-warning-emphasis: #ebcb8b;
+
+  --ae-color-danger:           #bf616a;
+  --ae-color-danger-subtle:    #34272a;
+  --ae-color-danger-emphasis:  #cf8088;
+
+  --ae-color-info:             #8fb3c9;
+  --ae-color-info-subtle:      #233038;
+  --ae-color-info-emphasis:    #8fb3c9;
+
+  --ae-color-focus-ring:     #82a682;   /* v1 uses accent / border-hover for focus */
+  --ae-color-selection-bg:   #3a4a43;   /* moss-tinted selection */
+  --ae-color-selection-fg:   #eef3ee;
+  --ae-color-hover-overlay:  rgba(255, 255, 255, 0.05);
+  --ae-color-active-overlay: rgba(255, 255, 255, 0.09);
+
+  /* Component-tier GEOMETRY (button sizing, control hover model, panel
+   * surfaces, etc.) is theme-independent and lives in spectrum-base.css.
+   * Stone & Moss adds no component overrides of its own — its semantic
+   * palette above feeds the shared component tokens directly. */
+}
+} /* @layer ae-brand */

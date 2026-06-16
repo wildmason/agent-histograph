@@ -1,0 +1,591 @@
+/*
+ * Aegis v2 — Editorial theme pack.
+ *
+ * A dark, warm-stone palette with a flax/gold accent and an editorial-
+ * serif (Fraunces) typographic identity. Derived from Wildmason Bridge's
+ * "Editorial" direction (`bridge/project/theme.jsx`, the STONE constants +
+ * DIRECTIONS.editorial entry) — and kept byte-identical to Bridge's shipped
+ * `bridge/ui/src/styles.css` --ed-* tokens. Bridge's palette name is "Stone &
+ * Moss"; the v2 dark variant ships as "Antique Brown" (its picker label) —
+ * warm grays carved out by muted, earthy status tones (rust, amber, moss,
+ * azure, plum, flax).
+ *
+ * Apply via class OR data-attribute on any ancestor (commonly :root):
+ *   <html class="editorial">         ← class form
+ *   <html data-theme="editorial">    ← data-attribute form
+ *
+ * No automatic media-query activation. Editorial is a brand opt-in,
+ * not a system-preference response.
+ *
+ * Editorial is dark-only by design (mirrors Bridge). The companion
+ * light direction is a future enhancement, not shipped here.
+ *
+ * --- Typography ----------------------------------------------------
+ * The font stacks reference Inter (body) and Fraunces (display + num).
+ * Aegis does not bundle webfonts — consumers who want full editorial
+ * fidelity should install @fontsource/inter and @fontsource/fraunces
+ * (or load equivalent latin subsets via their own pipeline). Without
+ * those, the cascade falls back to system-ui / Georgia, which still
+ * reads as editorial-direction-ish but loses the Fraunces flavour.
+ *
+ * Two non-standard font-feature aliases are exposed for consumers
+ * that want to opt body and numeric surfaces into the same OpenType
+ * features Bridge uses:
+ *   --ae-font-feature-settings-body    — Inter's ss01 + cv11
+ *   --ae-font-feature-settings-numeric — Fraunces's tnum + ss03
+ *
+ * --- Contrast ------------------------------------------------------
+ * Verified by real-browser canvas pixel-readback (scripts/verify-variant-
+ * contrast.mjs), now measured against Bridge's exact backgrounds:
+ *
+ *   fg gray-50 (#e8e6df) on bg gray-900 (#13120f)        ≈ 15.0:1 ✅ AAA
+ *   fg-muted gray-200 (#8e8b80) on bg                    ≈ 5.5:1  ✅ AA
+ *   fg-subtle gray-300 (#8a877b) on bg                   ≈ 5.2:1  ✅ AA (holds on the 4% input text-tint — placeholders)
+ *   fg-on-accent gray-1000 (#0f0f0d) on flax accent-500  ≈ 8.6:1  ✅ AAA
+ *   fg-on-danger gray-50 on danger-500                   ≈ 5.5:1  ✅ AA (danger FILL; danger TEXT now uses danger-emphasis ≈ 6.1:1)
+ *   accent-emphasis (accent-300) on bg (link)            ≈ 10.0:1 ✅ AAA
+ *
+ * (Pinning the backgrounds to Bridge canon lifted them ~5 OKLCH-lightness
+ * points off the previous drifted-dark transcription, which dropped the body
+ * ratio from a nominal ~16:1 to a true 15:1 — still solidly AAA.)
+ *
+ * Note: danger-500 is intentionally darker than Bridge's published STONE.rust
+ * (#c46a5a) so that white-ish text on a danger fill crosses AA for normal body
+ * weight. The original rust hue/saturation is preserved on
+ * `--ae-color-stone-rust` for editorial consumers who want it for non-text
+ * surfaces (icons, dot indicators, tints).
+ */
+
+@layer ae-brand {
+:root[data-theme="editorial"],
+:root.editorial {
+  /* Modal: blur + desaturate the page behind an open modal — the editorial
+   * "DimmedPage" treatment (lifted from Bridge's edit-sub-modal mockup).
+   * Applied to ae-modal's ::backdrop, so only the page behind the scrim is
+   * affected, never the modal's own content. */
+  --ae-modal-backdrop-page-filter: blur(2px) saturate(0.7);
+
+  /* ============================================================
+   * Tier 1 — Primitives: warm stone gray scale.
+   *
+   * The dark stops (gray-200…gray-1000 + gray-50) are Bridge's STONE /
+   * editorial swatches — EXACT hexes lifted from bridge/ui/src/styles.css
+   * (itself lifted verbatim from theme.jsx). An earlier pass transcribed them
+   * as oklch and drifted ~5 lightness points dark; they're pinned back to the
+   * source hexes here so v2 editorial renders identically to Bridge. gray-0
+   * and gray-100 have no Bridge source — they're the interpolated warm-light
+   * stops the Daylight variant needs — so they stay parametric (oklch hue ≈ 80).
+   * ============================================================ */
+
+  --ae-color-gray-0:    oklch(95% 0.007 80);  /* interpolated warm cream (Daylight paper) */
+  --ae-color-gray-50:   #e8e6df;              /* STONE.text */
+  --ae-color-gray-100:  oklch(80% 0.012 80);  /* interpolated warm light (Daylight muted) */
+  --ae-color-gray-200:  #8e8b80;              /* STONE.muted */
+  --ae-color-gray-300:  #8a877b;              /* STONE.faint, a11y-bumped past ed-faint so fg-subtle keeps AA on the 4% input text-tint (placeholders) */
+  --ae-color-gray-400:  #5e5b53;              /* STONE.faint raw — fails AA, deep-disabled tier */
+  --ae-color-gray-500:  #3d3d34;              /* STONE.borderH */
+  --ae-color-gray-600:  #2a2924;              /* editorial.border */
+  --ae-color-gray-700:  #252420;              /* editorial.surfaceAlt */
+  --ae-color-gray-800:  #1c1b18;              /* editorial.surface */
+  --ae-color-gray-900:  #13120f;              /* editorial.bg */
+  --ae-color-gray-1000: #0f0f0d;              /* STONE.sunk */
+
+  /* ============================================================
+   * Tier 1 — Primitives: flax accent.
+   *
+   * Centered on Bridge flax (#c4b06a ≈ oklch(75% 0.10 85)) — a muted
+   * warm gold that reads as editorial-direction signature. Chroma
+   * peaks at 0.10; even -500 stays muted by design.
+   * ============================================================ */
+
+  --ae-color-accent-50:  oklch(95% 0.025 85);
+  --ae-color-accent-100: oklch(90% 0.045 85);
+  --ae-color-accent-200: oklch(85% 0.07  85);
+  --ae-color-accent-300: oklch(80% 0.085 85);
+  --ae-color-accent-400: oklch(78% 0.095 85);
+  --ae-color-accent-500: oklch(75% 0.10  85);  /* Bridge flax */
+  --ae-color-accent-600: oklch(65% 0.10  85);
+  --ae-color-accent-700: oklch(55% 0.085 85);
+  --ae-color-accent-800: oklch(40% 0.065 85);
+  --ae-color-accent-900: oklch(28% 0.045 85);
+
+  /* ============================================================
+   * Tier 1 — Primitives: STONE-derived status palettes.
+   *
+   * Each status maps to a STONE swatch:
+   *   success → moss   (#7fa56a, hue ~130)
+   *   warning → amber  (#d4a85e, hue ~75)
+   *   danger  → rust   (#c46a5a, hue ~28) — see note above re: AA
+   *   info    → azure  (#7a96b8, hue ~250, low chroma)
+   *
+   * -700 stops are *brighter* than -500 (not darker), matching the
+   * dark.css convention — *-emphasis tokens use -700 for prominent
+   * text on dark backgrounds.
+   * ============================================================ */
+
+  --ae-color-success-50:  oklch(95% 0.03  130);
+  --ae-color-success-100: oklch(88% 0.06  130);
+  --ae-color-success-500: oklch(65% 0.10  130);
+  --ae-color-success-700: oklch(75% 0.11  130);
+
+  --ae-color-warning-50:  oklch(96% 0.035 75);
+  --ae-color-warning-100: oklch(92% 0.07  75);
+  --ae-color-warning-500: oklch(75% 0.11  75);
+  --ae-color-warning-700: oklch(82% 0.11  75);
+
+  --ae-color-danger-50:  oklch(95% 0.04 28);
+  --ae-color-danger-100: oklch(88% 0.08 28);
+  --ae-color-danger-500: oklch(49% 0.16 28);  /* AA: white-ish text on danger fill >=4.5:1 (measured 4.15 at L54) */
+  --ae-color-danger-700: oklch(68% 0.13 28);
+
+  --ae-color-info-50:  oklch(94% 0.02 250);
+  --ae-color-info-100: oklch(88% 0.04 250);
+  --ae-color-info-500: oklch(63% 0.06 250);
+  --ae-color-info-700: oklch(73% 0.07 250);
+
+  /* ============================================================
+   * Tier 1 — Primitives: typography.
+   *
+   * Inter for body/UI, Fraunces for editorial display + numbers.
+   * No @font-face here — consumers load @fontsource (or equivalent)
+   * themselves. Fallbacks keep the stack readable when fonts are
+   * absent.
+   * ============================================================ */
+
+  --ae-font-family-sans:
+    'Inter', system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --ae-font-family-serif:
+    'Fraunces', 'Source Serif 4', Georgia, 'Times New Roman', serif;
+  --ae-font-family-mono:
+    'JetBrains Mono', 'IBM Plex Mono', ui-monospace, 'SF Mono',
+    Menlo, Consolas, monospace;
+
+  /* ============================================================
+   * Tier 1 — Primitives: shadow alphas tuned for dark surfaces.
+   * Mirrors dark.css — editorial leans on borders + surface lifts
+   * more than shadow, but components that DO use shadow need the
+   * dark-surface alphas.
+   * ============================================================ */
+
+  --ae-shadow-xs:   0 1px 2px 0 oklch(0% 0 0 / 0.40);
+  --ae-shadow-sm:   0 1px 3px 0 oklch(0% 0 0 / 0.50), 0 1px 2px -1px oklch(0% 0 0 / 0.40);
+  --ae-shadow-md:   0 4px 6px -1px oklch(0% 0 0 / 0.55), 0 2px 4px -2px oklch(0% 0 0 / 0.45);
+  --ae-shadow-lg:   0 10px 15px -3px oklch(0% 0 0 / 0.55), 0 4px 6px -4px oklch(0% 0 0 / 0.45);
+  --ae-shadow-xl:   0 20px 25px -5px oklch(0% 0 0 / 0.60), 0 8px 10px -6px oklch(0% 0 0 / 0.50);
+  --ae-shadow-2xl:  0 25px 50px -12px oklch(0% 0 0 / 0.80);
+  --ae-shadow-inner: inset 0 2px 4px 0 oklch(0% 0 0 / 0.40);
+
+  /* ============================================================
+   * Tier 2 — Semantic remaps for dark surface direction.
+   *
+   * Differs from dark.css in TWO places:
+   *  1. `--ae-color-bg` points at gray-900 (not gray-1000) so we
+   *     preserve Bridge's sunk-below-bg depth. gray-1000 (= sunk)
+   *     stays available for surfaces that want extra recess.
+   *  2. `--ae-radius-default` drops from 6px (md) to 4px (sm) —
+   *     editorial direction is intentionally tighter-cornered than
+   *     the default Aegis vocabulary.
+   * ============================================================ */
+
+  --ae-color-bg:           var(--ae-color-gray-900);
+  --ae-color-bg-subtle:    var(--ae-color-gray-800);
+  --ae-color-bg-muted:     var(--ae-color-gray-700);
+  --ae-color-bg-elevated:  var(--ae-color-gray-800);
+  --ae-color-bg-inverse:   var(--ae-color-gray-50);
+  --ae-color-bg-overlay:   oklch(0% 0 0 / 0.6);
+
+  --ae-color-fg:           var(--ae-color-gray-50);
+  --ae-color-fg-muted:     var(--ae-color-gray-200);
+  --ae-color-fg-subtle:    var(--ae-color-gray-300);
+  --ae-color-fg-inverse:   var(--ae-color-gray-900);
+  --ae-color-fg-disabled:  var(--ae-color-gray-500);
+  /* Flax accent at L≈75 is light — dark sunk reads strongest on it. */
+  --ae-color-fg-on-accent: var(--ae-color-gray-1000);
+  /* Darkened-rust at L≈54 takes light text. */
+  --ae-color-fg-on-danger: var(--ae-color-gray-50);
+
+  --ae-color-border:        var(--ae-color-gray-600);
+  --ae-color-border-strong: var(--ae-color-gray-500);
+  --ae-color-border-subtle: var(--ae-color-gray-700);
+  --ae-color-border-inverse: var(--ae-color-gray-200);
+
+  --ae-color-accent:          var(--ae-color-accent-500);
+  --ae-color-accent-hover:    var(--ae-color-accent-400);
+  --ae-color-accent-active:   var(--ae-color-accent-300);
+  --ae-color-accent-subtle:   var(--ae-color-accent-900);
+  --ae-color-accent-emphasis: var(--ae-color-accent-300);
+
+  --ae-color-success:          var(--ae-color-success-500);
+  --ae-color-success-subtle:   var(--ae-color-gray-800);
+  --ae-color-success-emphasis: var(--ae-color-success-700);
+
+  --ae-color-warning:          var(--ae-color-warning-500);
+  --ae-color-warning-subtle:   var(--ae-color-gray-800);
+  --ae-color-warning-emphasis: var(--ae-color-warning-700);
+
+  --ae-color-danger:          var(--ae-color-danger-500);
+  --ae-color-danger-subtle:   var(--ae-color-gray-800);
+  --ae-color-danger-emphasis: var(--ae-color-danger-700);
+
+  --ae-color-info:            var(--ae-color-info-500);
+  --ae-color-info-subtle:     var(--ae-color-gray-800);
+  --ae-color-info-emphasis:   var(--ae-color-info-700);
+
+  --ae-color-focus-ring:     var(--ae-color-accent-400);
+  --ae-color-selection-bg:   var(--ae-color-accent-800);
+  --ae-color-selection-fg:   var(--ae-color-accent-50);
+  --ae-color-hover-overlay:  oklch(100% 0 0 / 0.06);
+  --ae-color-active-overlay: oklch(100% 0 0 / 0.10);
+
+  /* Tighter corners than the default Aegis vocabulary. */
+  --ae-radius-default: var(--ae-radius-sm);
+
+  /* Tight focus halo — Bridge uses 1px outline-offset, not the 2px
+   * default Aegis halo, so the accent ring hugs the control rather
+   * than floating away from it. */
+  --ae-focus-ring-offset: 1px;
+
+  /* Faster transitions — Bridge editorial chrome moves in 120ms,
+   * not 200ms. Tightens the "feel" of hovers and focus transitions
+   * across every component that consumes the duration tokens. */
+  --ae-duration-fast:   120ms;
+  --ae-duration-normal: 120ms;
+
+  /* ============================================================
+   * Tier 2 — Editorial typography role re-routing.
+   *
+   * sans stays Inter (already set above). Display + numeric route
+   * to Fraunces so titles and numeric surfaces pick up the serif
+   * editorial signature without forcing it on body text.
+   *
+   * Eyebrow tracking pushes out to 0.18em to match Bridge's
+   * uppercase mini-label vocabulary.
+   * ============================================================ */
+
+  --ae-font-family-ui:      var(--ae-font-family-sans);
+  --ae-font-family-display: var(--ae-font-family-serif);
+  --ae-font-family-numeric: var(--ae-font-family-serif);
+
+  --ae-letter-spacing-eyebrow: 0.18em;
+
+  /* Body and numeric OpenType features — Inter ss01+cv11 sharpens
+   * the body type; Fraunces tnum+ss03 gives editorial-spec numbers. */
+  --ae-font-feature-settings-body:    'ss01' 1, 'cv11' 1;
+  --ae-font-feature-settings-numeric: 'tnum' 1, 'ss03' 1;
+
+  /* ============================================================
+   * Tier 3 — Editorial control overrides.
+   *
+   * The token surface added on each control (ae-button shape +
+   * typography, ae-input / ae-textarea / ae-select / ae-combobox
+   * hover/focus bg + border) lets the editorial direction restyle
+   * controls without forking component CSS. Each override below
+   * mirrors a specific Bridge editorial-direction style from
+   * `bridge/ui/src/styles.css` (.ed-button / .ed-input).
+   * ============================================================ */
+
+  /* Buttons: uppercase, tight tracking, weight 600.
+   * Per .ed-button — `font-weight: 600`, `letter-spacing: 0.04px`,
+   * `text-transform: uppercase` on every button across the app. */
+  --ae-button-font-weight:    var(--ae-font-weight-semibold);
+  --ae-button-letter-spacing: 0.04em;
+  --ae-button-text-transform: uppercase;
+
+  /* Uniform 3px corner across every button size (sm/md/lg) and
+   * variant (primary/secondary/tertiary/ghost/danger). Editorial
+   * direction wants the same tight corner on a tiny inline button
+   * and a large CTA — radius does NOT scale with button size. 3px
+   * is finer than `--ae-radius-default` (4px in editorial) so the
+   * button reads sharper than surrounding input/card chrome. */
+  --ae-button-radius: 3px;
+
+  /* Loading buttons show an inline spinner next to the label instead of a
+   * sliding/striped bar — the bar language reads too utilitarian for the
+   * editorial direction. The spinner inherits the button text color, so it
+   * contrasts every variant (dark on a flax primary, ink on a light ghost). */
+  --ae-button-loading-bar-display:     none;
+  --ae-button-loading-spinner-display: inline-flex;
+  /* Tighter than the 8px icon gap — a 4px breath reads as refined, not loose,
+   * next to the small inline spinner. */
+  --ae-button-loading-spinner-gap:     var(--ae-space-1);
+
+  /* Inputs: subtle text-tint background that lifts over any
+   * surface (bg / surface / surface-alt), warming to a slightly
+   * stronger tint on hover/focus. The focus border is a TONED
+   * accent — `color-mix(accent 60%, border)` — rather than a full-
+   * saturation accent, so the focus state reads as "warming up"
+   * rather than "slapping a colored border on."
+   *
+   * The same overrides apply to textarea/select/combobox so the
+   * whole form-control family flips together. */
+  --ae-input-bg:           color-mix(in srgb, var(--ae-color-fg) 4%, transparent);
+  --ae-input-bg-hover:     color-mix(in srgb, var(--ae-color-fg) 6%, transparent);
+  --ae-input-bg-focus:     color-mix(in srgb, var(--ae-color-fg) 6%, transparent);
+  --ae-input-border:       var(--ae-color-border);
+  --ae-input-border-hover: var(--ae-color-border-strong);
+  --ae-input-border-focus: color-mix(in srgb, var(--ae-color-accent) 60%, var(--ae-color-border));
+
+  --ae-textarea-bg:           color-mix(in srgb, var(--ae-color-fg) 4%, transparent);
+  --ae-textarea-bg-hover:     color-mix(in srgb, var(--ae-color-fg) 6%, transparent);
+  --ae-textarea-bg-focus:     color-mix(in srgb, var(--ae-color-fg) 6%, transparent);
+  --ae-textarea-border:       var(--ae-color-border);
+  --ae-textarea-border-hover: var(--ae-color-border-strong);
+  --ae-textarea-border-focus: color-mix(in srgb, var(--ae-color-accent) 60%, var(--ae-color-border));
+
+  --ae-select-bg:           color-mix(in srgb, var(--ae-color-fg) 4%, transparent);
+  --ae-select-bg-hover:     color-mix(in srgb, var(--ae-color-fg) 6%, transparent);
+  --ae-select-bg-focus:     color-mix(in srgb, var(--ae-color-fg) 6%, transparent);
+  --ae-select-border:       var(--ae-color-border);
+  --ae-select-border-hover: var(--ae-color-border-strong);
+  --ae-select-border-focus: color-mix(in srgb, var(--ae-color-accent) 60%, var(--ae-color-border));
+
+  --ae-combobox-bg:           color-mix(in srgb, var(--ae-color-fg) 4%, transparent);
+  --ae-combobox-bg-hover:     color-mix(in srgb, var(--ae-color-fg) 6%, transparent);
+  --ae-combobox-bg-focus:     color-mix(in srgb, var(--ae-color-fg) 6%, transparent);
+  --ae-combobox-border:       var(--ae-color-border);
+  --ae-combobox-border-hover: var(--ae-color-border-strong);
+  --ae-combobox-border-focus: color-mix(in srgb, var(--ae-color-accent) 60%, var(--ae-color-border));
+
+  /* Spinners: gold by default in editorial. Standalone ae-spinner
+   * inherits text color (light on dark bg) when --ae-spinner-color
+   * is unset, which reads as a generic white spinner. Editorial-
+   * direction loading indicators should pick up the flax accent so
+   * the gold runs through every animated affordance.
+   * The track keeps its currentColor-at-20% fallback so the dim
+   * outer ring follows whatever text color surrounds the spinner.
+   * Per-instance override via inline `--ae-spinner-color` still wins
+   * (e.g. a spinner inside an accent-filled primary button can set
+   * its own dark indicator). */
+  --ae-spinner-color: var(--ae-color-accent);
+
+  /* ============================================================
+   * Tier 2 — Editorial extras (NON-STANDARD).
+   *
+   * These tokens exist only in this theme. Other theme packs do
+   * NOT declare them, so consumers that reach for them outside an
+   * editorial context get an undefined-token fallback. Use them
+   * only inside editorial-only surfaces, OR pair with a
+   * `var(--ae-color-stone-rust, var(--ae-color-danger))` fallback
+   * to stay cross-theme safe.
+   *
+   * The "stone-*" set preserves the original Bridge STONE swatches
+   * verbatim (including STONE.rust at its un-darkened lightness),
+   * giving editorial-aware consumers access to the source palette
+   * for things like dot indicators, icon tints, and tinted blocks
+   * that don't need text-on-color contrast.
+   *
+   * The "font-feature-settings-*" pair exposes the OpenType
+   * features Bridge applies to body text (Inter ss01+cv11) and
+   * numeric surfaces (Fraunces tnum+ss03). Consumers can apply
+   * them via `font-feature-settings: var(--ae-font-feature-settings-numeric)`
+   * on any element that should render as editorial numbers.
+   * (The font-feature aliases themselves are declared further up
+   * alongside the other Tier 2 typography role re-routes.)
+   * ============================================================ */
+
+  --ae-color-stone-rust:  oklch(58% 0.14 28);   /* Bridge STONE.rust  #c46a5a */
+  --ae-color-stone-amber: oklch(75% 0.11 75);   /* Bridge STONE.amber #d4a85e */
+  --ae-color-stone-moss:  oklch(65% 0.10 130);  /* Bridge STONE.moss  #7fa56a */
+  --ae-color-stone-azure: oklch(63% 0.06 250);  /* Bridge STONE.azure #7a96b8 */
+  --ae-color-stone-plum:  oklch(57% 0.07 335);  /* Bridge STONE.plum  #a07595 */
+  --ae-color-stone-flax:  oklch(75% 0.10 85);   /* Bridge STONE.flax  #c4b06a */
+}
+
+/*
+ * ── Editorial · Light variant ───────────────────────────────────────
+ *
+ * `data-theme="editorial" data-variant="light"` (or `class="editorial light"`).
+ * The warm-paper daytime companion to Antique Brown: the same flax accent and
+ * Fraunces editorial identity (inherited from the brand block — type, radius,
+ * eyebrow tracking, 120ms motion, the uppercase button + text-tint input
+ * treatments are all direction-agnostic) on a warm-cream stone ground.
+ *
+ * Self-contained: the Editorial brand block sets a DARK Tier-2 direction
+ * unconditionally (Editorial is dark-default), so this cell restates the full
+ * light surface direction to override it, plus light-tuned shadow alphas,
+ * darker status -emphasis stops (so they carry on cream), and a darker accent
+ * link stop.
+ *
+ * Contrast (real-browser canvas readback, scripts/verify-variant-contrast.mjs):
+ *   fg gray-900 (#13120f) on bg gray-0                 ≈ 16.2:1 ✅ AAA
+ *   fg-on-accent gray-1000 on flax accent-500          ≈ 8.6:1  ✅ AAA
+ *   accent-emphasis (accent-800) on cream bg (link)    ≈ 8.0:1  ✅ AAA
+ *   fg-muted gray-500 on bg                            ≈ 9.5:1  ✅ AAA
+ *   fg-subtle gray-400 on bg (large)                   ≈ 5.9:1  ✅ AA
+ *   fg-on-danger gray-50 on danger-500                 ≈ 5.5:1  ✅ AA
+ */
+:root[data-theme="editorial"][data-variant="light"],
+:root.editorial.light {
+  /* Status -700 re-toned DARKER for light (the dark block makes them brighter
+     than -500 for dark-emphasis; on cream they need to go the other way). */
+  --ae-color-success-700: oklch(42% 0.12 130);
+  --ae-color-warning-700: oklch(50% 0.12 75);
+  --ae-color-danger-700:  oklch(42% 0.16 28);
+  --ae-color-info-700:    oklch(45% 0.07 250);
+
+  /* Light-surface shadow alphas (the brand block carries dark-surface ones). */
+  --ae-shadow-xs:   0 1px 2px 0 oklch(0% 0 0 / 0.05);
+  --ae-shadow-sm:   0 1px 3px 0 oklch(0% 0 0 / 0.08), 0 1px 2px -1px oklch(0% 0 0 / 0.06);
+  --ae-shadow-md:   0 4px 6px -1px oklch(0% 0 0 / 0.10), 0 2px 4px -2px oklch(0% 0 0 / 0.08);
+  --ae-shadow-lg:   0 10px 15px -3px oklch(0% 0 0 / 0.10), 0 4px 6px -4px oklch(0% 0 0 / 0.08);
+  --ae-shadow-xl:   0 20px 25px -5px oklch(0% 0 0 / 0.12), 0 8px 10px -6px oklch(0% 0 0 / 0.10);
+  --ae-shadow-2xl:  0 25px 50px -12px oklch(0% 0 0 / 0.25);
+  --ae-shadow-inner: inset 0 2px 4px 0 oklch(0% 0 0 / 0.06);
+
+  /* Tier 2 — warm-cream light surface direction (stone ramp inherited). */
+  --ae-color-bg:           var(--ae-color-gray-0);
+  --ae-color-bg-subtle:    var(--ae-color-gray-50);
+  --ae-color-bg-muted:     var(--ae-color-gray-100);
+  --ae-color-bg-elevated:  var(--ae-color-gray-0);
+  --ae-color-bg-inverse:   var(--ae-color-gray-900);
+  --ae-color-bg-overlay:   oklch(0% 0 0 / 0.4);
+
+  --ae-color-fg:           var(--ae-color-gray-900);
+  --ae-color-fg-muted:     var(--ae-color-gray-500);
+  --ae-color-fg-subtle:    var(--ae-color-gray-400);
+  --ae-color-fg-inverse:   var(--ae-color-gray-0);
+  --ae-color-fg-disabled:  var(--ae-color-gray-300);
+  --ae-color-fg-on-accent: var(--ae-color-gray-1000);
+  --ae-color-fg-on-danger: var(--ae-color-gray-50);
+
+  --ae-color-border:         var(--ae-color-gray-200);
+  --ae-color-border-strong:  var(--ae-color-gray-300);
+  --ae-color-border-subtle:  var(--ae-color-gray-100);
+  --ae-color-border-inverse: var(--ae-color-gray-700);
+
+  --ae-color-accent:          var(--ae-color-accent-500);
+  --ae-color-accent-hover:    var(--ae-color-accent-600);
+  --ae-color-accent-active:   var(--ae-color-accent-700);
+  --ae-color-accent-subtle:   var(--ae-color-accent-50);
+  --ae-color-accent-emphasis: var(--ae-color-accent-800);
+
+  --ae-color-success:          var(--ae-color-success-500);
+  --ae-color-success-subtle:   var(--ae-color-gray-50);
+  --ae-color-success-emphasis: var(--ae-color-success-700);
+
+  --ae-color-warning:          var(--ae-color-warning-500);
+  --ae-color-warning-subtle:   var(--ae-color-gray-50);
+  --ae-color-warning-emphasis: var(--ae-color-warning-700);
+
+  --ae-color-danger:          var(--ae-color-danger-500);
+  --ae-color-danger-subtle:   var(--ae-color-gray-50);
+  --ae-color-danger-emphasis: var(--ae-color-danger-700);
+
+  --ae-color-info:           var(--ae-color-info-500);
+  --ae-color-info-subtle:    var(--ae-color-gray-50);
+  --ae-color-info-emphasis:  var(--ae-color-info-700);
+
+  --ae-color-focus-ring:     var(--ae-color-accent-600);
+  --ae-color-selection-bg:   var(--ae-color-accent-100);
+  --ae-color-selection-fg:   var(--ae-color-accent-900);
+  --ae-color-hover-overlay:  oklch(0% 0 0 / 0.04);
+  --ae-color-active-overlay: oklch(0% 0 0 / 0.08);
+}
+} /* @layer ae-brand */
+
+/* ============================================================
+ * Editorial density — re-anchor the rem scale to Bridge's base.
+ *
+ * Bridge runs its whole editorial direction on a 13.5px base
+ * (`PageFrame fontSize: 13.5` in `bridge/ui/src/styles.css`); without
+ * this, editorial inherited the 16px root and every control rendered
+ * ~17–33% larger than Bridge. Every `--ae-font-size-*` AND `--ae-space-*`
+ * token is rem-based, so re-anchoring the root font-size scales the whole
+ * type + spacing system at once: md → 13.5px (Bridge body), sm → 11.8px,
+ * xs → 10.1px (Bridge's 10–13px UI range), with spacing tightening in
+ * proportion. `--ae-radius-*` is px, so corners are unaffected.
+ *
+ * Expressed as a PERCENTAGE (13.5 / 16 = 84.375%), not absolute px, so it
+ * scales WITH the user's root font-size preference (browser/OS a11y zoom)
+ * instead of overriding it — 13.5px only at the 16px default.
+ *
+ * Deliberately UNLAYERED with a `:root[data-theme]` selector (specificity
+ * 0,2,0): a host or docs `html { font-size }` pin (0,0,1) is unlayered, and
+ * an unlayered rule beats ANY layered one regardless of specificity — so a
+ * re-anchor inside `@layer ae-brand` silently loses (the same cascade trap
+ * the crucible atmosphere hit). Unlayered + higher specificity wins. */
+:root[data-theme="editorial"],
+:root.editorial {
+  font-size: 84.375%;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * ae-tag — Bridge "editorial chip" look
+ *
+ * Adopts Bridge's tag treatment: a small MONO, uppercase, letter-spaced
+ * label in a tone-tinted rounded rectangle — fg = the tone colour,
+ * background = tone @ 10%, border = tone @ 30%. Bridge's STONE palette is
+ * already defined above as --ae-color-stone-*, so each tone keys straight
+ * off it. ae-tag's SEMANTIC tones map onto the palette (accent→flax,
+ * success→moss, warning→amber, danger→rust, info→azure), and the full
+ * editorial palette is also reachable directly via a `data-tone="rust |
+ * amber | moss | azure | plum | flax"` attribute (the dashboard convention).
+ *
+ * Every selector is wrapped in :where() so the whole block sits at
+ * specificity 0,0,1 (just the ::part pseudo-element). That makes it a true
+ * DEFAULT: any component-level `…::part(tag)` override (e.g. the dashboard's
+ * bare-text urgency labels, the amber manual-renewal pill) is ≥ 0,1,1 and
+ * therefore always wins. Colour rules are scoped to the soft variant (the
+ * default) so an explicit solid/outline tag keeps its native treatment.
+ * ───────────────────────────────────────────────────────────────────── */
+
+:where(:root[data-theme="editorial"], :root.editorial) :where(ae-tag)::part(tag) {
+  font-family: var(--ae-font-family-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: center;
+  border-radius: 3px;
+  padding: 0 7px;
+  min-height: 20px;
+}
+
+/* Neutral (no explicit tone) — warm-gray chip. */
+:where(:root[data-theme="editorial"], :root.editorial)
+  :where(ae-tag[tone="neutral"][variant="soft"])::part(tag) {
+  color: var(--ae-color-fg-muted);
+  background: color-mix(in srgb, var(--ae-color-fg-muted) 10%, transparent);
+  border-color: color-mix(in srgb, var(--ae-color-fg-muted) 28%, transparent);
+}
+
+/* Tone-tint matrix — fg = tone, bg = tone @ 10%, border = tone @ 30%.
+ * Each rule covers the editorial-palette data-tone alias AND the ae-tag
+ * semantic tone that maps onto it. */
+:where(:root[data-theme="editorial"], :root.editorial)
+  :where(ae-tag[data-tone="rust"][variant="soft"], ae-tag[tone="danger"][variant="soft"])::part(tag) {
+  color: var(--ae-color-stone-rust);
+  background: color-mix(in srgb, var(--ae-color-stone-rust) 10%, transparent);
+  border-color: color-mix(in srgb, var(--ae-color-stone-rust) 30%, transparent);
+}
+:where(:root[data-theme="editorial"], :root.editorial)
+  :where(ae-tag[data-tone="amber"][variant="soft"], ae-tag[tone="warning"][variant="soft"])::part(tag) {
+  color: var(--ae-color-stone-amber);
+  background: color-mix(in srgb, var(--ae-color-stone-amber) 10%, transparent);
+  border-color: color-mix(in srgb, var(--ae-color-stone-amber) 30%, transparent);
+}
+:where(:root[data-theme="editorial"], :root.editorial)
+  :where(ae-tag[data-tone="moss"][variant="soft"], ae-tag[tone="success"][variant="soft"])::part(tag) {
+  color: var(--ae-color-stone-moss);
+  background: color-mix(in srgb, var(--ae-color-stone-moss) 10%, transparent);
+  border-color: color-mix(in srgb, var(--ae-color-stone-moss) 30%, transparent);
+}
+:where(:root[data-theme="editorial"], :root.editorial)
+  :where(ae-tag[data-tone="azure"][variant="soft"], ae-tag[tone="info"][variant="soft"])::part(tag) {
+  color: var(--ae-color-stone-azure);
+  background: color-mix(in srgb, var(--ae-color-stone-azure) 10%, transparent);
+  border-color: color-mix(in srgb, var(--ae-color-stone-azure) 30%, transparent);
+}
+:where(:root[data-theme="editorial"], :root.editorial)
+  :where(ae-tag[data-tone="flax"][variant="soft"], ae-tag[tone="accent"][variant="soft"])::part(tag) {
+  color: var(--ae-color-stone-flax);
+  background: color-mix(in srgb, var(--ae-color-stone-flax) 10%, transparent);
+  border-color: color-mix(in srgb, var(--ae-color-stone-flax) 30%, transparent);
+}
+:where(:root[data-theme="editorial"], :root.editorial)
+  :where(ae-tag[data-tone="plum"][variant="soft"])::part(tag) {
+  color: var(--ae-color-stone-plum);
+  background: color-mix(in srgb, var(--ae-color-stone-plum) 10%, transparent);
+  border-color: color-mix(in srgb, var(--ae-color-stone-plum) 30%, transparent);
+}

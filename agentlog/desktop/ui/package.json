@@ -1,0 +1,10 @@
+{
+  "name": "histograph-ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Static splash for the Histograph desktop wrapper (no framework — the live UI is the Python-served histograph page).",
+  "scripts": {
+    "build": "node build.mjs"
+  }
+}

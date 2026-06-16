@@ -1,0 +1,139 @@
+/*
+ * Aegis v2 — Solarized Precision theme pack (Spectrum collection).
+ *
+ * A port of v1's "solarized-precision" theme — a warm Solarized-light look:
+ * deep blue-grey ink (#2c3e48) on a warm cream/tan paper stack (#ede7d2), a
+ * precision teal-blue accent (#185c78), and dark, readable status colours.
+ * Shadows carry the ink's blue-grey tint rather than flat black.
+ *
+ * Palette-only: all geometry (radius / type / motion / component metrics) is
+ * shared by the whole Spectrum collection in spectrum-base.css. This file sets
+ * only the tier-1 ramps, tier-2 semantic colours, and the (scheme-coupled)
+ * shadow block. Every value is the LITERAL v1 hex from ../aegis/themes.css
+ * (`[data-theme='solarized-precision']`) so the port is pixel-faithful — no oklch drift.
+ *
+ * LIGHT direction: unlike the dark Spectrum brands, the gray ramp runs
+ * light→dark as 0→1000 (surfaces live at the LIGHT end, text at the DARK end),
+ * and bg-/fg-inverse flip (a light theme's inverse bubble is dark).
+ *
+ * v1 surface stack (light → dark):
+ *   sunken #f1e8dd  base #ede7d2  raised #e2d8bc  float #d4cba8  fg-surf #c6be96
+ */
+
+@layer ae-brand {
+:root[data-theme="spectrum"][data-variant="solarized-precision"],
+:root.spectrum.solarized-precision {
+  color-scheme: light;
+
+  /* ── Tier 1 — Primitives ─────────────────────────────────────────
+   * Light theme: gray-0 is the lightest surface, gray-1000 the darkest ink.
+   * The light stops ARE v1's surfaces; the dark stops ARE v1's text. */
+  --ae-color-gray-0:    #f1e8dd;   /* = v1 bg-sunken (lightest) */
+  --ae-color-gray-50:   #ede7d2;   /* = v1 bg-base            */
+  --ae-color-gray-100:  #e2d8bc;   /* = v1 bg-raised          */
+  --ae-color-gray-200:  #d4cba8;   /* = v1 bg-float           */
+  --ae-color-gray-300:  #c6be96;   /* = v1 bg-foreground      */
+  --ae-color-gray-400:  #97a18f;
+  --ae-color-gray-500:  #688090;   /* = v1 border-input       */
+  --ae-color-gray-600:  #556d7c;
+  --ae-color-gray-700:  #455868;   /* = v1 text-muted         */
+  --ae-color-gray-800:  #3e545f;   /* = v1 text-secondary     */
+  --ae-color-gray-900:  #2c3e48;   /* = v1 text-primary       */
+  --ae-color-gray-1000: #1d2b32;
+
+  /* Precision teal-blue accent ramp anchored at 500 = v1 accent #185c78. */
+  --ae-color-accent-50:  #e4eef2;
+  --ae-color-accent-100: #c2dae3;
+  --ae-color-accent-200: #8cb8c8;
+  --ae-color-accent-300: #5095ab;
+  --ae-color-accent-400: #2a7693;
+  --ae-color-accent-500: #185c78;   /* = v1 accent */
+  --ae-color-accent-600: #134c64;
+  --ae-color-accent-700: #0f3d50;
+  --ae-color-accent-800: #0c3140;
+  --ae-color-accent-900: #08232f;
+
+  /* Status — v1 ships one dark, light-bg-readable value each. */
+  --ae-color-success-50:  #dcefe5;
+  --ae-color-success-100: #b9dfcb;
+  --ae-color-success-500: #006036;   /* = v1 success (deep emerald) */
+  --ae-color-success-700: #004727;
+
+  --ae-color-warning-50:  #f1e8d6;
+  --ae-color-warning-100: #e3d1ac;
+  --ae-color-warning-500: #6b4500;   /* = v1 warning (umber) */
+  --ae-color-warning-700: #503300;
+
+  --ae-color-danger-50:  #f9e0df;
+  --ae-color-danger-100: #f2c1bf;
+  --ae-color-danger-500: #c4302c;    /* = v1 danger */
+  --ae-color-danger-700: #962421;
+
+  /* Info — v1 has no info colour; reuse the syntax-function blue (#268bd2). */
+  --ae-color-info-50:  #e2f0f9;
+  --ae-color-info-100: #bfddf0;
+  --ae-color-info-500: #268bd2;
+  --ae-color-info-700: #1a649b;
+
+  /* ── Tier 2 — Semantic (light direction) ─────────────────────────── */
+  --ae-color-bg:           #ede7d2;   /* v1 base    */
+  --ae-color-bg-subtle:    #f1e8dd;   /* v1 sunken (lighter recessed) */
+  --ae-color-bg-muted:     #e2d8bc;   /* v1 raised  */
+  --ae-color-bg-elevated:  #d4cba8;   /* v1 float   */
+  --ae-color-bg-inverse:   #2c3e48;   /* dark ink — inverse (tooltip) ground */
+  --ae-color-bg-overlay:   rgba(0, 0, 0, 0.35);   /* v1 backdrop-opacity 0.35 */
+
+  --ae-color-fg:           #2c3e48;   /* v1 text-primary   */
+  --ae-color-fg-muted:     #3e545f;   /* v1 text-secondary */
+  --ae-color-fg-subtle:    #455868;   /* v1 text-muted     */
+  --ae-color-fg-inverse:   #f1e8dd;   /* light text on the dark inverse bubble */
+  --ae-color-fg-disabled:  #a8b8be;   /* v1 text-placeholder */
+  --ae-color-fg-on-accent: #ffffff;   /* v1 accent-text */
+  --ae-color-fg-on-danger:  #ffffff;
+  --ae-color-fg-on-warning: #ffffff;
+  --ae-color-fg-on-success: #ffffff;
+  --ae-color-fg-on-info:    #ffffff;
+
+  --ae-color-border:         #cec6aa;   /* v1 border        */
+  --ae-color-border-strong:  #688090;   /* v1 border-input  */
+  --ae-color-border-subtle:  #dad4bc;   /* v1 border-subtle */
+  --ae-color-border-inverse: #556d7c;
+
+  --ae-color-accent:          #185c78;   /* v1 accent       */
+  --ae-color-accent-hover:    #1e6e96;   /* v1 accent-hover */
+  --ae-color-accent-active:   #134c64;
+  --ae-color-accent-subtle:   #d7e6ec;   /* pale accent tint on warm paper */
+  --ae-color-accent-emphasis: #185c78;   /* accent reads fine on light bg */
+
+  --ae-color-success:          #006036;
+  --ae-color-success-subtle:   #d4ebdf;
+  --ae-color-success-emphasis: #006036;
+
+  --ae-color-warning:          #6b4500;
+  --ae-color-warning-subtle:   #eee0c8;
+  --ae-color-warning-emphasis: #6b4500;
+
+  --ae-color-danger:           #c4302c;
+  --ae-color-danger-subtle:    #f5dcdb;
+  --ae-color-danger-emphasis:  #c4302c;
+
+  --ae-color-info:             #268bd2;
+  --ae-color-info-subtle:      #d9eaf6;
+  --ae-color-info-emphasis:    #1a649b;
+
+  --ae-color-focus-ring:     #185c78;   /* v1 focuses controls to the accent */
+  --ae-color-selection-bg:   #c7dbe2;   /* pale accent wash */
+  --ae-color-selection-fg:   #2c3e48;
+  --ae-color-hover-overlay:  rgba(0, 0, 0, 0.04);
+  --ae-color-active-overlay: rgba(0, 0, 0, 0.07);
+
+  /* ── Shadows (scheme-coupled — light alphas, blue-grey ink tint) ──── */
+  --ae-shadow-xs:    0 1px 1px rgba(44, 62, 72, 0.06);
+  --ae-shadow-sm:    0 1px 2px rgba(44, 62, 72, 0.08);
+  --ae-shadow-md:    0 4px 8px rgba(44, 62, 72, 0.12);
+  --ae-shadow-lg:    0 10px 20px rgba(44, 62, 72, 0.15);
+  --ae-shadow-xl:    0 20px 30px rgba(44, 62, 72, 0.17);
+  --ae-shadow-2xl:   0 25px 50px -12px rgba(44, 62, 72, 0.24);
+  --ae-shadow-inner: inset 0 2px 4px 0 rgba(44, 62, 72, 0.08);
+}
+}

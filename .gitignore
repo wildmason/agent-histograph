@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Rust / Tauri build output (regenerated)
+agentlog/desktop/src-tauri/target/
+agentlog/desktop/src-tauri/gen/
+agentlog/desktop/ui/dist/
+
+# Node
+node_modules/
+
+# Captured ledger — never commit session content (lives in ~/.agentlog normally;
+# ignored here in case anyone runs from inside the repo or sets AGENTLOG_DIR=./)
+.agentlog/
+*.jsonl
+hook.log
+
+# evidence / snapshots (not part of this extraction, but belt-and-suspenders)
+evidence/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp

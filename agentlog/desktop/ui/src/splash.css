@@ -1,0 +1,100 @@
+/* Self-contained dark splash. No Aegis dependency — it shows for ~1s while the
+   Python sidecar boots, then the webview navigates to the real histograph page
+   (which carries its own vendored Aegis theme). Kept visually close to the
+   histograph crucible/dark default so the handoff doesn't flash a different look. */
+:root {
+  --bg: #15110e;
+  --bg-bar: #1c1714;
+  --line: #2a221d;
+  --ink: #e7ddd2;
+  --ink-dim: #9a8c7d;
+  --accent: #d2691e;
+}
+
+* { box-sizing: border-box; }
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font: 13px/1.5 ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  overflow: hidden;
+  user-select: none;
+}
+
+.hg-titlebar {
+  display: flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 .35rem 0 .7rem;
+  background: var(--bg-bar);
+  border-bottom: 1px solid var(--line);
+  cursor: default;
+}
+
+.hg-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: var(--ink);
+}
+
+.hg-brand__mark {
+  color: var(--accent);
+}
+
+.splash {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  height: calc(100% - 34px);
+  text-align: center;
+  padding: 1rem;
+}
+
+.splash__pulse {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-bottom: .35rem;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: .35; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+
+.splash__msg {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.splash__sub {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+
+.splash--error .splash__pulse {
+  background: #c0392b;
+  animation: none;
+}
+
+.splash--error .splash__sub {
+  color: #e08a7e;
+  max-width: 32ch;
+  word-break: break-word;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash__pulse { animation: none; }
+}

@@ -1,0 +1,1311 @@
+/*
+ * Aegis v2 — Metro theme pack ("Paper Ticket").
+ *
+ * A train-station / metro-map design system. Warm cream paper,
+ * thick black ink rules, vermilion + signage-gold accents, zero
+ * corner radius, mono-first typography (JetBrains Mono) with
+ * Newsreader italic for editorial moments. Derived from the
+ * Helm Transit Auth design system (source palette in
+ * `~drop/ticket design system/colors_and_type.css`).
+ *
+ * Apply via class OR data-attribute on any ancestor (commonly :root):
+ *   <html class="metro">         ← class form
+ *   <html data-theme="metro">    ← data-attribute form
+ *
+ * No automatic media-query activation. Metro is a brand opt-in.
+ *
+ * Metro ships two variants: Paper Ticket (light, the default) and Night Depot
+ * (dark, `data-variant="dark"`) — see the Night Depot cell near the bottom.
+ *
+ * --- Visual fundamentals ------------------------------------------
+ *
+ * - **Paper-on-ink.** Warm cream `#f3efe2` paper, near-black
+ *   `#15140f` ink, vermilion `#c84a26` accent, signage gold
+ *   `#c8a738`. No mid-grays, no muddy neutrals — every surface
+ *   reads as printed paper.
+ * - **Borders, not shadows.** Surfaces meet via thick ink rules,
+ *   not soft drop-shadows. `--ae-border-width-1` is bumped to 2px
+ *   at the primitive layer so every "1px" border in the component
+ *   layer renders as a 2px ink rule by default. Shadows are
+ *   re-tuned to hard-offset ink casts (`6px 6px 0 var(--ink)`)
+ *   for a ticket-stub feel; consumers who don't want that look
+ *   can override the shadow tokens locally.
+ * - **Zero radius.** `--ae-radius-default: 0` everywhere; every
+ *   Tier-3 component radius token (button, input, card, modal,
+ *   tag, badge) is pinned to 0 as well. The single exceptions
+ *   are radio buttons, spinners, and avatar circles — those use
+ *   `border-radius: 50%` directly in component CSS, not via the
+ *   default token, so they keep their natural circular shape.
+ * - **Mono-first typography.** JetBrains Mono is wired into
+ *   `--ae-font-family-sans` (the default body family), so every
+ *   surface that doesn't explicitly opt out renders in mono.
+ *   Newsreader is the serif slot for editorial italic captions.
+ * - **Uppercase chrome.** Buttons, eyebrow labels, tags all carry
+ *   `text-transform: uppercase` with `0.12em` tracking — the
+ *   transit-signage register Bridge editorial leans into harder
+ *   than Aegis defaults.
+ *
+ * --- Typography ----------------------------------------------------
+ *
+ * The font stacks reference JetBrains Mono and Newsreader. Aegis
+ * does not bundle webfonts — consumers who want full Metro fidelity
+ * should install @fontsource/jetbrains-mono and @fontsource/newsreader
+ * (or load equivalent latin subsets via their own pipeline). Without
+ * those, the cascade falls back to ui-monospace + Georgia, which is
+ * still recognizably print-shop-ish but loses the JetBrains-Mono
+ * 'ss01' + 'cv01' character set Bridge depends on.
+ *
+ * --- Contrast ------------------------------------------------------
+ *
+ * Spot-checked against WCAG 2.1 AA. Verify with a real checker
+ * before shipping consumer apps.
+ *
+ *   ink (#15140f, L≈14) on paper (#f3efe2, L≈94.5)         ≈ ~17:1 ✅ AAA
+ *   ink-3 (#6b6657, L≈45) on paper (L≈94.5)                ≈ ~5:1  ✅ AA
+ *   paper on accent vermilion (#c84a26, L≈55)              ≈ ~5:1  ✅ AA
+ *   paper on signal-go pine (#5e7e4f, L≈52)                ≈ ~5:1  ✅ AA
+ *   ink on signage-gold (#c8a738, L≈72)                    ≈ ~7:1  ✅ AAA
+ *   paper on ink (#15140f)                                 ≈ ~17:1 ✅ AAA
+ */
+
+@layer ae-brand {
+:root[data-theme="metro"],
+:root.metro {
+  /* ============================================================
+   * Tier 1 — Primitives: warm cream gray scale.
+   *
+   * Tuned to the Helm Transit Auth paper/ink palette:
+   *   gray-0    paper       #f3efe2  (warm cream base)
+   *   gray-50   paper-2     #ebe6d4  (darker paper for fills)
+   *   gray-100  paper-3     #ddd6bf  (deeper paper / muted strip)
+   *   gray-200  warm-light  interpolated
+   *   gray-300  ink-soft    interpolated
+   *   gray-400  warm-mid    interpolated
+   *   gray-500  ink-3       #6b6657  (muted ink / labels)
+   *   gray-600  warm-deep   interpolated toward ink
+   *   gray-700  ink-2-soft  interpolated
+   *   gray-800  ink-2       #2a2820  (secondary ink)
+   *   gray-900  ink         #15140f  (warm near-black)
+   *   gray-1000 deep-ink    interpolated below ink
+   *
+   * Hue ≈ 85 (warm tan, mirrors Bridge editorial's hue). Chroma
+   * stays low overall but lifts gently toward the light end so
+   * the paper reads warm rather than muddy.
+   * ============================================================ */
+
+  --ae-color-gray-0:    oklch(94.5% 0.018 85);  /* paper      */
+  --ae-color-gray-50:   oklch(91%   0.025 85);  /* paper-2    */
+  --ae-color-gray-100:  oklch(85%   0.035 85);  /* paper-3    */
+  --ae-color-gray-200:  oklch(76%   0.030 85);
+  --ae-color-gray-300:  oklch(64%   0.022 85);
+  --ae-color-gray-400:  oklch(54%   0.018 85);
+  --ae-color-gray-500:  oklch(45%   0.015 85);  /* ink-3      */
+  --ae-color-gray-600:  oklch(36%   0.012 85);
+  --ae-color-gray-700:  oklch(28%   0.010 85);
+  --ae-color-gray-800:  oklch(20%   0.008 85);  /* ink-2      */
+  --ae-color-gray-900:  oklch(14%   0.005 85);  /* ink        */
+  --ae-color-gray-1000: oklch(10%   0.004 85);
+
+  /* ============================================================
+   * Tier 1 — Primitives: vermilion accent.
+   *
+   * Centered on Bridge transit-feat orange (#c84a26 ≈
+   * oklch(55% 0.17 35)). Hue 35 = orange-red. -700 is the pressed
+   * state (Bridge `--accent-2: #b53d1d`); lighter stops feed into
+   * subtle tints + hover states.
+   * ============================================================ */
+
+  --ae-color-accent-50:  oklch(96% 0.025 35);
+  --ae-color-accent-100: oklch(92% 0.050 35);
+  --ae-color-accent-200: oklch(85% 0.090 35);
+  --ae-color-accent-300: oklch(75% 0.130 35);
+  --ae-color-accent-400: oklch(65% 0.160 35);
+  --ae-color-accent-500: oklch(55% 0.170 35);   /* Bridge vermilion #c84a26 */
+  --ae-color-accent-600: oklch(50% 0.180 35);   /* Bridge accent-2 #b53d1d */
+  --ae-color-accent-700: oklch(45% 0.180 35);
+  --ae-color-accent-800: oklch(34% 0.140 35);
+  --ae-color-accent-900: oklch(24% 0.090 35);
+
+  /* ============================================================
+   * Tier 1 — Primitives: transit status palettes.
+   *
+   * Status colors borrowed from the source design system's
+   * "signal" set:
+   *   success → pine green (#5e7e4f ≈ oklch(52% 0.09 135))
+   *   warning → signage gold (#c8a738 ≈ oklch(72% 0.13 88))
+   *   danger  → vermilion (shares accent — Bridge uses the same
+   *             stop hue for FEAT, FIX, and DISRUPTION)
+   *   info    → slate blue (#3a6a96 ≈ oklch(48% 0.10 240)) — from
+   *             the Hearth applied surface, used for "passed with
+   *             a caveat" / drift states.
+   * ============================================================ */
+
+  --ae-color-success-50:  oklch(95% 0.025 135);
+  --ae-color-success-100: oklch(90% 0.050 135);
+  --ae-color-success-500: oklch(52% 0.090 135);  /* pine green */
+  --ae-color-success-700: oklch(40% 0.095 135);
+
+  --ae-color-warning-50:  oklch(96% 0.025 88);
+  --ae-color-warning-100: oklch(92% 0.060 88);
+  --ae-color-warning-500: oklch(72% 0.130 88);   /* signage gold */
+  --ae-color-warning-700: oklch(50% 0.105 88);   /* AA: emphasis text on warning-soft bg >=4.5:1 */
+
+  --ae-color-danger-50:  oklch(96% 0.025 35);
+  --ae-color-danger-100: oklch(92% 0.050 35);
+  --ae-color-danger-500: oklch(46% 0.15 35);    /* shares vermilion; lower chroma escapes sRGB gamut clip so paper text hits AA >=4.5:1 */
+  --ae-color-danger-700: oklch(45% 0.180 35);
+
+  --ae-color-info-50:  oklch(95% 0.025 240);
+  --ae-color-info-100: oklch(90% 0.050 240);
+  --ae-color-info-500: oklch(48% 0.100 240);     /* slate blue */
+  --ae-color-info-700: oklch(40% 0.110 240);
+
+  /* ============================================================
+   * Tier 1 — Primitives: typography swap.
+   *
+   * Metro flips `--ae-font-family-sans` to a JetBrains-Mono-led
+   * stack, since the whole system is mono-first. Newsreader takes
+   * the serif slot for editorial italic captions.
+   *
+   * If consumers don't install @fontsource/jetbrains-mono, the
+   * stack falls through to ui-monospace, which still reads as
+   * print-shop chrome on every modern OS.
+   * ============================================================ */
+
+  --ae-font-family-sans:
+    'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas,
+    'Liberation Mono', monospace;
+  --ae-font-family-serif:
+    'Newsreader', 'Iowan Old Style', Georgia, 'Times New Roman', serif;
+  --ae-font-family-mono:
+    'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas,
+    'Liberation Mono', monospace;
+
+  /* Bridge depends on JetBrains Mono's ss01 + cv01 stylistic sets
+   * for the characteristic dotted-zero / one-storey-a / hooked-l
+   * Helvetica-Mono-ish appearance. Exposed as feature aliases so
+   * any element can opt in via
+   * `font-feature-settings: var(--ae-font-feature-settings-body);` */
+  --ae-font-feature-settings-body:    'ss01' 1, 'cv01' 1;
+  --ae-font-feature-settings-numeric: 'tnum' 1;
+
+  /* ============================================================
+   * Tier 1 — Primitives: heavy ink rules.
+   *
+   * Metro's signature: every surface boundary is a 2px ink rule,
+   * not a 1px subtle gray. We achieve this without forking every
+   * component by re-defining `--ae-border-width-1` itself — the
+   * token name becomes a slight misnomer in this theme, but the
+   * behaviour is correct (the "default border" is 2px in Metro).
+   * Components that explicitly want 1px can reach for
+   * `--ae-border-width-0` or hard-code `1px`.
+   * ============================================================ */
+
+  --ae-border-width-1: 2px;
+
+  /* ============================================================
+   * Tier 1 — Primitives: hard-offset cast shadows.
+   *
+   * The transit-ticket aesthetic uses a hard cast shadow ("ticket
+   * stub" depth) instead of soft drop shadows. Each shadow tier
+   * casts ink at a different offset, no blur. Components that
+   * don't explicitly want this look can override the shadow
+   * tokens locally; the global Tier 1 default is the ticket stub.
+   *
+   * `--ae-color-ink-shadow` is a stable name that survives even
+   * if the gray scale is later re-tuned — defined below.
+   * ============================================================ */
+
+  --ae-shadow-xs:   1px 1px 0 0 var(--ae-color-gray-900);
+  --ae-shadow-sm:   2px 2px 0 0 var(--ae-color-gray-900);
+  --ae-shadow-md:   3px 3px 0 0 var(--ae-color-gray-900);
+  --ae-shadow-lg:   4px 4px 0 0 var(--ae-color-gray-900);
+  --ae-shadow-xl:   6px 6px 0 0 var(--ae-color-gray-900);
+  --ae-shadow-2xl:  8px 8px 0 0 var(--ae-color-gray-900);
+  --ae-shadow-inner: inset 0 0 0 1px var(--ae-color-gray-900);
+
+  /* ============================================================
+   * Tier 2 — Semantic re-routes (paper-on-ink).
+   *
+   * Background = paper. Foreground = ink. Border = ink (full
+   * strength) instead of a subtle gray — this is what makes the
+   * print-shop feel land.
+   * ============================================================ */
+
+  --ae-color-bg:           var(--ae-color-gray-0);   /* paper        */
+  --ae-color-bg-subtle:    var(--ae-color-gray-50);  /* paper-2      */
+  --ae-color-bg-muted:     var(--ae-color-gray-100); /* paper-3      */
+  --ae-color-bg-elevated:  var(--ae-color-gray-0);   /* paper        */
+  --ae-color-bg-inverse:   var(--ae-color-gray-900); /* ink          */
+  --ae-color-bg-overlay:   oklch(14% 0.005 85 / 0.6);
+
+  --ae-color-fg:           var(--ae-color-gray-900); /* ink          */
+  --ae-color-fg-muted:     var(--ae-color-gray-700); /* ink-2-soft   */
+  --ae-color-fg-subtle:    var(--ae-color-gray-500); /* ink-3        */
+  --ae-color-fg-inverse:   var(--ae-color-gray-0);   /* paper        */
+  --ae-color-fg-disabled:  var(--ae-color-gray-400);
+  /* White (not paper) on the vermilion accent fill: warm paper lands at 4.47
+     — a hair under AA for non-large text (badges/tags). White clears 4.5:1. */
+  --ae-color-fg-on-accent: #ffffff;
+  /* Pure white (not paper) on the danger fill: at hue 35 the danger red is
+     sRGB gamut-clipped to ~#c0401f, where warm paper text lands at 4.46 — just
+     under AA. White clears 4.5:1 and reads as high-alarm signage. */
+  --ae-color-fg-on-danger: #ffffff;
+
+  /* Borders are full ink, not a subtle gray. This is the Metro
+   * signature — every surface boundary reads as a printed rule. */
+  --ae-color-border:        var(--ae-color-gray-900);
+  --ae-color-border-strong: var(--ae-color-gray-900);
+  --ae-color-border-subtle: var(--ae-color-gray-300);
+  --ae-color-border-inverse: var(--ae-color-gray-0);
+
+  --ae-color-accent:          var(--ae-color-accent-500);
+  --ae-color-accent-hover:    var(--ae-color-accent-600);
+  --ae-color-accent-active:   var(--ae-color-accent-700);
+  --ae-color-accent-subtle:   var(--ae-color-accent-50);
+  --ae-color-accent-emphasis: var(--ae-color-accent-700);
+
+  --ae-color-success:          var(--ae-color-success-500);
+  --ae-color-success-subtle:   var(--ae-color-success-50);
+  --ae-color-success-emphasis: var(--ae-color-success-700);
+
+  --ae-color-warning:          var(--ae-color-warning-500);
+  --ae-color-warning-subtle:   var(--ae-color-warning-50);
+  --ae-color-warning-emphasis: var(--ae-color-warning-700);
+
+  --ae-color-danger:          var(--ae-color-danger-500);
+  --ae-color-danger-subtle:   var(--ae-color-danger-50);
+  --ae-color-danger-emphasis: var(--ae-color-danger-700);
+
+  --ae-color-info:           var(--ae-color-info-500);
+  --ae-color-info-subtle:    var(--ae-color-info-50);
+  --ae-color-info-emphasis:  var(--ae-color-info-700);
+
+  /* Focus ring uses the full accent (vermilion) at 2px — no
+   * lighter halo. The ring sits hard against the control. */
+  --ae-color-focus-ring:     var(--ae-color-accent-500);
+  --ae-color-selection-bg:   var(--ae-color-gray-900);
+  --ae-color-selection-fg:   var(--ae-color-gray-0);
+  --ae-color-hover-overlay:  oklch(14% 0.005 85 / 0.06);
+  --ae-color-active-overlay: oklch(14% 0.005 85 / 0.10);
+
+  /* ============================================================
+   * Tier 2 — Layout & motion.
+   *
+   * Zero radius is the headline change. Defaults across the
+   * radius scale collapse to 0; components that consume
+   * `--ae-radius-default` (the bulk of them) flip to sharp
+   * corners. The Tier 3 component-radius overrides below pin
+   * the same value at the per-component layer.
+   *
+   * Transitions snap (80ms) — slower than editorial's 120ms,
+   * matches the source design's `transition: 80ms ease`.
+   * ============================================================ */
+
+  /* Flatten the entire non-full radius scale. Components that pull
+   * directly from `--ae-radius-sm`, `--ae-radius-md`, etc. (alert,
+   * banner, card, code-block, modal, list-item, menu-item, toast,
+   * tooltip, etc.) all collapse to square corners. `--ae-radius-full`
+   * stays at its default 9999px so genuinely-circular elements —
+   * radio dots, avatars, badge counters, switch knobs, slider thumbs,
+   * scrollbar thumbs, skeleton-as-avatar — keep their circular shape.
+   * That single exception matches the source design's rule:
+   * "Zero radius. Rectangles only. The single exception: badge
+   * circles for line letters (M/F/R/D), dots, and avatar marks." */
+  --ae-radius-xs:      0;
+  --ae-radius-sm:      0;
+  --ae-radius-md:      0;
+  --ae-radius-lg:      0;
+  --ae-radius-xl:      0;
+  --ae-radius-2xl:     0;
+  --ae-radius-default: var(--ae-radius-none);
+
+  --ae-duration-fast:   80ms;
+  --ae-duration-normal: 80ms;
+
+  /* Eyebrow tracking — Metro uses Bridge transit's 0.12em
+   * (vs editorial's 0.18em). Reads as a tighter signage stamp
+   * rather than an architectural masthead. */
+  --ae-letter-spacing-eyebrow: 0.12em;
+
+  /* Focus ring offset hugs the control hard — no halo around
+   * the ink rule. */
+  --ae-focus-ring-offset: 0px;
+  --ae-focus-ring-width:  2px;
+
+  /* ============================================================
+   * Tier 3 — Component radius pins.
+   *
+   * Each control gets `border-radius: 0` even where the
+   * component would otherwise consume `--ae-radius-default`.
+   * Pinning here (in addition to the Tier 2 default) makes the
+   * intent visible per-component and survives any future
+   * component-radius tokens that consult their own default.
+   * ============================================================ */
+
+  --ae-button-radius: 0;
+
+  /* Tags default to pills (--ae-radius-full); Metro pins them to
+   * rectangles so they read as printed labels rather than chips. */
+  --ae-tag-radius: 0;
+
+  /* Slider track is a flat 3px ink line with vermilion fill — no
+   * pill curve at the ends. Source design uses a sharp transit-route
+   * line, not a rounded progress pill. */
+  --ae-slider-track-size:   3px;
+  --ae-slider-track-radius: 0;
+  --ae-slider-track-bg:     var(--ae-color-ink);
+  --ae-slider-track-fill:   var(--ae-color-accent);
+
+  /* Slider thumb renders as a diamond, not a circle. Per the source
+   * design's .diamond primitive: width/height stay the same, but
+   * border-radius collapses to 0 and a 45deg rotation produces the
+   * diamond silhouette. Source design also fills the diamond with
+   * signage gold and outlines it in ink, so the marker reads as a
+   * distinct affordance against the vermilion track-fill. */
+  --ae-slider-thumb-radius: 0;
+  --ae-slider-thumb-rotate: rotate(45deg);
+  --ae-slider-thumb-bg:     var(--ae-color-gold);
+  --ae-slider-thumb-border: var(--ae-color-ink);
+
+  /* Checkbox: ink-filled SQUARE with a paper-colored ✓ glyph, per
+   * source. Default Aegis renders the checked state as an
+   * accent-filled box; Metro flips it to the print-shop inversion
+   * (ink box, paper tick). Mixed state inherits the same
+   * ink/paper inversion through bg-checked + fg. */
+  --ae-checkbox-bg:             var(--ae-color-paper);
+  --ae-checkbox-bg-checked:     var(--ae-color-ink);
+  --ae-checkbox-border:         var(--ae-color-ink);
+  --ae-checkbox-border-checked: var(--ae-color-ink);
+  --ae-checkbox-fg:             var(--ae-color-paper);
+
+  /* Radio: paper bg + 2px ink border ring, with a smaller vermilion
+   * inner dot when selected. Source keeps the ring INK (not accent)
+   * even when checked; only the dot carries the accent. */
+  --ae-radio-bg:             var(--ae-color-paper);
+  --ae-radio-border:         var(--ae-color-ink);
+  --ae-radio-border-checked: var(--ae-color-ink);
+  --ae-radio-bg-checked:     var(--ae-color-accent);
+
+  /* Switch: 44×24 RECTANGULAR ink-bordered track with paper bg off,
+   * ink bg on. SQUARE 16×16 knob — ink when off, gold when on. The
+   * border is rendered as an inset box-shadow so it doesn't shift
+   * layout in other themes (default `none`). */
+  --ae-switch-bg:             var(--ae-color-paper);
+  --ae-switch-bg-checked:     var(--ae-color-ink);
+  --ae-switch-thumb:          var(--ae-color-ink);
+  --ae-switch-thumb-checked:  var(--ae-color-gold);
+  --ae-switch-radius:         0;
+  --ae-switch-thumb-radius:   0;
+  --ae-switch-border-shadow:  inset 0 0 0 2px var(--ae-color-ink);
+
+  /* Input prefix/suffix affix chrome: source design wraps start/end
+   * slotted content in a paper-2 cell with a 2px ink separator border
+   * facing the input. The negative pull/gap math compensates for the
+   * wrapper's default horizontal padding so the affix sits flush
+   * against the outer field border. */
+  --ae-input-affix-bg:        var(--ae-color-paper-2);
+  --ae-input-affix-padding:   0 var(--ae-space-3);
+  --ae-input-affix-pull:      calc(var(--ae-space-3) * -1);
+  --ae-input-affix-gap:       var(--ae-space-2);
+  --ae-input-affix-separator: 2px solid var(--ae-color-ink);
+
+  /* Pagination: source design's connected-cell row. 2px ink container
+   * around the whole row + 2px ink right-borders between items.
+   * Current page = gold bg + ink text per the source's active-item
+   * pattern (matches the same gold treatment used on nav items). */
+  --ae-pagination-gap:                0;
+  --ae-pagination-item-radius:        0;
+  --ae-pagination-item-bg-active:     var(--ae-color-gold);
+  --ae-pagination-item-fg-active:     var(--ae-color-ink);
+  --ae-pagination-item-separator:     2px solid var(--ae-color-ink);
+  --ae-pagination-list-border:        2px solid var(--ae-color-ink);
+
+  /* Breadcrumb: source design's "route ticket" strip. A 2px ink rule wraps
+   * the whole trail on a paper ground; each crumb is an uppercase mono cell
+   * (11px / 700 / 0.14em); the current page is filled signage-gold with full
+   * ink text (same active-cell pattern as pagination + nav items); and the
+   * separators become bold › chevrons divided by 2px ink rules. The glyph is
+   * collapsed to 0 here and redrawn by the [data-ae-sep]::before rule at the
+   * end of this file (the separators are light DOM, so document CSS reaches
+   * them). Surfaces reference the absolute paper/ink/gold aliases, so the
+   * ticket look carries unchanged into Night Depot. */
+  --ae-breadcrumb-border:                    2px solid var(--ae-color-ink);
+  --ae-breadcrumb-bg:                        var(--ae-color-paper);
+  --ae-breadcrumb-align:                     stretch;
+  --ae-breadcrumb-item-padding:              8px 14px;
+  --ae-breadcrumb-item-margin:               0;
+  --ae-breadcrumb-item-font-family:          var(--ae-font-family-mono);
+  --ae-breadcrumb-item-font-size:            11px;
+  --ae-breadcrumb-item-font-weight:          700;
+  --ae-breadcrumb-item-font-weight-current:  700;
+  --ae-breadcrumb-item-tracking:             0.14em;
+  --ae-breadcrumb-item-transform:            uppercase;
+  --ae-breadcrumb-item-fg:                   var(--ae-color-ink-3);
+  --ae-breadcrumb-item-fg-current:           var(--ae-color-ink);
+  --ae-breadcrumb-item-bg-current:           var(--ae-color-gold);
+  --ae-breadcrumb-separator-color:           var(--ae-color-ink);
+  --ae-breadcrumb-separator-padding:         0 8px;
+  --ae-breadcrumb-separator-font-size:       0; /* hide the textContent glyph; ::before draws › */
+  --ae-breadcrumb-separator-font-weight:     800;
+  --ae-breadcrumb-separator-divider:         2px solid var(--ae-color-ink);
+
+  /* Toast: source design's ticket-stub notification — a solid signal ground
+   * (not the default subtle tint), an 8px colored edge strip, an uppercase 800
+   * title, and an action column divided by a 2px rule. Border stays a uniform
+   * ink frame across tones; text flips paper/ink for contrast on each ground.
+   * neutral+info = ink ground / gold strip; success = pine / paper strip;
+   * warning = gold / ink strip; danger = vermilion / gold strip; accent =
+   * vermilion / gold strip. */
+  --ae-toast-neutral-bg:     var(--ae-color-ink);
+  --ae-toast-neutral-fg:     var(--ae-color-paper);
+  --ae-toast-neutral-border: var(--ae-color-ink);
+  --ae-toast-neutral-strip:  inset 8px 0 0 0 var(--ae-color-gold);
+  --ae-toast-info-bg:        var(--ae-color-ink);
+  --ae-toast-info-fg:        var(--ae-color-paper);
+  --ae-toast-info-border:    var(--ae-color-ink);
+  --ae-toast-info-strip:     inset 8px 0 0 0 var(--ae-color-gold);
+  --ae-toast-success-bg:     var(--ae-color-signal-go);
+  --ae-toast-success-fg:     var(--ae-color-paper);
+  --ae-toast-success-border: var(--ae-color-ink);
+  --ae-toast-success-strip:  inset 8px 0 0 0 var(--ae-color-paper);
+  --ae-toast-warning-bg:     var(--ae-color-signal-warn);
+  --ae-toast-warning-fg:     var(--ae-color-ink);
+  --ae-toast-warning-border: var(--ae-color-ink);
+  --ae-toast-warning-strip:  inset 8px 0 0 0 var(--ae-color-ink);
+  --ae-toast-danger-bg:      var(--ae-color-signal-stop);
+  --ae-toast-danger-fg:      var(--ae-color-paper);
+  --ae-toast-danger-border:  var(--ae-color-ink);
+  --ae-toast-danger-strip:   inset 8px 0 0 0 var(--ae-color-gold);
+  --ae-toast-accent-bg:      var(--ae-color-accent);
+  --ae-toast-accent-fg:      var(--ae-color-paper);
+  --ae-toast-accent-border:  var(--ae-color-ink);
+  --ae-toast-accent-strip:   inset 8px 0 0 0 var(--ae-color-gold);
+  --ae-toast-title-weight:    800;
+  --ae-toast-title-transform: uppercase;
+  --ae-toast-title-tracking:  0.12em;
+  --ae-toast-actions-divider: 2px solid currentColor;
+  --ae-toast-actions-pad:     var(--ae-space-3);
+
+  /* Alert (in-flow notice): source design's Banner / NoticeRow — a 3px ink
+   * frame on a flat paper ground, a 56px tone-colored signal box on the left
+   * carrying a paper glyph and divided by a 3px rule, an uppercase mono kicker
+   * (the `title`) over a 14px/600 mono body. The bg/fg/border stay constant
+   * across tones (paper / ink / ink); only the signal-box accent flips by tone
+   * — info = ink, success = pine-go, warning = signage gold, danger = stop-red,
+   * neutral = ink-2. Routed through per-tone indirection tokens so this single
+   * :root block recolors every tone × variant combination. */
+  --ae-alert-font-family:   var(--ae-font-family-mono);
+  --ae-alert-border-width:  3px;
+  --ae-alert-radius:        0;
+  --ae-alert-padding:       0;
+  --ae-alert-row-gap:       0;
+  --ae-alert-col-gap:       0;
+  --ae-alert-body-padding:  14px 18px;
+  --ae-alert-body-justify:  center;
+  --ae-alert-body-weight:   600;
+  --ae-alert-icon-width:    56px;
+  --ae-alert-icon-align:    center;
+  --ae-alert-icon-pad-top:  0;
+  --ae-alert-icon-size:     22px;
+  /* The 56px signal box is filled by the component from --ae-alert-<tone>-accent
+   * (below) — it can't be set here, as --ae-alert-accent is shadow-internal. */
+  --ae-alert-icon-color:    var(--ae-color-paper);
+  --ae-alert-icon-divider:  3px solid var(--ae-color-ink);
+  --ae-alert-title-size:      10px;
+  --ae-alert-title-weight:    700;
+  --ae-alert-title-transform: uppercase;
+  --ae-alert-title-tracking:  0.14em;
+  --ae-alert-title-color:     var(--ae-color-ink-3);
+  --ae-alert-dismiss-margin:  8px;
+  --ae-alert-info-bg:        var(--ae-color-paper);
+  --ae-alert-info-fg:        var(--ae-color-ink);
+  --ae-alert-info-border:    var(--ae-color-ink);
+  --ae-alert-info-accent:    var(--ae-color-ink);
+  --ae-alert-success-bg:     var(--ae-color-paper);
+  --ae-alert-success-fg:     var(--ae-color-ink);
+  --ae-alert-success-border: var(--ae-color-ink);
+  --ae-alert-success-accent: var(--ae-color-signal-go);
+  --ae-alert-warning-bg:     var(--ae-color-paper);
+  --ae-alert-warning-fg:     var(--ae-color-ink);
+  --ae-alert-warning-border: var(--ae-color-ink);
+  --ae-alert-warning-accent: var(--ae-color-gold);
+  --ae-alert-danger-bg:      var(--ae-color-paper);
+  --ae-alert-danger-fg:      var(--ae-color-ink);
+  --ae-alert-danger-border:  var(--ae-color-ink);
+  --ae-alert-danger-accent:  var(--ae-color-signal-stop);
+  --ae-alert-neutral-bg:     var(--ae-color-paper);
+  --ae-alert-neutral-fg:     var(--ae-color-ink);
+  --ae-alert-neutral-border: var(--ae-color-ink);
+  --ae-alert-neutral-accent: var(--ae-color-ink-2);
+
+  /* Banner (full-bleed advisory bar): no direct source equivalent, so it
+   * takes the transit "service advisory" read — a solid signal ground with
+   * paper/ink text, a 3px ink bottom rule, and uppercase mono signage type.
+   * Tone grounds mirror the toast/alert signal language: info+neutral = ink,
+   * success = pine-go, warning = signage gold, danger = stop-red, accent =
+   * vermilion. Routed through per-tone indirection so this :root block recolors
+   * every tone. */
+  --ae-banner-font-family:  var(--ae-font-family-mono);
+  --ae-banner-font-weight:  600;
+  --ae-banner-transform:    uppercase;
+  --ae-banner-tracking:     0.06em;
+  --ae-banner-border-width: 3px;
+  --ae-banner-info-bg:        var(--ae-color-ink);
+  --ae-banner-info-fg:        var(--ae-color-paper);
+  --ae-banner-info-border:    var(--ae-color-ink);
+  --ae-banner-neutral-bg:     var(--ae-color-ink);
+  --ae-banner-neutral-fg:     var(--ae-color-paper);
+  --ae-banner-neutral-border: var(--ae-color-ink);
+  --ae-banner-success-bg:     var(--ae-color-signal-go);
+  --ae-banner-success-fg:     var(--ae-color-paper);
+  --ae-banner-success-border: var(--ae-color-ink);
+  --ae-banner-warning-bg:     var(--ae-color-gold);
+  --ae-banner-warning-fg:     var(--ae-color-ink);
+  --ae-banner-warning-border: var(--ae-color-ink);
+  --ae-banner-danger-bg:      var(--ae-color-signal-stop);
+  --ae-banner-danger-fg:      var(--ae-color-paper);
+  --ae-banner-danger-border:  var(--ae-color-ink);
+  --ae-banner-accent-bg:      var(--ae-color-accent);
+  --ae-banner-accent-fg:      var(--ae-color-paper);
+  --ae-banner-accent-border:  var(--ae-color-ink);
+
+  /* Skeleton: source design's loading placeholder is a static ticket-tape —
+   * an 8px/4px repeating paper-2 → paper-3 stripe inside a 2px ink frame, hard
+   * corners. The default soft-tinted pulse block becomes the striped stub; the
+   * opacity pulse (reduced-motion-safe) still reads as "loading". */
+  --ae-skeleton-bg: repeating-linear-gradient(
+    90deg,
+    var(--ae-color-paper-2) 0 8px,
+    var(--ae-color-paper-3) 8px 12px
+  );
+  --ae-skeleton-border:    2px solid var(--ae-color-ink);
+  --ae-skeleton-radius:    0;
+  --ae-skeleton-highlight: var(--ae-color-paper);
+
+  /* Empty state: source design's EmptyState is a 3px dashed ink frame on a
+   * paper-2 ground, mono type, with a 56px ink-framed paper icon box, an 800
+   * tight title, and a serif-italic ink-3 body. */
+  --ae-empty-state-bg:            var(--ae-color-paper-2);
+  --ae-empty-state-border:        3px dashed var(--ae-color-ink);
+  --ae-empty-state-radius:        0;
+  --ae-empty-state-font-family:   var(--ae-font-family-mono);
+  --ae-empty-state-icon-size:     56px;
+  --ae-empty-state-icon-bg:       var(--ae-color-paper);
+  --ae-empty-state-icon-border:   3px solid var(--ae-color-ink);
+  --ae-empty-state-icon-color:    var(--ae-color-ink);
+  --ae-empty-state-icon-weight:   800;
+  --ae-empty-state-icon-font-size: 26px;
+  --ae-empty-state-title-weight:   800;
+  --ae-empty-state-title-tracking: -0.01em;
+  --ae-empty-state-body-font-family: var(--ae-font-family-serif);
+  --ae-empty-state-body-style:       italic;
+  --ae-empty-state-body-color:       var(--ae-color-ink-3);
+
+  /* Kbd: source design's keycap is a flat 2px-ink-framed paper-2 chip — no
+   * pseudo-keycap shadow (borders, not shadows), hard corners, mono 700 with
+   * 0.05em tracking. The 2px frame comes from the global --ae-border-width-1. */
+  --ae-kbd-bg:          var(--ae-color-paper-2);
+  --ae-kbd-fg:          var(--ae-color-ink);
+  --ae-kbd-border:      var(--ae-color-ink);
+  --ae-kbd-radius:      0;
+  --ae-kbd-shadow:      none;
+  --ae-kbd-font-weight: 700;
+  --ae-kbd-tracking:    0.05em;
+
+  /* Avatar: source design's identity chip is a solid line-colored disc with a
+   * paper mono-800 initial. Tones map onto the transit palette: neutral/info =
+   * ink, accent = vermilion, success = pine-go, warning = gold (ink initial),
+   * danger = stop-red. Square avatars take hard corners. */
+  --ae-avatar-font-family:   var(--ae-font-family-mono);
+  --ae-avatar-font-weight:   800;
+  --ae-avatar-square-radius: 0;
+  --ae-avatar-neutral-bg: var(--ae-color-ink);        --ae-avatar-neutral-fg: var(--ae-color-paper);
+  --ae-avatar-info-bg:    var(--ae-color-ink);        --ae-avatar-info-fg:    var(--ae-color-paper);
+  --ae-avatar-accent-bg:  var(--ae-color-accent);     --ae-avatar-accent-fg:  var(--ae-color-paper);
+  --ae-avatar-success-bg: var(--ae-color-signal-go);  --ae-avatar-success-fg: var(--ae-color-paper);
+  --ae-avatar-warning-bg: var(--ae-color-gold);       --ae-avatar-warning-fg: var(--ae-color-ink);
+  --ae-avatar-danger-bg:  var(--ae-color-signal-stop); --ae-avatar-danger-fg: var(--ae-color-paper);
+
+  /* Overlays (menu / context-menu / popover / command-palette / tooltip): the
+   * source design renders every floating surface as a card inside a heavy ink
+   * frame with a hard ticket-stub box-shadow (borders + offset cast, not soft
+   * blur), zero radius. The SURFACE chrome routes through SCHEME-AWARE tokens —
+   * bg-elevated / fg / border-strong, each byte-identical to paper / ink in
+   * Paper Ticket — so the card, its text, its frame, and its cast all invert to
+   * a charcoal panel with a cream rule + cream cast in Night Depot rather than
+   * stranding a light paper card on the dark ground. Only the FILLED signage
+   * stays scheme-stable: menus light the active row gold (ink text), the
+   * command palette lights the selected row gold, and the tooltip is the
+   * inverse chip (bg-inverse / fg-inverse — dark by day, light at night). */
+  --ae-menu-bg:           var(--ae-color-bg-elevated);
+  --ae-menu-fg:           var(--ae-color-fg);
+  --ae-menu-border:       var(--ae-color-border-strong);
+  --ae-menu-border-width: 3px;
+  --ae-menu-radius:       0;
+  --ae-menu-shadow:       4px 4px 0 0 var(--ae-color-border-strong);
+  --ae-menu-padding:      0;
+  --ae-menu-item-bg-hover: var(--ae-color-gold);
+  --ae-menu-item-fg-active: var(--ae-color-ink);
+  --ae-menu-item-radius:   0;
+
+  --ae-popover-bg:           var(--ae-color-bg-elevated);
+  --ae-popover-fg:           var(--ae-color-fg);
+  --ae-popover-border:       var(--ae-color-border-strong);
+  --ae-popover-border-width: 3px;
+  --ae-popover-radius:       0;
+  --ae-popover-shadow:       4px 4px 0 0 var(--ae-color-border-strong);
+
+  --ae-command-palette-bg:                var(--ae-color-bg-elevated);
+  --ae-command-palette-border:            var(--ae-color-border-strong);
+  --ae-command-palette-border-width:      3px;
+  --ae-command-palette-radius:            0;
+  --ae-command-palette-shadow:            6px 6px 0 0 var(--ae-color-border-strong);
+  --ae-command-palette-header-border:     var(--ae-color-border-strong);
+  --ae-command-palette-header-border-width: 3px;
+  --ae-command-palette-section-bg:        var(--ae-color-bg-subtle);
+  --ae-command-palette-section-fg:        var(--ae-color-fg-subtle);
+  --ae-command-palette-section-tracking:  0.14em;
+  --ae-command-palette-selected-bg:       var(--ae-color-gold);
+  --ae-command-palette-selected-fg:       var(--ae-color-ink);
+  --ae-command-palette-item-divider:      1px solid var(--ae-color-rule-soft);
+
+  --ae-tooltip-bg:          var(--ae-color-bg-inverse);
+  --ae-tooltip-fg:          var(--ae-color-fg-inverse);
+  --ae-tooltip-radius:      0;
+  --ae-tooltip-shadow:      none;
+  --ae-tooltip-font-weight: 600;
+  --ae-tooltip-tracking:    0.04em;
+
+  /* Modal / dialog: source design's ModalShell is a card inside a heavy frame
+   * with a 6px hard ticket-stub cast, ruled header + footer, an 800 tight
+   * title, and a recessed footer. Mono throughout. Like the overlays, the shell
+   * chrome routes through SCHEME-AWARE bg-elevated / fg / border-strong /
+   * bg-subtle (byte-identical to paper / ink / paper-2 in Paper Ticket) so the
+   * whole shell inverts to a charcoal panel with a cream frame + cream cast in
+   * Night Depot rather than opening as a light paper card on the dark ground.
+   * The optional severity strip is consumer content. */
+  --ae-modal-bg:               var(--ae-color-bg-elevated);
+  --ae-modal-fg:               var(--ae-color-fg);
+  --ae-modal-border:           var(--ae-color-border-strong);
+  --ae-modal-border-width:     3px;
+  --ae-modal-radius:           0;
+  --ae-modal-shadow:           6px 6px 0 0 var(--ae-color-border-strong);
+  --ae-modal-divider:          var(--ae-color-border-strong);
+  --ae-modal-divider-width:    3px;
+  --ae-modal-footer-bg:        var(--ae-color-bg-subtle);
+  --ae-modal-title-font-family: var(--ae-font-family-mono);
+  --ae-modal-title-font-weight: 800;
+  --ae-modal-title-tracking:    -0.01em;
+
+  --ae-dialog-bg:               var(--ae-color-bg-elevated);
+  --ae-dialog-border:           var(--ae-color-border-strong);
+  --ae-dialog-border-width:     3px;
+  --ae-dialog-radius:           0;
+  --ae-dialog-shadow:           6px 6px 0 0 var(--ae-color-border-strong);
+  --ae-dialog-divider:          var(--ae-color-border-strong);
+  --ae-dialog-divider-width:    3px;
+  --ae-dialog-footer-bg:        var(--ae-color-bg-subtle);
+  --ae-dialog-title-font-family: var(--ae-font-family-mono);
+  --ae-dialog-title-font-weight: 800;
+  --ae-dialog-title-tracking:    -0.01em;
+
+  /* Drawer: source SlidePanel — a panel with a heavy rule on its leading edge,
+   * ruled header/footer, recessed footer, 800 title. Same scheme-aware routing
+   * as the other shells (bg-elevated / fg / border-strong / bg-subtle) so it
+   * inverts to charcoal + a cream rule in Night Depot. */
+  --ae-drawer-bg:               var(--ae-color-bg-elevated);
+  --ae-drawer-fg:               var(--ae-color-fg);
+  --ae-drawer-border:           var(--ae-color-border-strong);
+  --ae-drawer-border-width:     3px;
+  --ae-drawer-shadow:           none;
+  --ae-drawer-divider:          var(--ae-color-border-strong);
+  --ae-drawer-divider-width:    3px;
+  --ae-drawer-footer-bg:        var(--ae-color-bg-subtle);
+  --ae-drawer-title-font-weight: 800;
+
+  /* Stepper — source design's WizardSteps / step-form. HORIZONTAL renders the
+   * canonical connected ribbon: filled, butted segments (paper upcoming / gold
+   * current / ink complete / stop error) divided by 3px ink seams inside a 3px
+   * ink frame, each carrying an INVERTED marker badge and an uppercase mono
+   * label. VERTICAL keeps the marker+label+rail layout (the source's connected
+   * strip can't go vertical) with the per-state badge palette + a 2px ink rail.
+   * The segment fills are scheme-stable printed chrome (paper/ink/gold), like
+   * the other filled Metro controls, so the ribbon holds in Night Depot too. */
+
+  /* Vertical / base marker palette (also the fallback the horizontal badge
+   * inverts against). */
+  --ae-step-marker-bg:      var(--ae-color-paper);
+  --ae-step-marker-fg:      var(--ae-color-ink);
+  --ae-step-marker-border:  var(--ae-color-ink);
+  --ae-step-marker-weight:  800;
+  --ae-step-current-bg:     var(--ae-color-gold);
+  --ae-step-current-fg:     var(--ae-color-ink);
+  --ae-step-current-border: var(--ae-color-ink);
+  --ae-step-complete-bg:     var(--ae-color-ink);
+  --ae-step-complete-fg:     var(--ae-color-paper);
+  --ae-step-complete-border: var(--ae-color-ink);
+  --ae-step-error-bg:       var(--ae-color-signal-stop);
+  --ae-step-error-fg:       var(--ae-color-paper);
+  --ae-step-error-border:   var(--ae-color-ink);
+  --ae-step-label-weight:    700;
+  --ae-step-label-tracking:  0.12em;
+  --ae-step-label-transform: uppercase;
+
+  /* Horizontal ribbon — per-state segment fill + text color. */
+  --ae-step-upcoming-segment-bg: var(--ae-color-paper);
+  --ae-step-upcoming-segment-fg: var(--ae-color-ink);
+  --ae-step-current-segment-bg:  var(--ae-color-gold);
+  --ae-step-current-segment-fg:  var(--ae-color-ink);
+  --ae-step-complete-segment-bg: var(--ae-color-ink);
+  --ae-step-complete-segment-fg: var(--ae-color-paper);
+  --ae-step-error-segment-bg:    var(--ae-color-signal-stop);
+  --ae-step-error-segment-fg:    var(--ae-color-paper);
+
+  /* Inverted badge inside each filled segment (ink badge on the gold/paper
+   * cells, paper badge on the ink complete cell — matches step-form .n). */
+  --ae-step-upcoming-marker-bg:     var(--ae-color-ink);
+  --ae-step-upcoming-marker-fg:     var(--ae-color-paper);
+  --ae-step-upcoming-marker-border: var(--ae-color-ink);
+  --ae-step-current-marker-bg:      var(--ae-color-ink);
+  --ae-step-current-marker-fg:      var(--ae-color-paper);
+  --ae-step-current-marker-border:  var(--ae-color-ink);
+  --ae-step-complete-marker-bg:     var(--ae-color-paper);
+  --ae-step-complete-marker-fg:     var(--ae-color-ink);
+  --ae-step-complete-marker-border: var(--ae-color-paper);
+  --ae-step-error-marker-bg:        var(--ae-color-paper);
+  --ae-step-error-marker-fg:        var(--ae-color-signal-stop);
+  --ae-step-error-marker-border:    var(--ae-color-signal-stop);
+
+  /* Seam between segments + interior padding. The seam/frame/rail are STRUCTURAL
+   * rules (the source's single flipping `--rule`), not segment fills, so they
+   * route through scheme-aware --ae-color-border-strong: identical to ink by day
+   * (= gray-900) but flipping to cream in Night Depot so the frame + vertical
+   * rail don't vanish against the near-black page. The segment FILLS stay
+   * scheme-stable printed chrome (paper/ink/gold) above. */
+  --ae-step-seam-width:      3px;
+  --ae-step-seam-color:      var(--ae-color-border-strong);
+  --ae-step-segment-padding: var(--ae-space-3) var(--ae-space-4);
+
+  /* Stepper strip: butt the segments (gap 0), frame the ribbon, drop the
+   * floating horizontal connector, thicken the vertical rail to a 2px line. */
+  --ae-stepper-gap:               0;
+  --ae-stepper-list-border:       3px solid var(--ae-color-border-strong);
+  --ae-stepper-connector-display: none;
+  --ae-stepper-rail-width:        2px;
+  --ae-stepper-rail-color:        var(--ae-color-border-strong);
+
+  /* File input: source design's FileDrop — a 3px dashed ink frame on paper-2
+   * with a ticket-styled (ink-framed, uppercase mono) browse trigger. */
+  --ae-file-input-bg:            var(--ae-color-paper-2);
+  --ae-file-input-border:        var(--ae-color-ink);
+  --ae-file-input-border-width:  3px;
+  --ae-file-input-border-active: var(--ae-color-gold);
+  --ae-file-input-radius:        0;
+  --ae-file-input-trigger-bg:        var(--ae-color-paper);
+  --ae-file-input-trigger-border:    var(--ae-color-ink);
+  --ae-file-input-trigger-radius:    0;
+  --ae-file-input-trigger-weight:    700;
+  --ae-file-input-trigger-tracking:  0.08em;
+  --ae-file-input-trigger-transform: uppercase;
+
+  /* Accordion: source design's collapsible — a 2px ink frame on paper, mono
+   * uppercase 12px/700 headers (paper-2 when open) with a +/− ink glyph, ink-3
+   * meta, 2px ink inter-item rules, and a serif-italic ink-3 body. */
+  --ae-accordion-bg:               var(--ae-color-paper);
+  --ae-accordion-border:           2px solid var(--ae-color-ink);
+  --ae-accordion-radius:           0;
+  --ae-accordion-divider:          2px solid var(--ae-color-ink);
+  --ae-accordion-header-bg:        var(--ae-color-paper);
+  --ae-accordion-header-bg-open:   var(--ae-color-paper-2);
+  --ae-accordion-header-bg-hover:  var(--ae-color-paper-2);
+  --ae-accordion-header-fg:        var(--ae-color-ink);
+  --ae-accordion-header-font-family: var(--ae-font-family-mono);
+  --ae-accordion-header-font-size:   12px;
+  --ae-accordion-header-font-weight: 700;
+  --ae-accordion-header-tracking:    0.12em;
+  --ae-accordion-header-transform:   uppercase;
+  --ae-accordion-icon-color:       var(--ae-color-ink);
+  --ae-accordion-meta-color:       var(--ae-color-ink-3);
+  --ae-accordion-body-font-family: var(--ae-font-family-serif);
+  --ae-accordion-body-font-style:  italic;
+  --ae-accordion-body-font-size:   13px;
+  --ae-accordion-body-color:       var(--ae-color-ink-3);
+
+  /* Timeline: source design's activity feed — a 3px ink rail with per-event
+   * dot/diamond markers (ink default / accent / pine / gold / stop, 2px ink
+   * ring), an uppercase mono "when" label, a 700 title, and a serif-italic
+   * ink-3 body. Mono throughout. */
+  --ae-timeline-font-family:  var(--ae-font-family-mono);
+  --ae-timeline-rail-color:   var(--ae-color-ink);
+  --ae-timeline-rail-width:   3px;
+  --ae-timeline-marker-border: 2px solid var(--ae-color-ink);
+  --ae-timeline-neutral-bg: var(--ae-color-ink);
+  --ae-timeline-accent-bg:  var(--ae-color-accent);
+  --ae-timeline-success-bg: var(--ae-color-signal-go);
+  --ae-timeline-warning-bg: var(--ae-color-gold);
+  --ae-timeline-danger-bg:  var(--ae-color-signal-stop);
+  --ae-timeline-when-font-size:   10px;
+  --ae-timeline-when-font-weight: 700;
+  --ae-timeline-when-tracking:    0.14em;
+  --ae-timeline-when-color:       var(--ae-color-ink-3);
+  --ae-timeline-title-font-size:   13px;
+  --ae-timeline-title-font-weight: 700;
+  --ae-timeline-title-color:       var(--ae-color-ink);
+  --ae-timeline-body-font-family: var(--ae-font-family-serif);
+  --ae-timeline-body-font-style:  italic;
+  --ae-timeline-body-font-size:   12px;
+  --ae-timeline-body-color:       var(--ae-color-ink-3);
+
+  /* Segmented control: source design's connected button strip — a 2px ink
+   * frame on paper, cells divided by 2px ink rules, the active cell filled
+   * gold (ink text), uppercase mono 11px/700 labels, hard corners. */
+  --ae-segmented-bg:           var(--ae-color-paper);
+  --ae-segmented-border:       2px solid var(--ae-color-ink);
+  --ae-segmented-radius:       0;
+  --ae-segmented-padding:      0;
+  --ae-segmented-font-family:  var(--ae-font-family-mono);
+  --ae-segmented-item-fg:           var(--ae-color-ink);
+  --ae-segmented-item-bg-selected:  var(--ae-color-gold);
+  --ae-segmented-item-fg-selected:  var(--ae-color-ink);
+  --ae-segmented-item-bg-hover:     var(--ae-color-paper-2);
+  --ae-segmented-item-radius:       0;
+  --ae-segmented-item-divider:      2px solid var(--ae-color-ink);
+  --ae-segmented-item-padding:      10px 18px;
+  --ae-segmented-item-font-weight:  700;
+  --ae-segmented-item-tracking:     0.14em;
+  --ae-segmented-item-transform:    uppercase;
+
+  /* Code block: source design's CodeBlock has a 3px ink-bordered card
+   * with an ink-bg header strip carrying paper-text uppercase 0.12em
+   * language tag, paper-2 body for the code lines. The diagonal-line
+   * pattern on the body is replaced with a flat paper-2 surface. */
+  --ae-code-block-bg:               var(--ae-color-paper-2);
+  --ae-code-block-fg:               var(--ae-color-ink);
+  --ae-code-block-border:           3px solid var(--ae-color-ink);
+  --ae-code-block-radius:           0;
+  --ae-code-block-header-bg:        var(--ae-color-ink);
+  --ae-code-block-header-fg:        var(--ae-color-paper);
+  --ae-code-block-header-border:    3px solid var(--ae-color-ink);
+  --ae-code-block-header-tracking:  0.12em;
+  --ae-code-block-header-transform: uppercase;
+
+  /* Diff viewer: 3px ink-bordered card matching the code-block stub. */
+  --ae-diff-bg:     var(--ae-color-paper-2);
+  --ae-diff-fg:     var(--ae-color-ink);
+  --ae-diff-radius: 0;
+
+  /* Tables: source design's data tables use ink-bg paper-text headers
+   * with uppercase tracked mono labels — reads as transit signage. */
+  --ae-table-header-bg:              var(--ae-color-ink);
+  --ae-table-header-fg:              var(--ae-color-paper);
+  --ae-table-header-letter-spacing:  0.12em;
+
+  /* List items + tree nodes: source design's nav active-item style.
+   * Selected = gold bg + ink text + 3px accent (vermilion) left-border
+   * drawn via inset box-shadow so it doesn't shift layout. Active
+   * (hover) state stays subtle paper-2. */
+  --ae-list-item-bg-active:       var(--ae-color-paper-2);
+  --ae-list-item-bg-selected:     var(--ae-color-gold);
+  --ae-list-item-fg-selected:     var(--ae-color-ink);
+  --ae-list-item-shadow-selected: inset 3px 0 0 0 var(--ae-color-accent);
+
+  --ae-tree-node-bg-active:       var(--ae-color-paper-2);
+  --ae-tree-node-bg-selected:     var(--ae-color-gold);
+  --ae-tree-node-fg-selected:     var(--ae-color-ink);
+  --ae-tree-node-shadow-selected: inset 3px 0 0 0 var(--ae-color-accent);
+
+  /* Tabs: source design's STANDARD tabs (preview/tabs.html) — a paper strip,
+   * NOT the black file-tab canvas. The tablist rides on paper with a 3px ink
+   * rule along its edge; tabs are uppercase mono labels (ink-3 inactive, full
+   * ink active) divided by hairline rule-soft seams. The active tab carries a
+   * vermilion signal dot before its label and a 4px GOLD underline (the gold
+   * depot-signage marker, layered over the 3px ink rule). No black canvas —
+   * the file-tab strip is a distinct surface, not what ae-tabs renders.
+   *
+   * The pill variant rides a paper-2 ticket strip with a gold active cell
+   * (ink text, no shadow — borders, not shadows). */
+   * Scheme-aware on purpose: unfilled text-on-paper tabs must flip with the
+   * scheme (ink rules/labels by day, cream by night), so the rule/active/
+   * inactive colors route through --ae-color-fg / -fg-subtle / -border-strong
+   * (which invert in Night Depot) rather than the scheme-stable paper/ink
+   * aliases. The gold underline + vermilion dot read on both grounds; the gold
+   * pill cell always wants stable ink text. This one block therefore serves
+   * both schemes — no dark restatement needed. */
+  --ae-tabs-tablist-bg:            transparent;
+  --ae-tabs-tablist-border-width:  3px;
+  --ae-tabs-tablist-border-color:  var(--ae-color-border-strong);
+  --ae-tabs-pill-tablist-bg:       var(--ae-color-bg-muted);
+  --ae-tabs-tablist-gap:           0;
+  --ae-tabs-tab-bg-active:         transparent;
+  --ae-tabs-tab-fg-active:         var(--ae-color-fg);
+  --ae-tabs-tab-fg-inactive:       var(--ae-color-fg-subtle);
+  --ae-tabs-tab-separator:         2px solid var(--ae-color-border-subtle);
+  --ae-tabs-tab-font-family:       var(--ae-font-family-mono);
+  --ae-tabs-tab-font-size:         var(--ae-font-size-xs);
+  --ae-tabs-tab-font-weight:       700;
+  --ae-tabs-tab-letter-spacing:    0.12em;
+  --ae-tabs-tab-text-transform:    uppercase;
+  --ae-tabs-tab-padding:           var(--ae-space-3) var(--ae-space-5);
+  --ae-tabs-indicator-height:      4px;
+  --ae-tabs-indicator-color:       var(--ae-color-gold);
+  --ae-tabs-active-marker-display: inline-block;
+  --ae-tabs-active-marker-size:    0.5rem;
+  --ae-tabs-active-marker-color:   var(--ae-color-accent);
+  --ae-tabs-pill-tab-bg-active:    var(--ae-color-gold);
+  --ae-tabs-pill-tab-fg-active:    var(--ae-color-ink);
+  --ae-tabs-pill-tab-shadow-active: none;
+
+  /* Date / Time pickers: the calendar-open / list-open affix button
+   * reads as a paper-2 separator-bordered cell on the right side of
+   * the input (mirroring the source's left-side ▤ prefix; we keep the
+   * toggle on the right to avoid a structural break). The popup gets
+   * the print-shop 3px ink border. Selected day cells flip to ink-bg +
+   * paper text (matching the source's ink range-selected day chrome). */
+  --ae-date-picker-toggle-bg:           var(--ae-color-paper-2);
+  --ae-date-picker-toggle-border:       2px solid var(--ae-color-ink);
+  --ae-date-picker-cal-border:          3px solid var(--ae-color-ink);
+  --ae-date-picker-cal-radius:          0;
+  --ae-date-picker-cal-day-radius:      0;
+  --ae-date-picker-cal-day-selected-bg: var(--ae-color-ink);
+  --ae-date-picker-cal-day-selected-fg: var(--ae-color-paper);
+
+  --ae-time-picker-toggle-bg:     var(--ae-color-paper-2);
+  --ae-time-picker-toggle-border: 2px solid var(--ae-color-ink);
+  --ae-time-picker-popup-border: 3px solid var(--ae-color-ink);
+  --ae-time-picker-popup-radius: 0;
+
+  /* Resizer: source design's splitter is an 8px paper-2 bar with 2px
+   * ink borders perpendicular to the drag axis + 4 small (2×2) ink
+   * dots stacked in the center as a grip indicator. The new
+   * --ae-resizer-* tokens carry every signal so other themes keep
+   * the slim accent bar. */
+  --ae-resizer-thickness:   8px;
+  --ae-resizer-color:       var(--ae-color-paper-2);
+  --ae-resizer-color-hover: var(--ae-color-paper-3);
+  --ae-resizer-radius:      0;
+  --ae-resizer-border-perp: 2px solid var(--ae-color-ink);
+  --ae-resizer-dot-color:   var(--ae-color-ink);
+
+  /* Source design's signature ink+gold diagonal-stripe "hazard tape".
+   * Defined once as a Metro-local token so the progress bar AND the
+   * spinner ring (below) share the exact same gradient — the two
+   * loading affordances read as one print-shop visual language. */
+  --ae-hazard-tape:
+    repeating-linear-gradient(
+      45deg,
+      var(--ae-color-ink) 0 4px,
+      var(--ae-color-gold) 4px 8px
+    );
+
+  /* Progress: track is paper with a 2px ink border at 16px height.
+   * The hazard-tape fill overrides whatever tone is set on the bar —
+   * every Metro progress reads as the same print-shop affordance. */
+  --ae-progress-track:  var(--ae-color-paper);
+  --ae-progress-border: 2px solid var(--ae-color-ink);
+  --ae-progress-radius: 0;
+  --ae-progress-height: 1rem;
+  --ae-progress-fill:   var(--ae-hazard-tape);
+
+  /* ============================================================
+   * Tier 3 — Editorial control overrides.
+   *
+   * Buttons are uppercase mono with heavy 700 weight + tight
+   * 0.12em tracking. Inputs use a paper bg with the full ink
+   * border. Focus state warms the paper slightly (per the
+   * source design's `.input:focus { background: var(--paper-2) }`).
+   * ============================================================ */
+
+  /* Buttons: uppercase mono, weight 700, 0.12em tracking. The
+   * source design uses 0.12em (Bridge editorial is 0.04em — the
+   * difference matters: Metro is print-shop signage, editorial
+   * is architectural caption). Font family routes through the
+   * Tier 1 sans swap so buttons inherit JetBrains Mono. */
+  --ae-button-font-family:    var(--ae-font-family-sans);
+  --ae-button-font-weight:    700;
+  --ae-button-letter-spacing: 0.12em;
+  --ae-button-text-transform: uppercase;
+
+  /* Loading bar rides the button edge as the same ink+gold hazard tape as
+   * ae-progress and ae-spinner — one loading language across every async
+   * affordance. The textured barber-pole is Metro-ONLY (every other theme
+   * keeps the flat sliding bar or a spinner), so opt in by painting the bar
+   * IMAGE with the ink+gold diagonal and hiding the default flat segment.
+   * The 0.5rem stripe tile lands ~4px diagonal bands; the bar's
+   * background-position scroll animates it. */
+  --ae-button-loading-bar-image:
+    linear-gradient(
+      45deg,
+      var(--ae-color-ink) 25%,
+      var(--ae-color-gold) 25%,
+      var(--ae-color-gold) 50%,
+      var(--ae-color-ink) 50%,
+      var(--ae-color-ink) 75%,
+      var(--ae-color-gold) 75%
+    );
+  --ae-button-loading-segment-display: none;
+  --ae-button-loading-bar-stripe: 0.5rem;
+
+  /* Inputs: full paper bg, slightly darker paper on focus (per
+   * the source design). Border is full ink — the entire
+   * control reads as a stamped form field. */
+  --ae-input-bg:           var(--ae-color-bg);
+  --ae-input-bg-hover:     var(--ae-color-bg);
+  --ae-input-bg-focus:     var(--ae-color-bg-subtle);
+  --ae-input-border:       var(--ae-color-fg);
+  --ae-input-border-hover: var(--ae-color-fg);
+  --ae-input-border-focus: var(--ae-color-fg);
+
+  --ae-textarea-bg:           var(--ae-color-bg);
+  --ae-textarea-bg-hover:     var(--ae-color-bg);
+  --ae-textarea-bg-focus:     var(--ae-color-bg-subtle);
+  --ae-textarea-border:       var(--ae-color-fg);
+  --ae-textarea-border-hover: var(--ae-color-fg);
+  --ae-textarea-border-focus: var(--ae-color-fg);
+
+  --ae-select-bg:           var(--ae-color-bg);
+  --ae-select-bg-hover:     var(--ae-color-bg);
+  --ae-select-bg-focus:     var(--ae-color-bg-subtle);
+  --ae-select-border:       var(--ae-color-fg);
+  --ae-select-border-hover: var(--ae-color-fg);
+  --ae-select-border-focus: var(--ae-color-fg);
+
+  --ae-combobox-bg:           var(--ae-color-bg);
+  --ae-combobox-bg-hover:     var(--ae-color-bg);
+  --ae-combobox-bg-focus:     var(--ae-color-bg-subtle);
+  --ae-combobox-border:       var(--ae-color-fg);
+  --ae-combobox-border-hover: var(--ae-color-fg);
+  --ae-combobox-border-focus: var(--ae-color-fg);
+
+  /* Spinner: swap the SVG arc for the scrolling hazard-tape ring so
+   * the loading spinner shares ae-progress' ink+gold print-shop
+   * visual. The ring is STATIC; the tape scrolls left→right (the same
+   * background-position animation as the button's loading bar), not a
+   * rotating wheel. The two display tokens flip together — SVG off,
+   * stripe ring on — and the ring is fed the SAME --ae-hazard-tape
+   * gradient as the progress bar. --ae-spinner-color is kept as the ink
+   * arc fallback for any consumer that flips back to the SVG variant
+   * (e.g. a spinner inside a vermilion primary button). */
+  --ae-spinner-color:          var(--ae-color-fg);
+  --ae-spinner-svg-display:    none;
+  --ae-spinner-stripe-display: block;
+  --ae-spinner-stripe:         var(--ae-hazard-tape);
+  --ae-spinner-stripe-band:    3px;
+
+  /* Page header: the source's standardised heading reads as a transit
+   * departure-board row — a 3px ink baseline rule under an uppercase mono
+   * eyebrow + mono display title, the status pill a flat ticket chip. The rule
+   * + badge route through SCHEME-AWARE border-strong / bg-subtle / fg (= ink/
+   * paper by day, flipping in Night Depot) so the header doesn't strand a light
+   * chip on the dark ground — the floating-shell lesson applied up front. */
+  --ae-page-header-rule-width:          3px;
+  --ae-page-header-rule-color:          var(--ae-color-border-strong);
+  --ae-page-header-eyebrow-font-family: var(--ae-font-family-mono);
+  --ae-page-header-eyebrow-tracking:    0.12em;
+  --ae-page-header-eyebrow-color:       var(--ae-color-fg-subtle);
+  --ae-page-header-heading-font-family: var(--ae-font-family-mono);
+  --ae-page-header-heading-tracking:    -0.01em;
+  --ae-page-header-badge-bg:            var(--ae-color-bg-subtle);
+  --ae-page-header-badge-fg:            var(--ae-color-fg);
+  --ae-page-header-badge-border:        var(--ae-color-border-strong);
+  --ae-page-header-badge-radius:        0;
+  --ae-page-header-badge-font-family:   var(--ae-font-family-mono);
+
+  /* ============================================================
+   * Tier 2 — Metro extras (NON-STANDARD).
+   *
+   * Tokens that only exist in this theme. Other theme packs do
+   * NOT declare them, so consumers reaching for them outside a
+   * Metro context get an undefined-token fallback. Use them only
+   * inside Metro-only surfaces, OR pair with a fallback like
+   * `var(--ae-color-paper, var(--ae-color-bg))` for cross-theme
+   * safety.
+   *
+   * The "paper-*" / "ink-*" set exposes the source palette by its
+   * domain name (paper, ink) so transit-vocabulary consumers can
+   * address swatches semantically without thinking in gray-stops.
+   *
+   * The "line-*" set carries the four metro line colors from the
+   * source — useful for badges, dot indicators, route diagrams,
+   * or any tag/category surface that wants to read as a transit
+   * line letter.
+   *
+   * `--ae-color-gold` and `--ae-color-stop` / `--ae-color-go` are
+   * the explicit signage / signal colors for tags and status
+   * indicators (the source uses `--signal-go/-warn/-stop` and
+   * `--gold` as first-class tokens, not as derived semantic
+   * names).
+   * ============================================================ */
+
+  --ae-color-paper:    var(--ae-color-gray-0);    /* #f3efe2 */
+  --ae-color-paper-2:  var(--ae-color-gray-50);   /* #ebe6d4 */
+  --ae-color-paper-3:  var(--ae-color-gray-100);  /* #ddd6bf */
+
+  --ae-color-ink:      var(--ae-color-gray-900);  /* #15140f */
+  --ae-color-ink-2:    var(--ae-color-gray-800);  /* #2a2820 */
+  --ae-color-ink-3:    var(--ae-color-gray-500);  /* #6b6657 */
+
+  --ae-color-rule-soft: oklch(14% 0.005 85 / 0.18);
+
+  --ae-color-gold:    var(--ae-color-warning-500); /* #c8a738 */
+  --ae-color-gold-2:  var(--ae-color-warning-700);
+
+  --ae-color-signal-go:   var(--ae-color-success-500);
+  --ae-color-signal-warn: var(--ae-color-warning-500);
+  --ae-color-signal-stop: var(--ae-color-danger-500);
+
+  --ae-color-line-main:    var(--ae-color-ink);       /* MAIN — black */
+  --ae-color-line-feat:    var(--ae-color-accent);    /* FEAT — vermilion */
+  --ae-color-line-release: oklch(56% 0.13 295);       /* RELEASE — purple (#7c5fb0) */
+  --ae-color-line-fix:     var(--ae-color-accent);    /* FIX — shares vermilion */
+  --ae-color-line-docs:    var(--ae-color-success);   /* DOCS — pine green */
+}
+
+/*
+ * ── Metro · Night Depot (dark variant) ──────────────────────────────
+ *
+ * `data-theme="metro" data-variant="dark"` (or `class="metro dark"`).
+ * The night-platform companion to Paper Ticket: the warm-cream surfaces
+ * invert to a deep ink ground while the stamped controls keep their
+ * paper-on-ink print look — cream tickets glowing on a dark depot. The
+ * vermilion accent and signage gold are preserved; they read even harder
+ * against the night ground.
+ *
+ * Self-contained: the Metro brand block above sets a LIGHT (paper) Tier-2
+ * direction, so this cell restates the full dark surface direction to
+ * override it. The paper/ink Tier-3 component tokens (checkbox, switch,
+ * tabs, code-block, …) reference the absolute `--ae-color-paper` / `-ink`
+ * aliases, which stay constant across schemes — so those controls keep
+ * their printed cream-on-ink chrome without per-component overrides here.
+ *
+ * Contrast (OKLCH-lightness proxy; verify with a real checker pre-launch):
+ *   fg paper (L≈94.5) on bg ink (L≈10)                 ≈ ~17:1 ✅ AAA
+ *   fg-muted gray-200 (L≈76) on bg (L≈10)              ≈ ~8:1  ✅ AAA
+ *   white on accent vermilion (L≈55)                   ≈ ~5:1  ✅ AA
+ *   ink on signage gold (L≈72)                         ≈ ~7:1  ✅ AAA
+ */
+:root[data-theme="metro"][data-variant="dark"],
+:root.metro.dark {
+  /* Soft dark shadow alphas — the hard ink ticket-stub cast doesn't read on a
+     near-black ground, so Night Depot lifts surfaces with alpha shadows
+     instead. (Borders still do most of the surface-separation work.) */
+  --ae-shadow-xs:   0 1px 2px 0 oklch(0% 0 0 / 0.50);
+  --ae-shadow-sm:   0 1px 3px 0 oklch(0% 0 0 / 0.60), 0 1px 2px -1px oklch(0% 0 0 / 0.50);
+  --ae-shadow-md:   0 4px 6px -1px oklch(0% 0 0 / 0.65), 0 2px 4px -2px oklch(0% 0 0 / 0.55);
+  --ae-shadow-lg:   0 10px 15px -3px oklch(0% 0 0 / 0.65), 0 4px 6px -4px oklch(0% 0 0 / 0.55);
+  --ae-shadow-xl:   0 20px 25px -5px oklch(0% 0 0 / 0.70), 0 8px 10px -6px oklch(0% 0 0 / 0.60);
+  --ae-shadow-2xl:  0 25px 50px -12px oklch(0% 0 0 / 0.85);
+  --ae-shadow-inner: inset 0 2px 4px 0 oklch(0% 0 0 / 0.50);
+
+  /* Tier 2 — night surface direction (ink ground, paper text). The raised
+     surfaces lift OFF the deep page instead of hugging it: at the bottom of the
+     lightness range a 4-point step (the old gray-1000 -> gray-900 for both the
+     subtle fill AND the elevated plane) reads as "both black", so each surface
+     gets a distinct, slightly-warmer charcoal — depot wood/metal catching the
+     platform light. The page itself lifts a touch off literal pure-black
+     (gray-1000 renders #040302) to a warm off-black — the symmetric inverse of
+     Paper Ticket's warm off-WHITE paper, which is likewise never pure white. */
+  --ae-color-bg:           oklch(14% 0.006 85);       /* deep warm off-black ground */
+  --ae-color-bg-subtle:    oklch(18% 0.008 85);       /* recessed secondary fill    */
+  --ae-color-bg-muted:     oklch(24% 0.010 85);       /* mid charcoal               */
+  --ae-color-bg-elevated:  oklch(30% 0.014 85);       /* raised card/dropdown plane */
+  --ae-color-bg-inverse:   var(--ae-color-gray-0);    /* paper            */
+  --ae-color-bg-overlay:   oklch(10% 0.004 85 / 0.7);
+
+  --ae-color-fg:           var(--ae-color-gray-0);    /* paper            */
+  --ae-color-fg-muted:     var(--ae-color-gray-200);
+  --ae-color-fg-subtle:    var(--ae-color-gray-300);
+  --ae-color-fg-inverse:   var(--ae-color-gray-900);  /* ink              */
+  --ae-color-fg-disabled:  var(--ae-color-gray-500);
+  --ae-color-fg-on-accent: #ffffff;
+  --ae-color-fg-on-danger: #ffffff;
+
+  /* Borders become light paper rules on the night ground — the inverse of
+     the daytime ink rules, same heavy 2px weight (inherited from brand). */
+  --ae-color-border:         var(--ae-color-gray-200);
+  --ae-color-border-strong:  var(--ae-color-gray-100);
+  --ae-color-border-subtle:  var(--ae-color-gray-700);
+  --ae-color-border-inverse: var(--ae-color-gray-900);
+
+  /* Faint hairline rule inverts too — a low-alpha PAPER line on the night
+     ground (the symmetric inverse of the daytime low-alpha ink line) so the
+     command-palette item dividers don't dissolve into the charcoal surface. */
+  --ae-color-rule-soft: oklch(96% 0.005 85 / 0.18);
+
+  --ae-color-accent:          var(--ae-color-accent-500);
+  --ae-color-accent-hover:    var(--ae-color-accent-400);
+  --ae-color-accent-active:   var(--ae-color-accent-300);
+  --ae-color-accent-subtle:   var(--ae-color-accent-900);
+  --ae-color-accent-emphasis: var(--ae-color-accent-300);
+
+  --ae-color-success:          var(--ae-color-success-500);
+  --ae-color-success-subtle:   var(--ae-color-gray-900);
+  --ae-color-success-emphasis: var(--ae-color-success-700);
+
+  --ae-color-warning:          var(--ae-color-warning-500);
+  --ae-color-warning-subtle:   var(--ae-color-gray-900);
+  --ae-color-warning-emphasis: var(--ae-color-warning-700);
+
+  --ae-color-danger:           var(--ae-color-danger-500);
+  --ae-color-danger-subtle:    var(--ae-color-gray-900);
+  --ae-color-danger-emphasis:  var(--ae-color-danger-700);
+
+  --ae-color-info:             var(--ae-color-info-500);
+  --ae-color-info-subtle:      var(--ae-color-gray-900);
+  --ae-color-info-emphasis:    var(--ae-color-info-700);
+
+  --ae-color-focus-ring:     var(--ae-color-accent-500);
+  --ae-color-selection-bg:   var(--ae-color-gray-0);
+  --ae-color-selection-fg:   var(--ae-color-gray-1000);
+  --ae-color-hover-overlay:  oklch(100% 0 0 / 0.06);
+  --ae-color-active-overlay: oklch(100% 0 0 / 0.10);
+
+  /* Night re-tones a few Tier-3 surfaces whose daytime values assumed a
+     paper ground. The table header flips to paper-on-ink-2 so it doesn't
+     vanish into the night bg; list/tree selected rows keep gold. The tabs
+     don't need a restatement — their Metro tokens route through scheme-aware
+     --ae-color-fg / -border-strong, which invert here automatically. */
+  --ae-table-header-bg:        var(--ae-color-gray-800);
+  --ae-table-header-fg:        var(--ae-color-paper);
+  --ae-code-block-bg:          var(--ae-color-gray-900);
+  --ae-code-block-fg:          var(--ae-color-paper);
+  --ae-code-block-header-bg:   var(--ae-color-gray-800);
+}
+
+/* Breadcrumb chevron. The separator spans are injected into the LIGHT DOM (so
+ * they project between slotted items), which the component's shadow stylesheet
+ * can't reach but document CSS can. Metro collapses the textContent "/" to
+ * font-size:0 (via --ae-breadcrumb-separator-font-size) and redraws a bold ›
+ * here. The glyph is tokenized so a consumer can swap it without re-theming. */
+:root[data-theme="metro"] ae-breadcrumb [data-ae-sep]::before,
+:root.metro ae-breadcrumb [data-ae-sep]::before {
+  content: var(--ae-breadcrumb-separator-content, "\203A");
+  font-size: var(--ae-breadcrumb-separator-glyph-size, 12px);
+  line-height: 1;
+}
+} /* @layer ae-brand */
+
+/* ============================================================
+ * Metro density — re-anchor the base type scale to 14px.
+ *
+ * Every `--ae-font-size-*` and `--ae-space-*` token is rem-based, so
+ * re-anchoring the root font-size scales the base/body type + rem spacing
+ * to a 14px base (md → 14px, sm → 12.25px, xs → 10.5px). Metro's
+ * deliberate per-component px sizes (breadcrumb 11px, accordion 12px,
+ * timeline 10–13px, empty-state icon 26px, …) are absolute and stay
+ * exactly as designed — this only moves the rem-based base.
+ *
+ * Expressed as a PERCENTAGE (14 / 16 = 87.5%), not absolute px, so it
+ * scales WITH the user's root font-size preference (a11y) instead of
+ * overriding it — 14px only at the 16px default. `--ae-radius-*` is px,
+ * so corners are unaffected.
+ *
+ * Deliberately UNLAYERED with a `:root[data-theme]` selector (0,2,0): an
+ * unlayered host/docs `html { font-size }` pin (0,0,1) beats any layered
+ * declaration regardless of specificity, so a re-anchor inside
+ * `@layer ae-brand` silently loses (the same cascade trap the crucible
+ * atmosphere + editorial density hit). Unlayered + higher specificity wins. */
+:root[data-theme="metro"],
+:root.metro {
+  font-size: 87.5%;
+}
