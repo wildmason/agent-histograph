@@ -188,14 +188,22 @@ function stopPolling() {
   }
 }
 
-// pause polling when the tab is hidden (second-monitor companion); resume +
-// refresh immediately when it returns.
+// Pause polling only in a BROWSER tab when hidden (second-monitor companion) to
+// save work. In the Tauri desktop app the board is a pinned companion meant to
+// stay live while you work in ANOTHER window, so it must NOT stop when merely
+// covered/unfocused — and a webview can flag a backgrounded window
+// `document.hidden` (WebView2 occlusion on Windows; WKWebView/App-Nap on macOS).
+// The window-level `additional_browser_args` neutralizes that on Windows but
+// no-ops on macOS, so this guard is what keeps the board live cross-platform.
+// Desktop host is detected via the injected global (withGlobalTauri).
+const IS_DESKTOP = typeof window !== "undefined" && !!window.__TAURI__;
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) {
-    stopPolling();
-  } else {
-    startPolling(); // the loop fetches immediately
+  if (!document.hidden) {
+    startPolling(); // visible (or back in view): ensure polling + immediate fetch
+  } else if (!IS_DESKTOP) {
+    stopPolling(); // browser tab hidden: pause to save work
   }
+  // desktop + hidden (covered/minimized): keep polling — it's a pinned companion
 });
 
 // ---- focus switch --------------------------------------------------------

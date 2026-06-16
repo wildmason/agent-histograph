@@ -44,7 +44,24 @@ show anything.** Set that up first.
 - **Python 3.9+** (stdlib only — no pip installs). Required at runtime.
 - To **build the desktop app**: [Rust](https://rustup.rs) + the Tauri CLI
   (`cargo install tauri-cli` or `cargo binstall tauri-cli`) + Node 20+.
-- Windows is the primary target; macOS/Linux build but are less exercised.
+- **Cross-platform.** All Windows-specific code (console-suppression, the
+  kill-on-close job) is `#[cfg(windows)]`-gated, so the crate compiles cleanly on
+  macOS and Linux too. `bundle.targets` is `"all"`, so `cargo tauri build` emits
+  the right installer for the host: `msi`/`nsis` on Windows, `app`/`dmg` on macOS,
+  `deb`/`rpm`/`appimage` on Linux.
+
+### macOS
+
+```sh
+xcode-select --install      # one-time: Command Line Tools (linker + SDK)
+cd agentlog/desktop && cargo tauri build      # -> .app + .dmg under src-tauri/target/release/bundle/
+```
+
+The build is **unsigned**, so first launch needs **right-click → Open** (or
+`xattr -dr com.apple.quarantine "<path to>.app"`) to clear Gatekeeper. The board
+stays live while the window is unfocused/covered on macOS too — the Windows
+occlusion/throttling flags no-op there, but a cross-platform poll guard keeps it
+ticking regardless.
 
 ## Quick start
 
