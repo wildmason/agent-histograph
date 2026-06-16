@@ -303,12 +303,100 @@ function renderStatusLine(text) {
   return wrap;
 }
 
-/** Draw (or redraw) the whole triage mosaic into mountEl. */
+// Short status word when the backend hands over no explicit statusLine.text.
+const STATUS_WORD = {
+  active: "active", "needs-you": "needs you", stale: "idle", parked: "parked", done: "done",
+};
+
+/**
+ * One process-table lane row: status dot · provider glyph + id · focus title ·
+ * status · age. Clickable + keyboard-operable; the focused lane gets an inset
+ * accent bar. Token-driven (no hex) — the dot, provider tint, and freshness tone
+ * reuse the same --ae-* classes the old cards used. The full "id · project"
+ * rides the row's title so the project survives the denser layout (hover).
+ */
+function renderTriageRow(term, { onFocus } = {}) {
+  const prov = providerOf(term.provider);
+  const needsYou =
+    term.status === "needs-you" || (term.statusLine && term.statusLine.kind === "needs-you");
+  const quiet = term.status === "stale" || term.status === "parked" || term.status === "done";
+
+  const hasProject = term.project && term.project !== term.id;
+  const fullLabel = hasProject ? `${term.id} · ${term.project}` : term.id;
+
+  // age tone — clamp to the known class set (muted/warning/danger) with a muted
+  // fallback; a "mid-turn" beat reads warning even when the backend collapsed it.
+  const FRESH_TONES = { muted: 1, warning: 1, danger: 1 };
+  let toneKey = FRESH_TONES[term.freshnessTone] ? term.freshnessTone : "muted";
+  if (term.freshnessLabel === "mid-turn") toneKey = "warning";
+
+  // status cell: needs-you owns the eye (danger); else the backend's short
+  // status text; else a plain status word.
+  const statusText = needsYou
+    ? "needs you"
+    : (term.statusLine && term.statusLine.text) || STATUS_WORD[term.status] || "";
+  const statusTone = needsYou ? "danger" : quiet ? "muted" : "success";
+
+  const row = el(
+    "div",
+    {
+      class: "hg-trow" + (term.focused ? " hg-trow--selected" : "") + (quiet ? " hg-trow--quiet" : ""),
+      title: fullLabel,
+      attrs: {
+        role: "button",
+        tabindex: "0",
+        "aria-pressed": term.focused ? "true" : "false",
+        "aria-label": `Focus ${fullLabel}` + (needsYou ? " — needs you" : ""),
+        "data-terminal": term.id,
+      },
+    },
+    el(
+      "span",
+      { class: "hg-trow__dot" },
+      el("span", {
+        class: "hg-statusdot " + (STATUS_DOT[term.status] || "hg-statusdot--stale"),
+        attrs: { "aria-hidden": "true" },
+      })
+    ),
+    el(
+      "span",
+      { class: "hg-trow__term" },
+      el("span", {
+        class: "hg-provider " + prov.cls,
+        title: prov.label,
+        attrs: { "aria-hidden": "true" },
+        text: prov.glyph,
+      }),
+      el("span", { class: "hg-trow__id", text: term.id })
+    ),
+    el("span", { class: "hg-trow__focus", text: (term.story && term.story.title) || "—" }),
+    el("span", { class: "hg-trow__status hg-trow__status--" + statusTone, text: statusText }),
+    el("span", { class: "hg-trow__age hg-card__fresh--" + toneKey, text: term.freshnessLabel || "" })
+  );
+
+  const activate = () => onFocus && onFocus(term.id);
+  row.addEventListener("click", activate);
+  row.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      activate();
+    }
+  });
+  return row;
+}
+
+/**
+ * Draw (or redraw) the triage as a process table: a column-hint header + a
+ * height-capped, scrollable body of one-line lane rows. Lanes that NEED YOU
+ * float to the top (then a divider), so triage is "the stuck ones are already
+ * on top," not "read all of them." The 120px cap (CSS) keeps a high terminal
+ * count from ever swallowing the trail below — at scale it scrolls instead.
+ */
 export function renderTriage(mountEl, terminals, opts = {}) {
   clear(mountEl);
   const list = Array.isArray(terminals) ? terminals : [];
   if (list.length === 0) {
-    // cold / no lanes — a calm placeholder rather than an empty grid.
+    // cold / no lanes — a calm placeholder rather than an empty table.
     mountEl.append(
       el(
         "ae-empty-state",
@@ -320,17 +408,42 @@ export function renderTriage(mountEl, terminals, opts = {}) {
     );
     return;
   }
-  // list semantics: the mosaic is a list of clickable lanes. The card itself is
-  // role="button"; we wrap each in a role="listitem" so a screen reader gets the
-  // "N items" count + structural boundary without double-roling the card (H3).
-  const grid = el("div", {
-    class: "hg-mosaic",
+
+  // needs-you-first (stable within each group — preserves the backend's order).
+  const needs = [];
+  const rest = [];
+  for (const t of list) {
+    (t.status === "needs-you" || (t.statusLine && t.statusLine.kind === "needs-you") ? needs : rest).push(t);
+  }
+
+  const table = el("div", { class: "hg-triage-table" });
+  table.append(
+    el(
+      "div",
+      { class: "hg-triage__head", attrs: { "aria-hidden": "true" } },
+      el("span", { class: "hg-trow__dot" }),
+      el("span", { class: "hg-trow__term", text: "term" }),
+      el("span", { class: "hg-trow__focus", text: "focus" }),
+      el("span", { class: "hg-trow__status", text: "status" }),
+      el("span", { class: "hg-trow__age", text: "age" })
+    )
+  );
+
+  // list semantics: a list of clickable lanes; each row is role="button", wrapped
+  // in a role="listitem" so AT gets the "N items" count without double-roling.
+  const body = el("div", {
+    class: "hg-triage__scroll hg-scroll",
     attrs: { role: "list", "aria-label": `${list.length} terminal${list.length === 1 ? "" : "s"}` },
   });
-  for (const t of list) {
-    grid.append(el("div", { class: "hg-mosaic__item", attrs: { role: "listitem" } }, renderTriageCard(t, opts)));
+  const add = (t) => body.append(el("div", { attrs: { role: "listitem" } }, renderTriageRow(t, opts)));
+  needs.forEach(add);
+  if (needs.length && rest.length) {
+    body.append(el("div", { class: "hg-triage__divider", attrs: { "aria-hidden": "true" } }));
   }
-  mountEl.append(grid);
+  rest.forEach(add);
+
+  table.append(body);
+  mountEl.append(table);
 }
 
 // ==========================================================================

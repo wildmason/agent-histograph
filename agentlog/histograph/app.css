@@ -195,58 +195,150 @@ body {
   margin: 0 0 var(--ae-space-3);
 }
 
-.hg-mosaic {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--ae-space-3);
+/* --------------------------------------------------------------------------
+   Triage — the process table. A compact, needs-you-first list of lanes in a
+   height-capped scroll body, so it can never eat the window the way the old
+   2×2 ae-card mosaic did (it wrapped to ~290px). Columns are locked so the eye
+   scans straight down status + age. Token-driven: the dots, provider tints, and
+   freshness tones are the same --ae-* classes the cards used.
+   -------------------------------------------------------------------------- */
+.hg-triage-table {
+  display: flex;
+  flex-direction: column;
 }
 
-/* listitem wrapper fills its grid cell and lets the card fill it, so the list
-   semantics (H3) don't disturb the mosaic geometry. */
-.hg-mosaic__item {
+/* column-hint header — a presentational scannability cue (aria-hidden). */
+.hg-triage__head {
   display: flex;
+  align-items: center;
+  gap: var(--ae-space-2);
+  padding: 0 var(--ae-space-2) var(--ae-space-1);
+  font-family: var(--hg-mono);
+  font-size: 0.5rem;
+  letter-spacing: var(--hg-tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--ae-color-fg-subtle);
+}
+/* the focus-column header must not inherit a row's bold fg styling. */
+.hg-triage__head .hg-trow__focus {
+  color: inherit;
+  font-weight: inherit;
+}
+
+/* height-capped, scrollable body — at most 120px, then it scrolls. This cap is
+   what keeps a high lane count from ever swallowing the trail below. */
+.hg-triage__scroll {
+  max-height: 120px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ae-space-px);
+}
+
+.hg-triage__divider {
+  height: var(--ae-border-width-1);
+  background: var(--ae-color-border-subtle);
+  margin: var(--ae-space-1) var(--ae-space-2);
+}
+
+/* one lane row — clickable, keyboard-operable, columns aligned to the header. */
+.hg-trow {
+  display: flex;
+  align-items: center;
+  gap: var(--ae-space-2);
+  padding: var(--ae-space-1) var(--ae-space-2);
+  border-radius: var(--ae-radius-sm);
+  cursor: pointer;
+  min-width: 0;
+  transition: background var(--ae-duration-fast) var(--ae-easing-ease-out);
+}
+.hg-trow:hover {
+  background: var(--ae-color-hover-overlay);
+}
+.hg-trow:focus-visible {
+  outline: var(--ae-focus-ring-width) var(--ae-focus-ring-style) var(--ae-color-focus-ring);
+  outline-offset: calc(-1 * var(--ae-focus-ring-width));
+}
+/* the focused lane — accent inset bar + a raised surface so it reads selected. */
+.hg-trow--selected {
+  background: var(--ae-color-bg-elevated);
+  box-shadow: inset 2px 0 0 var(--ae-color-accent);
+}
+
+/* columns (header + rows share these basis widths so they line up). */
+.hg-trow__dot {
+  flex: 0 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.hg-trow__term {
+  flex: 0 0 84px;
+  display: flex;
+  align-items: center;
+  gap: var(--ae-space-2);
   min-width: 0;
 }
-.hg-mosaic__item > .hg-card {
+.hg-trow__id {
+  font-family: var(--hg-mono);
+  font-size: var(--ae-font-size-xs);
+  color: var(--ae-color-fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hg-trow__focus {
   flex: 1 1 auto;
   min-width: 0;
+  font-size: var(--ae-font-size-sm);
+  font-weight: var(--ae-font-weight-semibold);
+  color: var(--ae-color-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hg-trow__status {
+  flex: 0 0 64px;
+  text-align: right;
+  font-family: var(--hg-mono);
+  font-size: var(--ae-font-size-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hg-trow__status--danger {
+  color: var(--ae-color-danger);
+  font-weight: var(--ae-font-weight-bold);
+}
+.hg-trow__status--success { color: var(--ae-color-success); }
+.hg-trow__status--muted { color: var(--ae-color-fg-subtle); }
+.hg-trow__age {
+  flex: 0 0 30px;
+  text-align: right;
+  font-family: var(--hg-mono);
+  font-size: var(--ae-font-size-xs);
 }
 
-/* --------------------------------------------------------------------------
-   Triage-card focus affordances. ae-card's host has no border-radius and no
-   :focus-visible ring of its own — radius + overflow live on the inner
-   ::part(card). So BOTH the focused-cell ring and the keyboard focus ring are
-   driven through ::part(card), which clips them to the rounded corners. (M2/M3)
-   -------------------------------------------------------------------------- */
-
-/* focused-cell ring — an accent inset ring on the rounded inner surface, so it
-   never paints a square inside the radius. Layered as a box-shadow on the part
-   (NOT the --ae-card-border token) so a card that is BOTH focused and needs-you
-   keeps its danger border tint AND shows the focus ring. */
-.hg-card[aria-pressed="true"]::part(card) {
-  box-shadow:
-    inset 0 0 0 1px color-mix(in oklch, var(--ae-color-accent) 55%, transparent),
-    var(--ae-shadow-xs);
+/* quiet (stale / parked / done) lanes read dimmer. */
+.hg-trow--quiet .hg-trow__focus,
+.hg-trow--quiet .hg-trow__id {
+  color: var(--ae-color-fg-muted);
+  font-weight: var(--ae-font-weight-normal);
 }
 
-/* keyboard focus — a real, theme-driven focus ring on the rounded part. ae-card
-   ships none for the interactive host, so without this a keyboard user has no
-   visible focus on the triage cards at all. */
-.hg-card:focus-visible {
-  outline: none;
+/* thin, theme-toned scrollbar for the capped body. */
+.hg-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ae-color-border-strong) transparent;
 }
-.hg-card:focus-visible::part(card) {
-  outline: var(--ae-focus-ring-width) var(--ae-focus-ring-style) var(--ae-color-focus-ring);
-  outline-offset: var(--ae-focus-ring-offset);
+.hg-scroll::-webkit-scrollbar { width: 8px; }
+.hg-scroll::-webkit-scrollbar-track { background: transparent; }
+.hg-scroll::-webkit-scrollbar-thumb {
+  background: var(--ae-color-border-strong);
+  border-radius: var(--ae-radius-full);
 }
-
-/* Degrade gracefully beyond 6 lanes: a single very tall column would scroll
-   the triage region, so cap card count visually by keeping the grid dense. */
-@media (max-width: 520px) {
-  .hg-mosaic {
-    grid-template-columns: 1fr;
-  }
-}
+.hg-scroll::-webkit-scrollbar-thumb:hover { background: var(--ae-color-fg-subtle); }
 
 /* --------------------------------------------------------------------------
    Focus region — the hero. Pinned epic band + active-story header, scrolling
