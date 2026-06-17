@@ -3,10 +3,10 @@
 
 Codex 0.140 supports PostToolUse. This wrapper normalizes likely Codex hook
 payload spellings into the existing passive-facts parser, then writes to the
-Codex activity ledger namespace. It is deliberately fail-open and performs no
-model calls.
+Codex activity ledger namespace. When capture is armed, it also scrapes recent
+conversation-visible assistant text for the same `intent` breadcrumb Claude
+emits. It is deliberately fail-open and performs no model calls.
 """
-import json
 import os
 import sys
 
@@ -16,62 +16,10 @@ import codex_common as C
 import posttooluse as PT
 
 
-def _dictish(value):
-    if isinstance(value, dict):
-        return value
-    if isinstance(value, str) and value.strip():
-        try:
-            parsed = json.loads(value)
-            return parsed if isinstance(parsed, dict) else {}
-        except Exception:
-            return {}
-    return {}
-
-
-def _nested(d, *path):
-    cur = d
-    for key in path:
-        if not isinstance(cur, dict):
-            return None
-        cur = cur.get(key)
-    return cur
-
-
-def _tool_name(data):
-    return (
-        data.get("tool_name")
-        or data.get("toolName")
-        or data.get("tool")
-        or data.get("name")
-        or _nested(data, "tool_call", "name")
-        or _nested(data, "toolCall", "name")
-        or _nested(data, "tool", "name")
-        or ""
-    )
-
-
-def _tool_input(data):
-    for key in ("tool_input", "toolInput", "input", "arguments", "args"):
-        value = data.get(key)
-        parsed = _dictish(value)
-        if parsed:
-            return parsed
-    for path in (
-        ("tool_call", "arguments"),
-        ("toolCall", "arguments"),
-        ("tool", "input"),
-        ("tool", "arguments"),
-    ):
-        parsed = _dictish(_nested(data, *path))
-        if parsed:
-            return parsed
-    return {}
-
-
 def codex_tool_use_record(data, now_iso=None):
     normalized = {
-        "tool_name": _tool_name(data),
-        "tool_input": _tool_input(data),
+        "tool_name": C.hook_tool_name(data),
+        "tool_input": C.hook_tool_input(data),
         "session_id": C.hook_session_id(data) or "unknown",
         "cwd": C.hook_cwd(data),
     }
@@ -81,16 +29,49 @@ def codex_tool_use_record(data, now_iso=None):
     return rec
 
 
+def codex_intent_record(data, now_iso=None):
+    sid = C.hook_session_id(data) or "unknown"
+    cwd = C.hook_cwd(data)
+    tpath = C.hook_transcript_path(data, session_id=sid, cwd=cwd)
+    if not tpath:
+        return None
+    rec = PT.intent_record(
+        {"session_id": sid, "cwd": cwd},
+        C.tail_codex_assistant_text(tpath),
+        now_iso=now_iso,
+    )
+    if rec:
+        rec["host"] = C.HOST
+    return rec
+
+
+def maybe_capture_intent(data):
+    rec = codex_intent_record(data)
+    if rec is None:
+        return
+    key = rec["title"] + "\x1f" + rec["why"]
+    marker_sid = C.state_id(rec["session_id"])
+    if A.last_intent_key(marker_sid) == key:
+        return
+    if C.append_activity(rec):
+        A.set_intent_key(marker_sid, key)
+
+
 def main():
-    data = A.read_stdin_json()
     if A.disabled():
         sys.exit(0)
+    data = A.read_stdin_json()
     try:
         rec = codex_tool_use_record(data)
         if rec:
             C.append_activity(rec)
     except Exception as e:
         A.log("codex posttooluse hook error (fail-open): %r" % e)
+    if C.armed():
+        try:
+            maybe_capture_intent(data)
+        except Exception as e:
+            A.log("codex posttooluse intent capture error (fail-open): %r" % e)
     sys.exit(0)
 
 

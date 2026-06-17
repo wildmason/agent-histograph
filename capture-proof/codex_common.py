@@ -22,6 +22,8 @@ ARM_FILE = os.path.join(A.AGENTLOG_DIR, "codex.capture-active")
 CODEX_HOME = os.environ.get("CODEX_HOME", os.path.join(os.path.expanduser("~"), ".codex"))
 CODEX_BIN = os.environ.get("AGENTLOG_CODEX_BIN") or ("codex.cmd" if os.name == "nt" else "codex")
 MAX_ARG_CHARS = int(os.environ.get("AGENTLOG_CODEX_MAX_ARG_CHARS", "1200"))
+HERE = os.path.dirname(os.path.abspath(__file__))
+CHECKPOINT_SCHEMA = os.path.join(HERE, "checkpoint.schema.json")
 
 
 def append_activity(obj):
@@ -56,6 +58,48 @@ def _nested(d, *path):
             return None
         cur = cur.get(key)
     return cur
+
+
+def dictish(value):
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def hook_tool_name(data):
+    return (
+        data.get("tool_name")
+        or data.get("toolName")
+        or data.get("tool")
+        or data.get("name")
+        or _nested(data, "tool_call", "name")
+        or _nested(data, "toolCall", "name")
+        or _nested(data, "tool", "name")
+        or ""
+    )
+
+
+def hook_tool_input(data):
+    for key in ("tool_input", "toolInput", "input", "arguments", "args"):
+        parsed = dictish(data.get(key))
+        if parsed:
+            return parsed
+    for path in (
+        ("tool_call", "arguments"),
+        ("toolCall", "arguments"),
+        ("tool", "input"),
+        ("tool", "arguments"),
+    ):
+        parsed = dictish(_nested(data, *path))
+        if parsed:
+            return parsed
+    return {}
 
 
 def hook_session_id(data):
@@ -184,6 +228,50 @@ def _short_json_text(value, cap=MAX_ARG_CHARS):
     return s
 
 
+def tail_codex_assistant_text(path, max_bytes=131072, max_messages=24):
+    """Return recent conversation-visible Codex assistant text.
+
+    This intentionally reads only `event_msg/agent_message` rows from the tail of
+    the transcript. Tool outputs, developer messages, and raw response items stay
+    out of the intent scrape.
+    """
+    if not path or not os.path.exists(path):
+        return ""
+    try:
+        size = os.path.getsize(path)
+        start = max(0, size - max_bytes)
+        with open(path, "rb") as f:
+            f.seek(start)
+            chunk = f.read()
+        text = chunk.decode("utf-8", errors="replace")
+        lines = text.splitlines()
+        if start > 0 and lines:
+            lines = lines[1:]  # drop a potentially partial JSONL row
+        out = []
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                o = json.loads(line)
+            except Exception:
+                continue
+            if o.get("type") != "event_msg":
+                continue
+            payload = o.get("payload") if isinstance(o.get("payload"), dict) else {}
+            if payload.get("type") != "agent_message":
+                continue
+            txt = _payload_text(payload, "message", "text").strip()
+            if txt:
+                out.append(txt)
+        if max_messages and len(out) > max_messages:
+            out = out[-max_messages:]
+        return "\n\n".join(out)
+    except Exception as e:
+        A.log("tail_codex_assistant_text error: %r" % e)
+        return ""
+
+
 def read_codex_transcript(path):
     """Return [{role,text,tools,ts}] from a Codex session JSONL.
 
@@ -231,7 +319,7 @@ def read_codex_transcript(path):
     return msgs
 
 
-def codex_exec(instruction, context_text, cwd="", timeout=300):
+def codex_exec(instruction, context_text, cwd="", timeout=300, output_schema=CHECKPOINT_SCHEMA):
     """Run headless Codex for extraction with hooks disabled and no persistence."""
     child_env = dict(os.environ)
     child_env["AGENTLOG_DISABLE"] = "1"
@@ -262,6 +350,8 @@ def codex_exec(instruction, context_text, cwd="", timeout=300):
             "-o",
             out_path,
         ]
+        if output_schema:
+            argv.extend(["--output-schema", output_schema])
         model = os.environ.get("AGENTLOG_CODEX_MODEL")
         if model:
             argv.extend(["-m", model])

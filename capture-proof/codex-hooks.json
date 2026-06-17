@@ -13,6 +13,18 @@
         ]
       }
     ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/Matt/Documents/development/agent-histograph/capture-proof/codex_pretooluse.py",
+            "commandWindows": "python C:/Users/Matt/Documents/development/agent-histograph/capture-proof/codex_pretooluse.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "hooks": [

@@ -24,6 +24,14 @@ import agentlog_common as A      # path constants + fail-open helpers (shared on
 import rubric                    # falsifiable material-decision / high-class checks (§4/§11)
 
 
+# Lifecycle / diagnostic activity records that are NOT real work. They must not
+# reset freshness, resolve an ask, or keep a lane active by themselves.
+META_ACTIVITY_TYPES = frozenset((
+    "session_end", "capture_attempt", "capture_result", "suspected_gap",
+    "human_ack", "pretool_material_signal",
+))
+
+
 # --------------------------------------------------------------------------- #
 # §10 — sanitization
 # --------------------------------------------------------------------------- #
@@ -204,7 +212,8 @@ class Ledger:
 
         stops = [a for a in acts if a.get("type") == "stop_boundary"]
         boundaries_since = sum(1 for a in stops if parse_ts(a.get("ts")) > last_cp_ts)
-        all_ts = [parse_ts(a.get("ts")) for a in acts] + [parse_ts(c.get("captured_at")) for c in cps]
+        real_acts = [a for a in acts if a.get("type") not in META_ACTIVITY_TYPES]
+        all_ts = [parse_ts(a.get("ts")) for a in real_acts] + [parse_ts(c.get("captured_at")) for c in cps]
         last_activity_ts = max(all_ts) if all_ts else 0.0
         idle = now_epoch - last_activity_ts if last_activity_ts else 1e18
 
@@ -214,10 +223,8 @@ class Ledger:
         # (stop_boundary / tool_use); bounded by now so a future-stamped record can't
         # retro-resolve a currently-open ask. This is why "needs you" no longer sticks
         # forever after you answer and the agent resumes.
-        _NONWORK = ("session_end", "capture_attempt", "capture_result",
-                    "suspected_gap", "human_ack")
         _work_ts = [parse_ts(c.get("captured_at")) for c in cps]
-        _work_ts += [parse_ts(a.get("ts")) for a in acts if a.get("type") not in _NONWORK]
+        _work_ts += [parse_ts(a.get("ts")) for a in real_acts]
         _work_ts = [t for t in _work_ts if t and t <= now_epoch]
         latest_work = max(_work_ts) if _work_ts else 0.0
 

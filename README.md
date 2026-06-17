@@ -80,7 +80,7 @@ Then **arm** it for the sessions you want on the board, and start/restart Claude
 
 Un-armed, the hooks only passively log and cannot disrupt a session.
 `AGENTLOG_DISABLE=1` no-ops everything. `python capture-proof/install_hooks.py --uninstall` removes them.
-Codex users: `~/.codex/hooks.json` from `capture-proof/codex-hooks.json` (repoint the paths) adds Codex capture; normal Codex TUI sessions must approve hooks with `/hooks`. Keep that file strict JSON with `hooks` as the only top-level key, because Codex rejects helper fields such as `_comment`. The Codex template includes a passive `PostToolUse` hook for live activity, but shell/tool payload details remain best-effort compared with the Claude Code producer.
+Codex users: `~/.codex/hooks.json` from `capture-proof/codex-hooks.json` (repoint the paths) adds Codex capture; normal Codex TUI sessions must approve hooks with `/hooks`. Keep that file strict JSON with `hooks` as the only top-level key, because Codex rejects helper fields such as `_comment`. The Codex template includes a passive `PostToolUse` hook for live activity, armed-only declared-intent capture from `intent: <what> -- <why>` assistant lines, and an armed-only `PreToolUse` materiality reminder/audit for planned billing/license/auth/migration/API/dependency/data-loss work. Quiet Codex checkpoints are extracted through `codex exec --output-schema capture-proof/checkpoint.schema.json` so prompt-injection audit refusals cannot replace the checkpoint ledger shape; shell/tool payload details remain best-effort compared with the Claude Code producer.
 
 ### 2. See the board
 
@@ -173,7 +173,8 @@ agent-histograph/
 └── capture-proof/            # Claude Code (+ Codex) capture producer
     ├── install_hooks.py      # portable hook registration into settings.json
     ├── *.py                  # the lifecycle hooks + the extractor
-    └── capture_prompt.txt    # the pinned checkpoint-extraction prompt
+    ├── capture_prompt.txt    # the pinned checkpoint-extraction prompt
+    └── checkpoint.schema.json # Codex exec response schema for quiet checkpoints
 ```
 
 Run the view tests: `python -m unittest discover -s agentlog -p 'test_*.py'`.
