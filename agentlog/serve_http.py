@@ -12,7 +12,7 @@ Routes:
   GET  /                 -> histograph/index.html (page shell)
   GET  /api/state        -> serve_state.build_state(...)              (application/json)
   GET  /api/epics        -> {"epics": serve_epics.list_epics(...)}    (application/json)
-  GET  /app.css|/app.js|/render.js|/theme.js|/markers.css|/index.html -> histograph/<file>
+  GET  /app.css|/app.js|/render.js|/theme.js|/zoom.js|/markers.css|/index.html -> histograph/<file>
   GET  /static/**        -> vendored aegis assets, PATH-TRAVERSAL GUARDED
   POST /api/focus        -> persist focus {"terminalId": ...}; 200 {"ok": true}
   POST /api/dismiss      -> close out a lane (hidden until new work); 200 {"ok": true}
@@ -54,6 +54,7 @@ _PAGE_FILES = {
     "/app.js": "app.js",
     "/render.js": "render.js",
     "/theme.js": "theme.js",
+    "/zoom.js": "zoom.js",
     "/markers.css": "markers.css",
 }
 

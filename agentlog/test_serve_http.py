@@ -310,5 +310,46 @@ class TestDismissEndpoint(_Server):
         self.assertIn("terminalId", json.loads(body).get("error", ""))
 
 
+# --------------------------------------------------------------------------- #
+# Regression guard — every root-level frontend asset the page imports MUST be in
+# the serve_http allowlist. A module added to histograph/ but NOT registered 404s,
+# and an ES-module import 404 takes the WHOLE graph down: app.js never executes,
+# so the settings modal goes dead and polling never starts (the board stops
+# painting lanes). This is the guard for zoom.js having shipped unregistered.
+# --------------------------------------------------------------------------- #
+class TestFrontendModulesServed(_Server):
+    HG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "histograph")
+
+    def _referenced_root_assets(self):
+        import glob, re
+        refs = set()
+        # root-level ES imports across every JS module (`from "/x.js"` / `import "/x.js"`).
+        # /static/** paths carry interior slashes so they never match — those are the
+        # traversal-guarded static handler's job, covered elsewhere.
+        for js in glob.glob(os.path.join(self.HG, "*.js")):
+            with open(js, encoding="utf-8") as fh:
+                src = fh.read()
+            refs.update(re.findall(r'(?:from|import)\s+["\'](/[\w.\-]+\.js)["\']', src))
+        # <script src="/x.js"> + <link href="/x.css"> in the page shell.
+        with open(os.path.join(self.HG, "index.html"), encoding="utf-8") as fh:
+            html = fh.read()
+        refs.update(re.findall(r'<script[^>]+src=["\'](/[\w.\-]+\.js)["\']', html))
+        refs.update(re.findall(r'<link[^>]+href=["\'](/[\w.\-]+\.css)["\']', html))
+        return refs
+
+    def test_every_referenced_root_asset_is_served_200(self):
+        refs = self._referenced_root_assets()
+        # non-tautological: assert the parse actually found the known entry points, so a
+        # broken regex can't pass by finding nothing to check.
+        self.assertIn("/app.js", refs)
+        self.assertIn("/zoom.js", refs)
+        broken = []
+        for path in sorted(refs):
+            status, _, _ = self._get(path)
+            if status != 200:
+                broken.append("%s -> %d" % (path, status))
+        self.assertFalse(broken, "frontend assets that 404 (a JS one breaks the whole module graph): %s" % broken)
+
+
 if __name__ == "__main__":
     unittest.main()
