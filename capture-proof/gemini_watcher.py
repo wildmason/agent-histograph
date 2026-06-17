@@ -118,6 +118,7 @@ def process_line(session_id, line):
     if step_type == "PLANNER_RESPONSE":
         thinking = rec.get("thinking", "")
         content = rec.get("content", "")
+        next_action = None
         
         # Scrape intent and next sigils directly from content
         if content:
