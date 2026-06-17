@@ -1,5 +1,4 @@
 {
-  "_comment": "Install as ~/.codex/hooks.json. New/changed hooks must be trusted in Codex with /hooks. Codex 0.137 does not pass shell_environment_policy.set to hook subprocesses, so persistent arming uses ~/.agent-histograph/codex.capture-active (delete that file to disarm after the Gate-B experiment). AGENTLOG_DISABLE=1 still no-ops everything.",
   "hooks": {
     "SessionStart": [
       {
@@ -7,9 +6,21 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/Matt/Documents/development/@wildmason/control-plane/capture-proof/codex_session_start.py",
-            "commandWindows": "python C:/Users/Matt/Documents/development/@wildmason/control-plane/capture-proof/codex_session_start.py",
+            "command": "python C:/Users/Matt/Documents/development/agent-histograph/capture-proof/codex_session_start.py",
+            "commandWindows": "python C:/Users/Matt/Documents/development/agent-histograph/capture-proof/codex_session_start.py",
             "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/Matt/Documents/development/agent-histograph/capture-proof/codex_posttooluse.py",
+            "commandWindows": "python C:/Users/Matt/Documents/development/agent-histograph/capture-proof/codex_posttooluse.py",
+            "timeout": 5
           }
         ]
       }
@@ -19,8 +30,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/Matt/Documents/development/@wildmason/control-plane/capture-proof/codex_stop_capture.py",
-            "commandWindows": "python C:/Users/Matt/Documents/development/@wildmason/control-plane/capture-proof/codex_stop_capture.py",
+            "command": "python C:/Users/Matt/Documents/development/agent-histograph/capture-proof/codex_stop_capture.py",
+            "commandWindows": "python C:/Users/Matt/Documents/development/agent-histograph/capture-proof/codex_stop_capture.py",
             "timeout": 15
           }
         ]
@@ -32,8 +43,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/Matt/Documents/development/@wildmason/control-plane/capture-proof/codex_precompact_marker.py",
-            "commandWindows": "python C:/Users/Matt/Documents/development/@wildmason/control-plane/capture-proof/codex_precompact_marker.py",
+            "command": "python C:/Users/Matt/Documents/development/agent-histograph/capture-proof/codex_precompact_marker.py",
+            "commandWindows": "python C:/Users/Matt/Documents/development/agent-histograph/capture-proof/codex_precompact_marker.py",
             "timeout": 10
           }
         ]

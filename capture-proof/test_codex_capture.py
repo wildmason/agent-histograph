@@ -10,6 +10,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import codex_capture_extract as CE
 import codex_common as C
+import codex_posttooluse as CPT
 
 
 def _write_codex_session(path, sid="019e-test", cwd="C:\\repo\\Demo"):
@@ -130,6 +131,44 @@ class TestCodexExecSafety(unittest.TestCase):
         self.assertNotIn("AGENTLOG_CAPTURE_ACTIVE", seen["env"])
         if os.name == "nt":
             self.assertTrue(seen["creationflags"] & 0x08000000)
+
+
+class TestCodexPostToolUse(unittest.TestCase):
+    def test_camel_case_payload_records_command_in_codex_namespace(self):
+        rec = CPT.codex_tool_use_record({
+            "sessionId": "cx1",
+            "cwd": "C:\\repo\\Demo",
+            "toolName": "Bash",
+            "toolInput": {"command": "python -m unittest"},
+        }, now_iso="2026-06-16T23:50:00-03:00")
+        self.assertEqual(rec["host"], "codex")
+        self.assertEqual(rec["session_id"], "cx1")
+        self.assertEqual(rec["tool"], "Bash")
+        self.assertEqual(rec["command"], "python -m unittest")
+
+    def test_json_arguments_payload_is_parsed(self):
+        rec = CPT.codex_tool_use_record({
+            "session_id": "cx2",
+            "tool_call": {
+                "name": "mcp__filesystem__read_file",
+                "arguments": json.dumps({"path": "C:/repo/README.md"}),
+            },
+        })
+        self.assertEqual(rec["host"], "codex")
+        self.assertEqual(rec["tool"], "mcp__filesystem__read_file")
+        self.assertEqual(rec["target"], "README.md")
+
+    def test_apply_patch_extracts_mutated_paths(self):
+        rec = CPT.codex_tool_use_record({
+            "session_id": "cx3",
+            "toolName": "apply_patch",
+            "toolInput": {
+                "patch": "*** Begin Patch\n*** Update File: capture-proof/codex-hooks.json\n@@\n*** End Patch\n"
+            },
+        })
+        self.assertEqual(rec["tool"], "apply_patch")
+        self.assertEqual(rec["paths"], ["capture-proof/codex-hooks.json"])
+        self.assertNotIn("target", rec)
 
 
 if __name__ == "__main__":
