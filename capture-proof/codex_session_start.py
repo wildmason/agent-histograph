@@ -21,13 +21,15 @@ CONTRACT = (
 
 
 def main():
-    data = A.read_stdin_json()
     if A.disabled():
         sys.exit(0)
+    data = A.read_stdin_json()
     sid = C.hook_session_id(data) or "unknown"
     cwd = C.hook_cwd(data)
+    tpath = C.hook_transcript_path(data, session_id=sid, cwd=cwd)
     source = data.get("source") or data.get("hook_event_name") or data.get("hookEventName") or "startup"
     try:
+        watcher = C.start_process_watcher(sid, cwd=cwd, source=source, transcript_path=tpath or "")
         C.append_activity({
             "type": "session_start",
             "session_id": sid,
@@ -35,6 +37,7 @@ def main():
             "branch": A.git_branch(cwd),
             "source": source,
             "armed": C.armed(),
+            "process_watcher": watcher,
             "ts": A.now_iso(),
         })
         A.log("codex session_start source=%s armed=%s" % (source, C.armed()))

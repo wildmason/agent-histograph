@@ -12,6 +12,7 @@ import codex_capture_extract as CE
 import codex_common as C
 import codex_pretooluse as CPRE
 import codex_posttooluse as CPT
+import codex_process_watcher as CW
 import replay_pilot as RP
 
 
@@ -94,6 +95,162 @@ class TestCodexTranscript(unittest.TestCase):
                 for k, v in saved_env.items():
                     if v is not None:
                         os.environ[k] = v
+
+
+class TestCodexProcessWatcher(unittest.TestCase):
+    def test_selects_codex_exe_ancestor_not_hook_shims(self):
+        chain = [
+            {"pid": 40, "ppid": 30, "name": "python.exe",
+             "command": "python C:/repo/capture-proof/codex_session_start.py"},
+            {"pid": 30, "ppid": 20, "name": "cmd.exe", "command": "cmd /d /c python ..."},
+            {"pid": 20, "ppid": 10, "name": "codex.exe", "command": "codex.exe resume 019e"},
+            {"pid": 10, "ppid": 0, "name": "node.exe",
+             "command": "node C:/Users/Matt/AppData/Roaming/npm/node_modules/@openai/codex/bin/codex.js"},
+        ]
+        target = C.select_codex_tui_process(chain)
+        self.assertEqual(target["pid"], 20)
+
+    def test_selects_node_codex_ancestor_when_native_binary_absent(self):
+        chain = [
+            {"pid": 4, "ppid": 3, "name": "python", "command": "python codex_session_start.py"},
+            {"pid": 3, "ppid": 2, "name": "sh", "command": "sh -c python codex_session_start.py"},
+            {"pid": 2, "ppid": 1, "name": "node",
+             "command": "node /usr/local/lib/node_modules/@openai/codex/bin/codex.js"},
+        ]
+        target = C.select_codex_tui_process(chain)
+        self.assertEqual(target["pid"], 2)
+
+    def test_hook_script_name_is_not_a_codex_tui_process(self):
+        self.assertFalse(C.is_codex_tui_process({
+            "pid": 4,
+            "ppid": 3,
+            "name": "python.exe",
+            "command": "python C:/repo/capture-proof/codex_session_start.py",
+        }))
+
+    def test_start_process_watcher_passes_selected_pid_to_detached_helper(self):
+        with tempfile.TemporaryDirectory() as td:
+            old_state = C.A.STATE_DIR
+            old_dir = C.A.AGENTLOG_DIR
+            old_spawn = C.A.spawn_detached
+            old_target = C.codex_tui_process
+            seen = {}
+
+            def fake_spawn(argv):
+                seen["argv"] = argv
+                return True
+
+            C.A.AGENTLOG_DIR = td
+            C.A.STATE_DIR = os.path.join(td, "state")
+            C.A.spawn_detached = fake_spawn
+            C.codex_tui_process = lambda start_pid=None: {
+                "pid": 43210,
+                "ppid": 111,
+                "name": "codex.exe",
+                "command": "codex.exe resume cx-watch",
+            }
+            try:
+                result = C.start_process_watcher(
+                    "cx-watch",
+                    cwd="C:\\repo\\Demo",
+                    source="startup",
+                    transcript_path="C:\\repo\\Demo\\cx-watch.jsonl",
+                )
+            finally:
+                C.A.STATE_DIR = old_state
+                C.A.AGENTLOG_DIR = old_dir
+                C.A.spawn_detached = old_spawn
+                C.codex_tui_process = old_target
+
+        self.assertTrue(result["started"])
+        self.assertIn("codex_process_watcher.py", seen["argv"][1])
+        self.assertEqual(seen["argv"][seen["argv"].index("--pid") + 1], "43210")
+        self.assertEqual(seen["argv"][seen["argv"].index("--session") + 1], "cx-watch")
+
+    def test_watcher_records_process_exit_session_end(self):
+        with tempfile.TemporaryDirectory() as td:
+            env = dict(os.environ)
+            env["AGENTLOG_DIR"] = td
+            for key in ("AGENTLOG_DISABLE", "AGENTLOG_CAPTURE_ACTIVE",
+                        "AGENTLOG_CODEX_CAPTURE_ACTIVE"):
+                env.pop(key, None)
+            # Use an already-gone child pid: on Windows the process handle is not
+            # openable; on POSIX os.kill(pid, 0) fails after the parent reaps it.
+            child = subprocess.Popen([sys.executable, "-c", "pass"])
+            child.wait(timeout=5)
+            script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                  "codex_process_watcher.py")
+            proc = subprocess.run(
+                [sys.executable, script,
+                 "--session", "cx-exit",
+                 "--pid", str(child.pid),
+                 "--cwd", "C:\\repo\\Demo",
+                 "--source", "startup",
+                 "--process-name", "codex.exe",
+                 "--poll-secs", "0.05"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                env=env,
+                timeout=10,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            with open(os.path.join(td, "activity.codex.jsonl"), encoding="utf-8") as f:
+                rows = [json.loads(line) for line in f if line.strip()]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["type"], "session_end")
+        self.assertEqual(rows[0]["source"], "process_exit")
+        self.assertEqual(rows[0]["session_id"], "cx-exit")
+        self.assertEqual(rows[0]["pid"], child.pid)
+
+    def test_session_start_disable_is_zero_footprint_before_stdin_parse(self):
+        with tempfile.TemporaryDirectory() as parent:
+            ledger = os.path.join(parent, "ledger")
+            env = dict(os.environ)
+            env["AGENTLOG_DIR"] = ledger
+            env["AGENTLOG_DISABLE"] = "1"
+            script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                  "codex_session_start.py")
+            proc = subprocess.run(
+                [sys.executable, script],
+                input="{not json",
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                env=env,
+                timeout=10,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertEqual(proc.stdout, "")
+            self.assertFalse(os.path.exists(ledger))
+
+    def test_process_exit_capture_uses_session_end_trigger_when_armed(self):
+        with tempfile.TemporaryDirectory() as td:
+            old_arm = CW.C.armed
+            old_find = CW.C.find_session_path
+            old_size = CW.C.transcript_size
+            old_state = CW.A.load_state
+            old_spawn = CW.A.spawn_detached
+            seen = {}
+            tpath = os.path.join(td, "cx.jsonl")
+            with open(tpath, "w", encoding="utf-8") as f:
+                f.write("{}\n")
+            CW.C.armed = lambda: True
+            CW.C.find_session_path = lambda session_id=None, cwd=None: tpath
+            CW.C.transcript_size = lambda path: 10
+            CW.A.load_state = lambda sid: {"last_capture_size": 0, "last_capture_at": 0}
+            CW.A.spawn_detached = lambda argv: seen.setdefault("argv", argv) or True
+            try:
+                self.assertTrue(CW.maybe_spawn_session_end_capture("cx-cap", td, ""))
+            finally:
+                CW.C.armed = old_arm
+                CW.C.find_session_path = old_find
+                CW.C.transcript_size = old_size
+                CW.A.load_state = old_state
+                CW.A.spawn_detached = old_spawn
+        self.assertEqual(seen["argv"][seen["argv"].index("--trigger") + 1], "session_end")
 
 
 class TestCodexPromptGuard(unittest.TestCase):

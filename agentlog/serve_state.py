@@ -53,7 +53,7 @@ _META_ACT_TYPES = frozenset((
 # session_end `source`/`reason` values that mean the human actually EXITED the
 # session (→ auto-drop the lane). "clear" is a context reset where the same
 # terminal keeps working, so it is deliberately NOT terminal.
-_TERMINAL_END_SOURCES = frozenset(("prompt_input_exit", "logout", "other"))
+_TERMINAL_END_SOURCES = frozenset(("prompt_input_exit", "logout", "other", "process_exit"))
 
 # decision classes that warrant a "milestone" marker + needs-attention weight
 _HIGH_CLASSES = {"billing", "license", "auth", "migration", "data_loss"}

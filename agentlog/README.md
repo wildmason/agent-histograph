@@ -250,7 +250,7 @@ parallel producers write, plus the CLI-authored ones:
 | `pretool_material_signal` | `{session_id, cwd, tool, classes:[...], paths?, command?, ts, host:"codex"}` | Codex PreToolUse armed-only materiality reminder/audit; meta, not real work |
 | `capture_attempt` | `{session_id, trigger, ts}` | quiet-pipeline observability |
 | `capture_result` | `{session_id, trigger, outcome:"written"\|"no_judgment"\|"failed"\|"skipped_lock"\|"skipped_cap"\|"skipped_breaker", checkpoint_id?, ts}` | quiet-pipeline observability |
-| `session_end` | `{session_id, cwd, source, armed, ts}` | producers |
+| `session_end` | `{session_id, cwd, source, armed, ts, pid?, process_name?}` | producers; Codex uses `source:"process_exit"` from the detached process watcher |
 | `cli_invocation` | `{command, project?, ts, host:"cli"}` | this CLI (A1, adoption evidence) |
 | `re_entry_question` | `{question_id:"q_<epoch-ms>", question, project, ts, host:"cli"}` | `agentlog question` |
 | `re_entry_answer` | `{question_id, elapsed_secs, wrong:bool, note, ts, host:"cli"}` | `agentlog answered` |

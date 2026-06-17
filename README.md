@@ -80,7 +80,7 @@ Then **arm** it for the sessions you want on the board, and start/restart Claude
 
 Un-armed, the hooks only passively log and cannot disrupt a session.
 `AGENTLOG_DISABLE=1` no-ops everything. `python capture-proof/install_hooks.py --uninstall` removes them.
-Codex users: `~/.codex/hooks.json` from `capture-proof/codex-hooks.json` (repoint the paths) adds Codex capture; normal Codex TUI sessions must approve hooks with `/hooks`. Keep that file strict JSON with `hooks` as the only top-level key, because Codex rejects helper fields such as `_comment`. The Codex template includes a passive `PostToolUse` hook for live activity, armed-only declared-intent capture from `intent: <what> -- <why>` assistant lines, and an armed-only `PreToolUse` materiality reminder/audit for planned billing/license/auth/migration/API/dependency/data-loss work. Quiet Codex checkpoints are extracted through `codex exec --output-schema capture-proof/checkpoint.schema.json` so prompt-injection audit refusals cannot replace the checkpoint ledger shape; shell/tool payload details remain best-effort compared with the Claude Code producer.
+Codex users: `~/.codex/hooks.json` from `capture-proof/codex-hooks.json` (repoint the paths) adds Codex capture; normal Codex TUI sessions must approve hooks with `/hooks`. Keep that file strict JSON with `hooks` as the only top-level key, because Codex rejects helper fields such as `_comment`. The Codex template includes a passive `PostToolUse` hook for live activity, armed-only declared-intent capture from `intent: <what> -- <why>` assistant lines, an armed-only `PreToolUse` materiality reminder/audit for planned billing/license/auth/migration/API/dependency/data-loss work, and a SessionStart-spawned detached process watcher that records `session_end source=process_exit` when the Codex TUI process exits. Quiet Codex checkpoints are extracted through `codex exec --output-schema capture-proof/checkpoint.schema.json` so prompt-injection audit refusals cannot replace the checkpoint ledger shape; shell/tool payload details remain best-effort compared with the Claude Code producer.
 
 ### 2. See the board
 
@@ -143,6 +143,7 @@ blank.
 | `AGENTLOG_PYTHON` | Explicit Python interpreter for the desktop app to spawn | auto-probes `py -3` / `python` / `python3` |
 | `AGENTLOG_CAPTURE_ACTIVE` | `1` arms capture for the session | unset (passive only) |
 | `AGENTLOG_DISABLE` | `1` no-ops all hooks | unset |
+| `AGENTLOG_CODEX_WATCH_PROCESS_EXIT` | `0` disables the Codex SessionStart process-exit watcher | enabled |
 
 A built/installed app can't see this source tree, so set `AGENTLOG_HOME` (and
 ensure Python is on PATH, or set `AGENTLOG_PYTHON`) on the machine you install on.

@@ -1225,6 +1225,16 @@ class TestSessionCloseOut(unittest.TestCase):
         state = self._state(cps, acts, now="2026-06-10T10:06:00-04:00")
         self.assertEqual(state["terminals"], [])
 
+    def test_codex_process_exit_session_end_drops_the_lane(self):
+        cps = [_cp("cx1", "2026-06-10T10:00:00-04:00", project="agent-histograph",
+                   host="codex")]
+        acts = [_act("tool_use", "cx1", "2026-06-10T10:00:00-04:00", tool="Bash",
+                     host="codex"),
+                _act("session_end", "cx1", "2026-06-10T10:05:00-04:00",
+                     source="process_exit", host="codex")]
+        state = self._state(cps, acts, now="2026-06-10T10:06:00-04:00")
+        self.assertEqual(state["terminals"], [])
+
     def test_clear_end_is_not_a_close(self):
         # /clear is a context reset, not a terminal exit -> the lane stays.
         cps = [_cp("s1", "2026-06-10T10:00:00-04:00", project="Mortar")]
