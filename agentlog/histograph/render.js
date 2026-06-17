@@ -652,10 +652,14 @@ function entryReversal(task) {
 
 // the highlighted NOW card — the live edge. A 'live' bloom carries the checkpoint
 // summary (+ its rationale); an 'activity' tip carries "tool · target". Pulsing
-// green NOW label + dot.
+// green NOW label + dot. When the live edge is a TOOL action (kind === "activity"),
+// it is a child of the task above and indents under it (hg-entry--child) so the
+// live tool tip lines up with the rest of the tool stream, not the task spine; a
+// 'live' checkpoint bloom is a task-level entry and stays at the root indent.
 function entryNow(task) {
   let title;
-  if (task.kind === "activity") {
+  const isTool = task.kind === "activity";
+  if (isTool) {
     const tool = task.tool || "tool";
     title = task.summary ? `${tool} · ${task.summary}` : tool;
   } else {
@@ -673,7 +677,7 @@ function entryNow(task) {
     el("div", { class: "hg-entry__title hg-entry__title--now", text: title })
   );
   if (task.detail) body.append(el("div", { class: "hg-entry__detail", text: task.detail }));
-  return el("div", { class: "hg-entry hg-entry--now" }, gutter, body);
+  return el("div", { class: "hg-entry hg-entry--now" + (isTool ? " hg-entry--child" : "") }, gutter, body);
 }
 
 // an earlier in-flight tool node (not the live edge) — faint telemetry threading
@@ -700,7 +704,9 @@ function entryActivity(task) {
   // the agent's first-party one-liner for this action (the tool's `description`),
   // a faint second line beneath the telemetry — "" renders nothing.
   if (task.detail) body.append(el("div", { class: "hg-entry__activity-desc", text: task.detail }));
-  return el("div", { class: "hg-entry hg-entry--activity" }, gutter, body);
+  // a tool node is a CHILD of the task above it: hg-entry--child indents it and
+  // draws the connector rail so it reads as subordinate, not a sibling task.
+  return el("div", { class: "hg-entry hg-entry--activity hg-entry--child" }, gutter, body);
 }
 
 // a declared-intent entry — the agent's first-party "what I'm doing and why", stated
@@ -716,19 +722,47 @@ function entryIntent(task) {
   );
 }
 
-// the ghosted next item — the latest next_action, dashed ○ + "next" label.
+// the ghosted next item — dashed ○ + "next" label. The text is the agent's OWN declared
+// next task (`▸ next:`) or planned next (TodoWrite), shown as first-party (volunteered ◈);
+// only when neither was stated does it fall back to the reconstructed next_action GUESS
+// (◇, read more tentatively). A declaration a later checkpoint overtook reads "may be
+// done". Surfacing provenance is the point: a guess must never look as authoritative as
+// the agent's own word. `source`/`stale` are backend-derived; undefined on an old payload
+// degrades to the reconstructed look.
 function entryPending(task) {
+  const source = task.source || "reconstructed";
+  const firstParty = source === "declared" || source === "todo";
+  const stale = !!task.stale;
   const gutter = el(
     "div",
     { class: "hg-entry__gutter" },
     el("span", { class: "hg-entry__nextlabel", text: "next" }),
     el("span", { class: "hg-entry__glyph hg-entry__glyph--pending", attrs: { "aria-hidden": "true" }, text: "○" })
   );
+  const body = entryBody(task, { titleCls: "hg-entry__title--next" });
+  // a quiet provenance row: the integrity glyph (◈ volunteered / ◇ reconstructed, the same
+  // vocabulary the rest of the trail uses) + a one-word source, so the reader can weight it.
+  const sourceLabel = source === "declared" ? "declared" : source === "todo" ? "from plan" : "guess";
+  const prov = el(
+    "div",
+    { class: "hg-entry__nextprov" },
+    entryIntegrity(firstParty ? "volunteered" : "reconstructed"),
+    el("span", { class: "hg-entry__nextsource", text: sourceLabel })
+  );
+  if (stale) {
+    prov.append(el("span", { class: "hg-entry__nextstale", text: "· may be done" }));
+  }
+  body.append(prov);
   return el(
     "div",
-    { class: "hg-entry hg-entry--next" },
+    {
+      class:
+        "hg-entry hg-entry--next" +
+        (firstParty ? " hg-entry--next-declared" : " hg-entry--next-guess") +
+        (stale ? " hg-entry--next-stale" : ""),
+    },
     gutter,
-    entryBody(task, { titleCls: "hg-entry__title--next" })
+    body
   );
 }
 

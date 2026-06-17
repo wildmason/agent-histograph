@@ -33,6 +33,10 @@ CONTRACT = (
     "histograph pre-loads that as the live task header with your own stated why, instead "
     "of waiting to reconstruct it — so your in-the-moment reasoning is captured verbatim, "
     "not inferred after the fact. One short line; never required. "
+    "You may likewise declare your NEXT planned task on its own line as `▸ next: <task>` "
+    "(optionally `▸ next: <task> — <why>`), e.g. as you finish or hand off a step. The "
+    "board shows that as the deterministic 'next' — and your TodoWrite plan feeds the same "
+    "'next' automatically — instead of an after-the-fact guess that is often wrong or stale. "
     "This never changes how you do the work."
 )
 

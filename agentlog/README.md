@@ -244,6 +244,10 @@ parallel producers write, plus the CLI-authored ones:
 | Type | Shape | Producer |
 |------|-------|----------|
 | `tool_use` | `{session_id, cwd, tool, paths:[…], command:"<redacted, ≤500>", ts}` | Claude PostToolUse passive facts |
+| `intent` | `{session_id, cwd, title, why, ts, host?}` | armed PostToolUse declared-intent scrape from assistant-authored `intent: <what> -- <why>` lines |
+| `next` | `{session_id, cwd, task, why, ts, host?}` | armed PostToolUse/Stop declared-NEXT scrape from assistant-authored `next: <task> -- <why>` lines — the first-party, deterministic "next" that supersedes the reconstructed `next_action` guess |
+| `todos` | `{session_id, cwd, items:[{content, status}], ts, host?}` | armed PostToolUse snapshot of the TodoWrite plan; serve derives the deterministic "next" from the first still-`pending` item |
+| `pretool_material_signal` | `{session_id, cwd, tool, classes:[...], paths?, command?, ts, host:"codex"}` | Codex PreToolUse armed-only materiality reminder/audit; meta, not real work |
 | `capture_attempt` | `{session_id, trigger, ts}` | quiet-pipeline observability |
 | `capture_result` | `{session_id, trigger, outcome:"written"\|"no_judgment"\|"failed"\|"skipped_lock"\|"skipped_cap"\|"skipped_breaker", checkpoint_id?, ts}` | quiet-pipeline observability |
 | `session_end` | `{session_id, cwd, source, armed, ts}` | producers |
@@ -256,6 +260,11 @@ Checkpoints may also carry `"integrity_class": "reconstructed_claim"` (quiet cap
 `"volunteered_claim"` (inline), surfaced as a `[reconstructed]` / `[volunteered]` tag.
 `reconstructed_claim` does **not** count as low-integrity on its own — only `_valid is
 False` or decisions-without-verification do.
+
+Codex quiet checkpoints are structurally constrained with
+`capture-proof/checkpoint.schema.json` via `codex exec --output-schema`; this keeps
+the producer from writing alternate prompt-injection audit shapes such as
+`audit_result` in place of checkpoint records.
 
 ## Files
 

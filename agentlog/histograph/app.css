@@ -285,7 +285,10 @@ body {
   background: color-mix(in oklch, var(--ae-color-accent) 10%, var(--ae-color-bg));
 }
 
-/* columns: dot · provider · term·project (shrinks) · task (flexes) · pill · age. */
+/* columns: dot · provider · project (PRIORITY, up to 60%) · task (flexes, ellipsizes
+   FIRST) · pill · age. The project name is the lane's identity — especially as the fleet
+   grows and lanes must be told apart at a glance — so it holds its width and the task
+   summary yields space before the name truncates. */
 .hg-trow__dot {
   flex: 0 0 12px;
   display: flex;
@@ -294,7 +297,7 @@ body {
 }
 .hg-trow__name {
   flex: 0 1 auto;
-  max-width: 42%;
+  max-width: 60%;
   font-family: var(--hg-mono);
   font-size: var(--ae-font-size-xs);
   color: var(--ae-color-fg);
@@ -304,7 +307,9 @@ body {
   text-overflow: ellipsis;
 }
 .hg-trow__task {
-  flex: 1 1 auto;
+  /* shrink ~100x faster than the name: the task ellipsizes first and the project name
+     keeps its width, only giving back space if the task has already collapsed to nothing. */
+  flex: 1 100 auto;
   min-width: 0;
   font-size: var(--ae-font-size-sm);
   color: var(--ae-color-fg-muted);
@@ -586,6 +591,75 @@ body {
   padding: var(--ae-space-2) 0;
   border-bottom: 0;
   align-items: center;
+}
+
+/* ----- tool-call children — indented under the task they belong to -----
+   A genuine tool action (an in-flight activity node, or the live NOW tip when it
+   is a tool — NOT a 'live' checkpoint bloom) is a CHILD of the task above it. We
+   indent it one step and draw a faint vertical connector rail down its left edge so
+   the eye reads the tool stream as subordinate to the task spine, not as sibling
+   tasks. The rail uses the same divider token (--ae-color-border-subtle) and the
+   left-rail idiom as the completed-turn tool accordion (.hg-tools__list), so the
+   live stream and the folded history read as one family. The indent step
+   (--ae-space-6) matches the focus column's horizontal rhythm. */
+.hg-entry--child {
+  position: relative;
+  margin-left: var(--ae-space-6);
+  /* keep the type/now glyph clear of the rail (the rail sits at the entry's left
+     edge; the gutter starts just inside it). */
+  padding-left: var(--ae-space-4);
+}
+.hg-entry--child::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  /* span the full row so consecutive children stitch into one continuous guide. */
+  top: 0;
+  bottom: 0;
+  width: var(--ae-border-width-1);
+  background: var(--ae-color-border-subtle);
+}
+/* the NOW card, when it IS a tool child, keeps its rounded success wash but still
+   indents + carries the rail. It already pads its left to 0 (the gradient bleeds to
+   the card's left edge) — preserve that so the wash isn't clipped; the indent is
+   carried entirely by the margin, and the rail rides just inside the card's rounded
+   left corners (inset top/bottom so it reads as a guide, not a card border). */
+.hg-entry--now.hg-entry--child {
+  padding-left: 0;
+}
+.hg-entry--now.hg-entry--child::before {
+  top: var(--ae-space-2);
+  bottom: var(--ae-space-2);
+}
+
+/* ----- the "next" provenance row — weight a first-party next over a guess -----
+   The next line shows WHERE its task came from: a first-party declaration (`▸ next:`) or
+   plan (TodoWrite) reads present (volunteered ◈), while the reconstructed next_action GUESS
+   (◇) reads fainter — so a guess never looks as authoritative as the agent's own word. A
+   declaration a later checkpoint overtook reads "may be done" (calm, not an alarm). The
+   integrity glyph reuses the trail's existing ◈/◇ vocabulary (markers.css tints it). */
+.hg-entry__nextprov {
+  display: flex;
+  align-items: center;
+  gap: var(--ae-space-1);
+  margin-top: var(--ae-space-1);
+  font-size: var(--ae-font-size-xs);
+  color: var(--ae-color-fg-subtle);
+}
+.hg-entry__nextsource {
+  letter-spacing: var(--ae-letter-spacing-wide);
+}
+.hg-entry__nextstale {
+  font-style: italic;
+  color: var(--ae-color-fg-subtle);
+}
+/* a first-party declared/planned next reads a touch more present than the title default. */
+.hg-entry--next-declared .hg-entry__title--next {
+  color: var(--ae-color-fg-muted);
+}
+/* the reconstructed guess: fainter title — it is tentative, not a stated decision. */
+.hg-entry--next-guess .hg-entry__title--next {
+  color: var(--ae-color-fg-subtle);
 }
 
 /* --------------------------------------------------------------------------

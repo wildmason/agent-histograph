@@ -623,5 +623,147 @@ class TestIntegrityClassStamp(unittest.TestCase):
         self.assertNotIn("topsecret123", cp["summary"])
 
 
+class TestExtractNext(unittest.TestCase):
+    """extract_next pulls a first-party `▸ next: <task> — <why>` declaration out of assistant
+    text — the deterministic replacement for the reconstructed next_action guess. Shares the
+    sigil core with extract_intent, so these pin the next-SPECIFIC surface: that `next:` parses,
+    and (the real risk for so common a word) that "next steps:" / "next_action" / mid-prose
+    never false-fire."""
+
+    def test_task_and_why_split_on_em_dash(self):
+        got = A.extract_next("▸ next: Backport to the unary fallback client — keeps both paths in lockstep")
+        self.assertEqual(got["title"], "Backport to the unary fallback client")
+        self.assertEqual(got["why"], "keeps both paths in lockstep")
+
+    def test_task_only_when_no_separator(self):
+        got = A.extract_next("next: Wire the retry budget")
+        self.assertEqual(got["title"], "Wire the retry budget")
+        self.assertEqual(got["why"], "")
+
+    def test_tolerates_leading_markers(self):
+        for prefix in ("▸ ", "- ", "* ", "> ", "» ", "  • ", ""):
+            got = A.extract_next(prefix + "next: Do Z :: because W")
+            self.assertEqual(got["title"], "Do Z", "prefix %r" % prefix)
+            self.assertEqual(got["why"], "because W")
+
+    def test_last_declaration_wins(self):
+        got = A.extract_next("next: first thing\n...work...\nnext: second thing — w2")
+        self.assertEqual(got["title"], "second thing")
+        self.assertEqual(got["why"], "w2")
+
+    def test_next_steps_phrase_does_not_match(self):
+        # a word between `next` and the colon -> never matches (only a bare/decorated `next:`).
+        self.assertIsNone(A.extract_next("Next steps: do a bunch of things"))
+
+    def test_next_action_word_does_not_match(self):
+        self.assertIsNone(A.extract_next("the next_action field is reconstructed out of band"))
+
+    def test_mid_prose_does_not_match(self):
+        self.assertIsNone(A.extract_next("I'll figure out what comes next: probably the parser."))
+
+    def test_no_next_line_is_none(self):
+        self.assertIsNone(A.extract_next("Just prose, nothing declared."))
+        self.assertIsNone(A.extract_next(""))
+        self.assertIsNone(A.extract_next(None))
+
+    def test_empty_after_colon_is_none(self):
+        self.assertIsNone(A.extract_next("next:"))
+        self.assertIsNone(A.extract_next("▸ next:   "))
+
+    def test_redacts_secrets_in_why(self):
+        got = A.extract_next("next: rotate the key — set token=sk-abcdefghijklmnop1234 in env")
+        self.assertNotIn("sk-abcdefghijklmnop1234", got["why"])
+
+    def test_caps_with_ellipsis_at_boundary(self):
+        got = A.extract_next("next: " + "T" * 250 + " — " + "W" * 500)
+        self.assertEqual(len(got["title"]), 200)
+        self.assertTrue(got["title"].endswith("…"))
+        self.assertEqual(len(got["why"]), 400)
+
+
+class TestTodosRecord(unittest.TestCase):
+    """todos_record snapshots a TodoWrite call into a `todos` activity record (the structured
+    first-party plan serve_state derives the deterministic 'next' from). Pins: only TodoWrite
+    produces one, content is redacted + capped, statuses normalized, junk items dropped."""
+
+    def _data(self, todos, tool="TodoWrite"):
+        return {"tool_name": tool, "tool_input": {"todos": todos},
+                "session_id": "s", "cwd": "C:\\repo\\X"}
+
+    def test_todowrite_snapshots_items_with_status(self):
+        rec = PT.todos_record(self._data([
+            {"content": "do A", "status": "completed", "activeForm": "doing A"},
+            {"content": "do B", "status": "in_progress"},
+            {"content": "do C", "status": "pending"},
+        ]), now_iso="2026-06-10T10:00:00Z")
+        self.assertEqual(rec["type"], "todos")
+        self.assertEqual([i["content"] for i in rec["items"]], ["do A", "do B", "do C"])
+        self.assertEqual([i["status"] for i in rec["items"]], ["completed", "in_progress", "pending"])
+        self.assertEqual(rec["session_id"], "s")
+
+    def test_non_todowrite_tool_is_none(self):
+        self.assertIsNone(PT.todos_record(self._data([{"content": "x", "status": "pending"}], tool="Bash")))
+
+    def test_empty_or_missing_todos_is_none(self):
+        self.assertIsNone(PT.todos_record(self._data([])))
+        self.assertIsNone(PT.todos_record({"tool_name": "TodoWrite", "tool_input": {}}))
+
+    def test_unknown_status_normalized_to_pending(self):
+        rec = PT.todos_record(self._data([{"content": "x", "status": "bogus"}]))
+        self.assertEqual(rec["items"][0]["status"], "pending")
+
+    def test_blank_content_items_dropped(self):
+        rec = PT.todos_record(self._data([{"content": "  ", "status": "pending"},
+                                          {"content": "real", "status": "pending"}]))
+        self.assertEqual([i["content"] for i in rec["items"]], ["real"])
+
+    def test_all_blank_items_is_none(self):
+        self.assertIsNone(PT.todos_record(self._data([{"content": "", "status": "pending"}])))
+
+    def test_content_redacted_at_rest(self):
+        rec = PT.todos_record(self._data([{"content": "deploy with token=sk-abcdefghijklmnop1234",
+                                           "status": "pending"}]))
+        self.assertNotIn("sk-abcdefghijklmnop1234", rec["items"][0]["content"])
+
+    def test_list_capped_to_max(self):
+        many = [{"content": "t%d" % i, "status": "pending"} for i in range(50)]
+        rec = PT.todos_record(self._data(many))
+        self.assertEqual(len(rec["items"]), 30)   # _MAX_TODOS
+
+
+class TestNextRecordAndDedup(unittest.TestCase):
+    """next_record builds a `next` activity record from a declared sigil; the per-kind dedup
+    markers keep intent and next independent (a declared next must not be suppressed by an
+    earlier intent, and vice-versa)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self._orig = A.STATE_DIR
+        A.STATE_DIR = self.tmp
+
+    def tearDown(self):
+        A.STATE_DIR = self._orig
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_next_record_shape(self):
+        rec = PT.next_record({"session_id": "s", "cwd": "C:\\repo\\X"},
+                             "▸ next: ship the parser — last piece", now_iso="2026-06-10T10:00:00Z")
+        self.assertEqual(rec["type"], "next")
+        self.assertEqual(rec["task"], "ship the parser")
+        self.assertEqual(rec["why"], "last piece")
+        self.assertEqual(rec["ts"], "2026-06-10T10:00:00Z")
+
+    def test_next_record_none_without_sigil(self):
+        self.assertIsNone(PT.next_record({"session_id": "s"}, "no declaration in this prose"))
+
+    def test_next_marker_is_independent_of_intent(self):
+        A.set_intent_key("s", "intent-key")
+        A.set_next_key("s", "next-key")
+        # distinct per-kind files -> neither clobbers the other.
+        self.assertEqual(A.last_intent_key("s"), "intent-key")
+        self.assertEqual(A.last_next_key("s"), "next-key")
+        self.assertNotEqual(A._sigil_marker_path("s", "intent"), A._sigil_marker_path("s", "next"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

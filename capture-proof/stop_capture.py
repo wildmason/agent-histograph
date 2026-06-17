@@ -123,6 +123,12 @@ def main():
             PT.maybe_capture_intent(data)
         except Exception as e:
             A.log("stop intent backstop error (fail-open): %r" % e)
+        # Same backstop for a declared `▸ next:` on the turn's FINAL message (no following
+        # tool call to trigger the PostToolUse scrape). Dedup-guarded; cheap; fail-open.
+        try:
+            PT.maybe_capture_next(data)
+        except Exception as e:
+            A.log("stop next backstop error (fail-open): %r" % e)
         if A.mode() == "inline":
             inline_capture(sid, cwd, tpath, stop_active, st)
         else:

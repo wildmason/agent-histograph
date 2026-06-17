@@ -48,6 +48,7 @@ LIVE_WINDOW_SECS = 86400 # a session older than this is no longer a live lane
 # ≈ 0 → "mid-turn") and linger a full LIVE_WINDOW before aging out.
 _META_ACT_TYPES = frozenset((
     "session_end", "capture_attempt", "capture_result", "suspected_gap",
+    "pretool_material_signal",
 ))
 # session_end `source`/`reason` values that mean the human actually EXITED the
 # session (→ auto-drop the lane). "clear" is a context reset where the same
@@ -497,6 +498,59 @@ def _intent_tasks(ledger, sid):
     return out
 
 
+def _first_pending_todo(items):
+    """The next UPCOMING item in a TodoWrite snapshot: the first 'pending' item's content
+    (what comes next, distinct from the in-progress 'now'). None when nothing is pending —
+    the agent is on the last item and has nothing queued, so this channel yields no 'next'."""
+    if not isinstance(items, list):
+        return None
+    for it in items:
+        if isinstance(it, dict) and (it.get("status") or "").strip().lower() == "pending":
+            content = (it.get("content") or "").strip()
+            if content:
+                return content
+    return None
+
+
+def _first_party_next(ledger, sid):
+    """The agent's OWN most-recent statement of the next task — the deterministic
+    replacement for the reconstructed `next_action` guess (the "next item is a best guess,
+    often wrong/stale" fix). Two first-party channels, NEWEST-by-timestamp wins so a fresh
+    plan update supersedes an older declaration:
+        • a declared `▸ next:` sigil  -> {source:'declared', text, why, at}
+        • the live TodoWrite plan     -> {source:'todo', text=first pending item, why:'', at}
+    Returns the winning candidate dict, or None when the agent has declared neither.
+    Fail-open: None on any read error."""
+    try:
+        acts = ledger._acts(sid)
+    except Exception:
+        return None
+    best = None  # (epoch, candidate)
+    for a in acts:
+        if not isinstance(a, dict):
+            continue
+        typ = a.get("type")
+        if typ == "next":
+            text = R.clean(a.get("task") or "", 240)
+            if not text:
+                continue
+            cand = {"source": "declared", "text": text,
+                    "why": R.clean(a.get("why") or "", _DETAIL_CAP), "at": a.get("ts")}
+        elif typ == "todos":
+            content = _first_pending_todo(a.get("items"))
+            if not content:
+                continue
+            cand = {"source": "todo", "text": R.clean(content, 240), "why": "",
+                    "at": a.get("ts")}
+        else:
+            continue
+        e = R.parse_ts(a.get("ts"))
+        e = e if e is not None else 0.0
+        if best is None or e >= best[0]:   # newest wins; ties favor the later record
+            best = (e, cand)
+    return best[1] if best else None
+
+
 def _live_edge_ts(t):
     """The effective sort time of a trail task for intent-weaving. The in-flight live
     edge (an activity now-tip, or a bloomed 'live' checkpoint) and the trailing 'pending'
@@ -643,20 +697,36 @@ def build_tasks(ledger, sid, *, include_activity=False, working_now=False):
         # wire-strip and the renderer draws the stitch instead of a plain live tip.
         tasks[-1]["kind"] = "live"
 
-    # trailing pending from the latest next_action
-    latest = cps[-1] if cps else None
-    if isinstance(latest, dict):
-        na = (latest.get("next_action") or "").strip()
+    # trailing "next" — the agent's OWN declared/planned next task supersedes the
+    # reconstructed `next_action` guess (the "next item is a best guess, often wrong/stale"
+    # fix). First-party channels (a `▸ next:` sigil, the TodoWrite plan) are read only on the
+    # focused trail; provenance (`source`) + a `stale` flag ride the wire so the renderer can
+    # weight a first-party statement (volunteered ◈) over a reconstruction (◇) and never paint
+    # a guess as authoritatively as the agent's own word.
+    fp = _first_party_next(ledger, sid) if include_activity else None
+    if fp:
+        # 'stale' only for an explicit DECLARATION overtaken by a later checkpoint (the agent
+        # consolidated a whole turn after declaring without re-stating it). A TodoWrite plan is
+        # current by construction; a reconstructed guess carries its tentativeness in provenance.
+        stale = False
+        if fp["source"] == "declared" and last_cp_epoch is not None:
+            at = R.parse_ts(fp.get("at"))
+            stale = at is not None and at < last_cp_epoch
+        tasks.append({
+            "id": "tk-pending", "kind": "pending",
+            "summary": R.clean(fp["text"], 240), "detail": fp.get("why") or "",
+            "integrity": "volunteered", "at": None, "topic": "", "reversal": None,
+            "_nextSource": fp["source"], "_nextStale": stale,
+        })
+    else:
+        latest = cps[-1] if cps else None
+        na = (latest.get("next_action") or "").strip() if isinstance(latest, dict) else ""
         if na:
             tasks.append({
-                "id": "tk-pending",
-                "kind": "pending",
-                "summary": R.clean(na, 240),
-                "detail": "",
-                "integrity": "passive",
-                "at": None,
-                "topic": "",
-                "reversal": None,
+                "id": "tk-pending", "kind": "pending",
+                "summary": R.clean(na, 240), "detail": "",
+                "integrity": "reconstructed", "at": None, "topic": "", "reversal": None,
+                "_nextSource": "reconstructed", "_nextStale": False,
             })
 
     # weave first-party DECLARED-INTENT entries into the trail by timestamp. Only on the
@@ -680,6 +750,12 @@ def build_tasks(ledger, sid, *, include_activity=False, working_now=False):
             # the in-flight tool node carries its tool name + live-edge flag.
             wire["tool"] = t.get("tool") or "tool"
             wire["now"] = bool(t.get("now"))
+        if t["kind"] == "pending":
+            # the "next" provenance: 'declared' (▸ next:) / 'todo' (TodoWrite plan) are
+            # first-party; 'reconstructed' is the inferred guess. `stale` marks a declaration
+            # a later checkpoint overtook. The renderer weights the line by these.
+            wire["source"] = t.get("_nextSource") or "reconstructed"
+            wire["stale"] = bool(t.get("_nextStale"))
         if t.get("_toolCalls"):
             # a completed turn's tool calls, for the click-to-expand accordion.
             wire["toolCalls"] = [

@@ -107,29 +107,46 @@ def save_state(sid, st):
     except Exception as e:
         log("save_state error: %r" % e)
 
-# ---- declared-intent dedup marker (decoupled from the shared session state) ----
-# The agent's volunteered `▸ intent:` line stays in the transcript tail for the rest
+# ---- first-party SIGIL dedup markers (decoupled from the shared session state) ----
+# A volunteered `▸ intent:` / `▸ next:` line stays in the transcript tail for the rest
 # of the turn, so every subsequent PostToolUse would re-emit it. We dedup on a tiny
-# per-session marker file (NOT the shared session-state json, so a per-tool intent
-# write can never clobber a concurrent capture_extract state update).
-def _intent_marker_path(sid):
+# per-session, per-KIND marker file (NOT the shared session-state json, so a per-tool
+# sigil write can never clobber a concurrent capture_extract state update). intent and
+# next dedup independently — a declared next must not be suppressed by an earlier intent.
+def _sigil_marker_path(sid, kind):
     safe = re.sub(r"[^A-Za-z0-9_.-]", "_", sid or "unknown")
-    return os.path.join(STATE_DIR, safe + ".intent")
+    return os.path.join(STATE_DIR, safe + "." + kind)
 
-def last_intent_key(sid):
+def _read_sigil_key(sid, kind):
     try:
-        with open(_intent_marker_path(sid), "r", encoding="utf-8") as f:
+        with open(_sigil_marker_path(sid, kind), "r", encoding="utf-8") as f:
             return f.read()
     except Exception:
         return ""
 
-def set_intent_key(sid, key):
+def _write_sigil_key(sid, kind, key):
     _ensure_dirs()
     try:
-        with open(_intent_marker_path(sid), "w", encoding="utf-8") as f:
+        with open(_sigil_marker_path(sid, kind), "w", encoding="utf-8") as f:
             f.write(key)
     except Exception as e:
-        log("set_intent_key error: %r" % e)
+        log("set_%s_key error: %r" % (kind, e))
+
+# back-compat alias (existing callers/tests reference _intent_marker_path).
+def _intent_marker_path(sid):
+    return _sigil_marker_path(sid, "intent")
+
+def last_intent_key(sid):
+    return _read_sigil_key(sid, "intent")
+
+def set_intent_key(sid, key):
+    _write_sigil_key(sid, "intent", key)
+
+def last_next_key(sid):
+    return _read_sigil_key(sid, "next")
+
+def set_next_key(sid, key):
+    _write_sigil_key(sid, "next", key)
 
 # ---- Claude Code transcript reading ----
 def transcript_size(path):
@@ -223,33 +240,41 @@ def tail_assistant_text(path, max_bytes=65536):
             out.append(t)
     return "\n".join(out)
 
-# A first-party DECLARED-INTENT line the agent volunteers as it starts a task:
-#   ▸ intent: <what> — <why>
-# The marker tolerates an optional leading bullet/quote/glyph (markdown `-`/`*`/`>`,
+# First-party DECLARED-SIGIL lines the agent volunteers in normal prose:
+#   ▸ intent: <what> — <why>      (what I'm doing now, and why — stated as I start)
+#   ▸ next:   <task> — <why>      (the task I'll do next — stated as I finish/hand off)
+# Each marker tolerates an optional leading bullet/quote/glyph (markdown `-`/`*`/`>`,
 # or ▸ » •) so it works whether the agent writes it bare or inside a list/quote. The
 # title/why split is on a SPACE-PADDED separator (— – :: -- |) so a hyphenated word in
 # the title is never mistaken for the boundary; with no separator the whole line is the
-# title (why=""). Anchored to line start (MULTILINE) to avoid matching "intent:" mid-prose.
+# title (why=""). Anchored to line start (MULTILINE) so "intent:"/"next:" never matches
+# mid-prose; `next\s*:` (colon right after the word) means "next steps:" / "next_action"
+# can never false-match — only a bare or decorated `next:` does.
 _INTENT_RE = re.compile(
     r"^[ \t>*\-•▸»]*intent\s*:\s*(.+?)\s*$",
     re.IGNORECASE | re.MULTILINE)
-_INTENT_SEP = re.compile(r"\s+(?:—|–|::|--|\|)\s+")
+_NEXT_RE = re.compile(
+    r"^[ \t>*\-•▸»]*next\s*:\s*(.+?)\s*$",
+    re.IGNORECASE | re.MULTILINE)
+_SIGIL_SEP = re.compile(r"\s+(?:—|–|::|--|\|)\s+")
+_INTENT_SEP = _SIGIL_SEP   # back-compat alias
 
-def extract_intent(text, *, title_cap=200, why_cap=400):
-    """Pure: pull the LAST `▸ intent: <what> — <why>` the agent declared from a block of
-    assistant text -> {"title", "why"} (redacted + capped at write time, §10), or None
-    when no intent line is present. The last one wins so a re-declaration supersedes an
-    earlier one still in the tail window. A title-only declaration yields why=''."""
+def _extract_sigil(text, regex, *, title_cap, why_cap):
+    """Pure shared core for the first-party `▸ <kind>: <what> — <why>` sigils. Pulls the
+    LAST matching line (a re-declaration supersedes an earlier one still in the tail),
+    splits title/why on the space-padded separator, redacts + caps both (§10 at-rest).
+    Returns {"title", "why"} (a title-only declaration yields why=""), or None when the
+    sigil is absent or its title is empty."""
     if not text:
         return None
     last = None
-    for m in _INTENT_RE.finditer(text):
+    for m in regex.finditer(text):
         cand = (m.group(1) or "").strip()
         if cand:
             last = cand
     if not last:
         return None
-    parts = _INTENT_SEP.split(last, maxsplit=1)
+    parts = _SIGIL_SEP.split(last, maxsplit=1)
     title = parts[0].strip()
     why = parts[1].strip() if len(parts) > 1 else ""
     if not title:
@@ -261,6 +286,20 @@ def extract_intent(text, *, title_cap=200, why_cap=400):
     if len(why) > why_cap:
         why = why[:why_cap - 1] + "…"
     return {"title": title, "why": why}
+
+def extract_intent(text, *, title_cap=200, why_cap=400):
+    """Pure: pull the LAST `▸ intent: <what> — <why>` the agent declared from a block of
+    assistant text -> {"title", "why"} (redacted + capped at write time, §10), or None
+    when no intent line is present. The last one wins so a re-declaration supersedes an
+    earlier one still in the tail window. A title-only declaration yields why=''."""
+    return _extract_sigil(text, _INTENT_RE, title_cap=title_cap, why_cap=why_cap)
+
+def extract_next(text, *, title_cap=200, why_cap=400):
+    """Pure: pull the LAST `▸ next: <task> [— <why>]` the agent declared -> {"title",
+    "why"} (redacted + capped), or None when absent. This is the first-party DECLARED-NEXT:
+    the agent's OWN statement of the next task, the deterministic replacement for the
+    reconstructed `next_action` guess. Last one wins so a re-declaration supersedes."""
+    return _extract_sigil(text, _NEXT_RE, title_cap=title_cap, why_cap=why_cap)
 
 _JSON_BLOCK = re.compile(r"```json\s*(\{.*?\})\s*```", re.DOTALL)
 

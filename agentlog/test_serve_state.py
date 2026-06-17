@@ -1152,6 +1152,23 @@ class TestSessionSubstance(unittest.TestCase):
         led = R.Ledger.from_dir(self.tmp)
         self.assertIn("fresh", S.live_sessions(led, _t("2026-06-15T09:02:00-04:00")))
 
+    def test_pretool_material_signal_alone_is_not_a_lane(self):
+        acts = [_act("pretool_material_signal", "guard", "2026-06-15T09:01:00-04:00",
+                     tool="apply_patch", classes=["migration"], paths=["db/migrations/001.sql"])]
+        _write(self.tmp, [], acts)
+        led = R.Ledger.from_dir(self.tmp)
+        self.assertNotIn("guard", S.live_sessions(led, _t("2026-06-15T09:02:00-04:00")))
+
+    def test_pretool_material_signal_does_not_refresh_a_checkpointed_lane(self):
+        cps = [_cp("guard", "2026-06-15T09:00:00-04:00")]
+        acts = [_act("pretool_material_signal", "guard", "2026-06-15T09:30:00-04:00",
+                     tool="apply_patch", classes=["dependency"], paths=["package.json"])]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        sess = led.session_state("guard", now_epoch=_t("2026-06-15T09:31:00-04:00"))
+        self.assertEqual(sess["last_activity_ts"], _t("2026-06-15T09:00:00-04:00"))
+        self.assertEqual(S.last_work_ts(led, "guard"), _t("2026-06-15T09:00:00-04:00"))
+
     def test_invalid_checkpoint_but_real_tool_use_is_still_a_lane(self):
         # an invalid checkpoint but genuine tool work -> kept (real work happened).
         cps = [_cp("w", "2026-06-15T09:04:00-04:00", valid=False, decisions=[], paths=[])]
@@ -1611,6 +1628,168 @@ class TestIntentWeaveOrdering(unittest.TestCase):
         kinds = [t["kind"] for t in tasks]
         # a corrupt-ts intent degrades to the tail (after the real decision), NOT 1970-top.
         self.assertGreater(kinds.index("intent"), kinds.index("decision"))
+
+
+class TestNextTask(unittest.TestCase):
+    """The trailing 'next' node prefers the agent's OWN statement — a `▸ next:` sigil or the
+    TodoWrite plan, NEWEST wins — over the reconstructed next_action guess, and carries the
+    provenance (`source`) + a `stale` flag so a guess is never painted as authoritatively as a
+    declaration. Every case asserts a DERIVED choice across realistic records, not a literal."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def _pending(self, sid, **kw):
+        return next((t for t in S.build_tasks(self.led, sid, **kw) if t["kind"] == "pending"), None)
+
+    def test_declared_next_supersedes_reconstructed(self):
+        cps = [_cp("d", "2026-06-10T10:00:00-04:00",
+                   decisions=[_decision("a", "did a thing")], next_action="reconstructed guess")]
+        acts = [_act("next", "d", "2026-06-10T10:05:00-04:00",
+                     task="wire the retry budget", why="the last gap before ship")]
+        _write(self.tmp, cps, acts)
+        self.led = R.Ledger.from_dir(self.tmp)
+        p = self._pending("d", include_activity=True)
+        self.assertEqual(p["summary"], "wire the retry budget")
+        self.assertEqual(p["detail"], "the last gap before ship")
+        self.assertEqual(p["integrity"], "volunteered")
+        self.assertEqual(p["source"], "declared")
+        self.assertFalse(p["stale"])
+
+    def test_todo_plan_supplies_next_when_no_sigil(self):
+        cps = [_cp("t", "2026-06-10T10:00:00-04:00",
+                   decisions=[_decision("a", "d")], next_action="guess")]
+        acts = [_act("todos", "t", "2026-06-10T10:05:00-04:00", items=[
+            {"content": "current task", "status": "in_progress"},
+            {"content": "the genuinely next task", "status": "pending"},
+            {"content": "after that", "status": "pending"},
+        ])]
+        _write(self.tmp, cps, acts)
+        self.led = R.Ledger.from_dir(self.tmp)
+        p = self._pending("t", include_activity=True)
+        self.assertEqual(p["summary"], "the genuinely next task")   # first PENDING, not the in_progress
+        self.assertEqual(p["source"], "todo")
+        self.assertEqual(p["integrity"], "volunteered")
+
+    def test_newest_first_party_signal_wins(self):
+        cps = [_cp("n", "2026-06-10T10:00:00-04:00", decisions=[_decision("a", "d")], next_action="")]
+        acts = [_act("next", "n", "2026-06-10T10:05:00-04:00", task="declared older", why=""),
+                _act("todos", "n", "2026-06-10T10:09:00-04:00",
+                     items=[{"content": "planned newer", "status": "pending"}])]
+        _write(self.tmp, cps, acts)
+        self.led = R.Ledger.from_dir(self.tmp)
+        p = self._pending("n", include_activity=True)
+        self.assertEqual(p["summary"], "planned newer")   # the newer todos record wins
+        self.assertEqual(p["source"], "todo")
+
+    def test_declared_wins_when_it_is_the_newer_signal(self):
+        cps = [_cp("n2", "2026-06-10T10:00:00-04:00", decisions=[_decision("a", "d")], next_action="")]
+        acts = [_act("todos", "n2", "2026-06-10T10:05:00-04:00",
+                     items=[{"content": "planned older", "status": "pending"}]),
+                _act("next", "n2", "2026-06-10T10:09:00-04:00", task="declared newer", why="w")]
+        _write(self.tmp, cps, acts)
+        self.led = R.Ledger.from_dir(self.tmp)
+        p = self._pending("n2", include_activity=True)
+        self.assertEqual(p["summary"], "declared newer")
+        self.assertEqual(p["source"], "declared")
+
+    def test_reconstructed_fallback_when_no_first_party(self):
+        cps = [_cp("r", "2026-06-10T10:00:00-04:00",
+                   decisions=[_decision("a", "d")], next_action="reconstructed guess")]
+        _write(self.tmp, cps, [])
+        self.led = R.Ledger.from_dir(self.tmp)
+        p = self._pending("r", include_activity=True)
+        self.assertEqual(p["summary"], "reconstructed guess")
+        self.assertEqual(p["source"], "reconstructed")
+        self.assertEqual(p["integrity"], "reconstructed")
+
+    def test_todos_with_no_pending_item_falls_back(self):
+        # all items done / in-progress -> no genuinely-next item, so this channel yields
+        # nothing and the reconstructed guess fills the slot.
+        cps = [_cp("tp", "2026-06-10T10:00:00-04:00",
+                   decisions=[_decision("a", "d")], next_action="recon")]
+        acts = [_act("todos", "tp", "2026-06-10T10:05:00-04:00", items=[
+            {"content": "done one", "status": "completed"},
+            {"content": "doing it", "status": "in_progress"},
+        ])]
+        _write(self.tmp, cps, acts)
+        self.led = R.Ledger.from_dir(self.tmp)
+        p = self._pending("tp", include_activity=True)
+        self.assertEqual(p["source"], "reconstructed")
+        self.assertEqual(p["summary"], "recon")
+
+    def test_declared_next_overtaken_by_later_checkpoint_is_stale(self):
+        # declared at 10:05, then a whole checkpoint consolidated at 10:10 without re-stating
+        # -> the declaration may already be done; mark it stale.
+        cps = [_cp("st", "2026-06-10T10:00:00-04:00", cid="c1", decisions=[_decision("a", "d")]),
+               _cp("st", "2026-06-10T10:10:00-04:00", cid="c2", decisions=[_decision("b", "e")], next_action="")]
+        acts = [_act("next", "st", "2026-06-10T10:05:00-04:00", task="declared mid", why="")]
+        _write(self.tmp, cps, acts)
+        self.led = R.Ledger.from_dir(self.tmp)
+        p = self._pending("st", include_activity=True)
+        self.assertEqual(p["source"], "declared")
+        self.assertTrue(p["stale"])
+
+    def test_declared_next_after_last_checkpoint_is_not_stale(self):
+        cps = [_cp("ns", "2026-06-10T10:00:00-04:00", decisions=[_decision("a", "d")], next_action="")]
+        acts = [_act("next", "ns", "2026-06-10T10:09:00-04:00", task="declared after", why="")]
+        _write(self.tmp, cps, acts)
+        self.led = R.Ledger.from_dir(self.tmp)
+        self.assertFalse(self._pending("ns", include_activity=True)["stale"])
+
+    def test_todo_next_never_stale(self):
+        # a todos plan is current by construction, even with a later checkpoint -> not stale.
+        cps = [_cp("tn", "2026-06-10T10:00:00-04:00", cid="c1", decisions=[_decision("a", "d")]),
+               _cp("tn", "2026-06-10T10:10:00-04:00", cid="c2", decisions=[_decision("b", "e")], next_action="")]
+        acts = [_act("todos", "tn", "2026-06-10T10:05:00-04:00",
+                     items=[{"content": "planned", "status": "pending"}])]
+        _write(self.tmp, cps, acts)
+        self.led = R.Ledger.from_dir(self.tmp)
+        p = self._pending("tn", include_activity=True)
+        self.assertEqual(p["source"], "todo")
+        self.assertFalse(p["stale"])
+
+    def test_lean_sibling_trail_ignores_first_party_next(self):
+        # first-party channels are read only on the focused trail; a lean sibling keeps the
+        # cheap reconstructed next_action (no per-sibling _acts scan).
+        cps = [_cp("lean", "2026-06-10T10:00:00-04:00",
+                   decisions=[_decision("a", "d")], next_action="recon next")]
+        acts = [_act("next", "lean", "2026-06-10T10:05:00-04:00", task="declared", why="")]
+        _write(self.tmp, cps, acts)
+        self.led = R.Ledger.from_dir(self.tmp)
+        p = self._pending("lean")   # include_activity defaults False
+        self.assertEqual(p["source"], "reconstructed")
+        self.assertEqual(p["summary"], "recon next")
+
+    def test_flows_through_build_state_focus(self):
+        cps = [_cp("fs", "2026-06-10T10:00:00-04:00",
+                   decisions=[_decision("a", "d")], project="Mortar", next_action="guess")]
+        acts = [_act("stop_boundary", "fs", "2026-06-10T10:00:00-04:00"),
+                _act("next", "fs", "2026-06-10T10:05:00-04:00", task="declared via state", why="why here")]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        state = S.build_state(led, _epics([]), now_epoch=_t("2026-06-10T10:06:00-04:00"))
+        p = next(t for t in state["focus"]["activeStory"]["tasks"] if t["kind"] == "pending")
+        self.assertEqual(p["summary"], "declared via state")
+        self.assertEqual(p["source"], "declared")
+        self.assertEqual(p["detail"], "why here")
+
+
+class TestFirstPendingTodo(unittest.TestCase):
+    """_first_pending_todo isolates the next UPCOMING item from a plan snapshot — the first
+    'pending', skipping completed + in-progress; None when nothing is queued."""
+
+    def test_returns_first_pending_skipping_done_and_active(self):
+        items = [{"content": "done", "status": "completed"},
+                 {"content": "now", "status": "in_progress"},
+                 {"content": "next up", "status": "pending"},
+                 {"content": "later", "status": "pending"}]
+        self.assertEqual(S._first_pending_todo(items), "next up")
+
+    def test_none_when_nothing_pending(self):
+        self.assertIsNone(S._first_pending_todo([{"content": "now", "status": "in_progress"}]))
+        self.assertIsNone(S._first_pending_todo([]))
+        self.assertIsNone(S._first_pending_todo(None))
 
 
 if __name__ == "__main__":

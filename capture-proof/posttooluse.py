@@ -31,6 +31,8 @@ import agentlog_common as A
 _CMD_CAP = 500
 _TARGET_CAP = 200
 _DESC_CAP = 200
+_TODO_CONTENT_CAP = 200
+_MAX_TODOS = 30
 
 # Tools that MUTATE the workspace. Only these contribute `paths` — the field the
 # §6.3 ground-truth / §6.4 suspected-gap audit harvests as "paths the session
@@ -168,6 +170,69 @@ def maybe_capture_intent(data):
         A.set_intent_key(sid, key)
 
 
+def next_record(data, text, now_iso=None):
+    """Pure: a block of assistant text -> a first-class `next` activity record when the agent
+    declared one (`▸ next: <task> — <why>`), else None. This is the first-party DECLARED-NEXT
+    layer — the agent's OWN statement of the next task, the deterministic replacement for the
+    out-of-band reconstructed `next_action` guess. Task/why are redacted + capped inside
+    A.extract_next (§10 at-rest)."""
+    parsed = A.extract_next(text)
+    if not parsed:
+        return None
+    return {"type": "next", "session_id": data.get("session_id") or "unknown",
+            "cwd": data.get("cwd") or "", "task": parsed["title"],
+            "why": parsed["why"], "ts": now_iso or A.now_iso()}
+
+
+def maybe_capture_next(data):
+    """Scrape the transcript tail for a declared `▸ next:` line and, if it is NEW (deduped
+    per session, independently of intent — the line lingers in the tail all turn), append a
+    `next` record. Bounded tail read; armed-only (called only when armed); fail-open."""
+    tpath = data.get("transcript_path") or ""
+    if not tpath:
+        return
+    rec = next_record(data, A.tail_assistant_text(tpath))
+    if rec is None:
+        return
+    sid = rec["session_id"]
+    key = rec["task"] + "\x1f" + rec["why"]
+    if A.last_next_key(sid) == key:
+        return   # this exact declaration was already emitted earlier in the turn
+    if A.append_jsonl(A.ACTIVITY, rec):
+        A.set_next_key(sid, key)
+
+
+def todos_record(data, now_iso=None):
+    """Pure: a TodoWrite tool call -> a `todos` activity record snapshotting the agent's live
+    plan ([{content, status}], redacted + capped), else None for any other tool or an empty
+    list. This is the STRUCTURED first-party plan: serve_state derives the deterministic
+    'next' from the first still-pending item, superseding the reconstructed `next_action`
+    guess with zero extra discipline (the agent already maintains its TodoWrite list)."""
+    if (data.get("tool_name") or "") != "TodoWrite":
+        return None
+    ti = data.get("tool_input") if isinstance(data.get("tool_input"), dict) else {}
+    raw = ti.get("todos")
+    if not isinstance(raw, list) or not raw:
+        return None
+    items = []
+    for t in raw[:_MAX_TODOS]:
+        if not isinstance(t, dict):
+            continue
+        content = A.redact(str(t.get("content") or "").strip())
+        if not content:
+            continue
+        if len(content) > _TODO_CONTENT_CAP:
+            content = content[:_TODO_CONTENT_CAP - 1] + "…"
+        status = (str(t.get("status") or "").strip().lower() or "pending")
+        if status not in ("pending", "in_progress", "completed"):
+            status = "pending"
+        items.append({"content": content, "status": status})
+    if not items:
+        return None
+    return {"type": "todos", "session_id": data.get("session_id") or "unknown",
+            "cwd": data.get("cwd") or "", "items": items, "ts": now_iso or A.now_iso()}
+
+
 def main():
     # Kill switch first: disabled() only reads an env var, so checking it BEFORE
     # read_stdin_json keeps AGENTLOG_DISABLE=1 a true zero-footprint no-op (a malformed
@@ -181,14 +246,25 @@ def main():
             A.append_jsonl(A.ACTIVITY, rec)
     except Exception as e:
         A.log("posttooluse hook error (fail-open): %r" % e)
-    # Declared intent is volunteered JUDGMENT (like a checkpoint), so it is ARMED-ONLY —
-    # a normal un-armed session pays zero extra cost (no transcript read at all). Wrapped
-    # separately so an intent-scrape error can never lose the passive tool_use fact above.
+    # Declared intent / next + the TodoWrite plan are volunteered JUDGMENT (like a
+    # checkpoint), so they are ARMED-ONLY — a normal un-armed session pays zero extra cost
+    # (no transcript read at all). Each is wrapped separately so one scrape error can never
+    # lose the passive tool_use fact above or the other first-party signals.
     if A.armed():
         try:
             maybe_capture_intent(data)
         except Exception as e:
             A.log("posttooluse intent capture error (fail-open): %r" % e)
+        try:
+            maybe_capture_next(data)
+        except Exception as e:
+            A.log("posttooluse next capture error (fail-open): %r" % e)
+        try:
+            trec = todos_record(data)
+            if trec:
+                A.append_jsonl(A.ACTIVITY, trec)
+        except Exception as e:
+            A.log("posttooluse todos capture error (fail-open): %r" % e)
     sys.exit(0)
 
 
