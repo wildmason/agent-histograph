@@ -170,7 +170,8 @@ def process_line(session_id, line):
                 "asks": [],
                 "next_action": next_action["title"] if next_action else "",
                 "health_draft": {"topic": "", "decision": "", "reason": "", "human_involved": False},
-                "ts": ts
+                "checkpoint_id": f"ckpt_{session_id}_{ts.replace(':', '').replace('-', '').replace('T', '').replace('Z', '')}",
+                "captured_at": ts
             }
             if thinking:
                 ckpt["decisions"].append({
