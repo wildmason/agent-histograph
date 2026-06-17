@@ -92,6 +92,9 @@ const focus = {
     indexLabel: "active · 3 of 4",
     nowLine: { text: "Bash · cargo test", working: true },
     tasks: [
+      { id: "intent-0", kind: "intent", summary: "Model the client as a single bidi stream",
+        detail: "Preserves server-side message ordering and halves connection setup — paired unary calls would reorder under load.",
+        integrity: "volunteered", at: "2026-06-10T14:05:00Z" },
       { id: "tk-1", kind: "decision", summary: "Model the client as a single bidi stream",
         detail: "Preserves server-side ordering and halves connection setup.",
         integrity: "volunteered", at: "2026-06-10T14:09:00Z" },
@@ -104,7 +107,12 @@ const focus = {
                     supersededAt: "2026-06-10T14:33:00Z", reversibility: "high" } },
       { id: "tk-4", kind: "milestone", summary: "Half-close wired end-to-end",
         detail: "First clean shutdown that round-trips without an RST.",
-        integrity: "volunteered", at: "2026-06-10T14:52:00Z" },
+        integrity: "volunteered", at: "2026-06-10T14:52:00Z",
+        toolCalls: [{ tool: "Bash", target: "cargo build", desc: "Compile the streaming client",
+                      at: "2026-06-10T14:50:00Z" }],
+        toolCount: 1 },
+      { id: "act-x", kind: "activity", tool: "Bash", summary: "cargo build", now: false,
+        detail: "Compile the streaming client", integrity: "passive", at: "2026-06-10T14:53:00Z" },
       { id: "act-0", kind: "activity", tool: "Bash", summary: "cargo test", now: true,
         detail: "", integrity: "passive", at: "2026-06-10T14:54:00Z" },
       { id: "tk-pending", kind: "pending", summary: "Backport to the unary fallback client",
@@ -142,12 +150,34 @@ ok("a segment carries its story title as a tooltip",
    /gRPC bidi streaming/.test(segs[2].getAttribute("title") || ""));
 
 // ---- transcript entries ----
+ok("one intent entry", one("hg-entry--intent").length === 1);
 ok("one decision entry", one("hg-entry--decision").length === 1);
 ok("one step entry", one("hg-entry--step").length === 1);
 ok("one milestone entry", one("hg-entry--milestone").length === 1);
 ok("one reversal entry", one("hg-entry--reversal").length === 1);
 ok("one NOW card", one("hg-entry--now").length === 1);
 ok("one next (pending) entry", one("hg-entry--next").length === 1);
+
+// the declared-intent entry: the agent's first-party "what & why", surviving alongside
+// the reconstructed decision of the same name (a distinct, durable entry).
+const intent = first("hg-entry--intent");
+ok("intent title is the declared task",
+   /Model the client as a single bidi stream/.test((intent.queryAll((n) => n.hasClass("hg-entry__title"))[0] || {}).textContent || ""));
+ok("intent detail line is the verbatim why",
+   /paired unary calls would reorder under load/.test((intent.queryAll((n) => n.hasClass("hg-entry__detail"))[0] || {}).textContent || ""));
+ok("intent carries the volunteered integrity glyph",
+   intent.queryAll((n) => n.hasClass("hg-entry__intg")).length === 1);
+ok("intent persists alongside the same-named reconstructed decision",
+   one("hg-entry--intent").length === 1 && one("hg-entry--decision").length === 1);
+
+// a non-live activity node now renders the tool's first-party `desc` second line.
+const activity = first("hg-entry--activity");
+ok("activity desc line renders the tool's description",
+   /Compile the streaming client/.test((activity.queryAll((n) => n.hasClass("hg-entry__activity-desc"))[0] || {}).textContent || ""));
+
+// the completed-turn accordion also surfaces the tool's first-party desc per call.
+ok("accordion row renders the tool's first-party desc",
+   /Compile the streaming client/.test((first("hg-tools__desc") || {}).textContent || ""));
 
 // the decision's rationale renders as the second line (detail), distinct from title.
 const decision = first("hg-entry--decision");
@@ -179,7 +209,8 @@ ok("passive step shows NO integrity glyph",
 // entries are threaded oldest -> newest (decision before reversal before now).
 const entries = one("hg-entry");
 const idxOf = (cls) => entries.findIndex((e) => e.hasClass(cls));
-ok("entries are oldest -> newest (decision < reversal < now < next)",
+ok("entries are oldest -> newest (intent < decision < reversal < now < next)",
+   idxOf("hg-entry--intent") < idxOf("hg-entry--decision") &&
    idxOf("hg-entry--decision") < idxOf("hg-entry--reversal") &&
    idxOf("hg-entry--reversal") < idxOf("hg-entry--now") &&
    idxOf("hg-entry--now") < idxOf("hg-entry--next"));

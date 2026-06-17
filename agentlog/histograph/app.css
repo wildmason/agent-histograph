@@ -387,7 +387,7 @@ body {
 .hg-focus__pinned {
   flex: 0 0 auto;
   padding: var(--ae-space-5) var(--ae-space-6) var(--ae-space-4);
-  background: var(--ae-color-bg);
+  background: var(--ae-color-bg-muted);
   border-bottom: var(--ae-border-width-1) solid var(--ae-color-border-subtle);
   z-index: var(--ae-z-sticky);
 }

@@ -26,7 +26,14 @@ CONTRACT = (
     "APIs, dependencies, or data loss, so the reconstruction is faithful. Do NOT print "
     "a JSON checkpoint block in your replies yourself — capture is external and "
     "automatic, and a self-emitted blob is exactly the TUI clutter the quiet mode "
-    "exists to avoid. This never changes how you do the work."
+    "exists to avoid. "
+    "OPTIONAL: when you START a non-trivial task, you may declare it first-party on its "
+    "own line as `▸ intent: <what> — <why>` (e.g. `▸ intent: Model the client as a "
+    "single bidi stream — preserves message ordering and halves connection setup`). The "
+    "histograph pre-loads that as the live task header with your own stated why, instead "
+    "of waiting to reconstruct it — so your in-the-moment reasoning is captured verbatim, "
+    "not inferred after the fact. One short line; never required. "
+    "This never changes how you do the work."
 )
 
 def main():

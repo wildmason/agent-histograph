@@ -1,5 +1,5 @@
 {
-  "_comment": "Merge the 'hooks' block into your Claude Code settings.json (~/.claude/settings.json for global, or .claude/settings.json in a test project). Stop ignores its matcher; PreCompact with no matcher fires for both manual and auto; SessionEnd fires on clear/logout/exit (cannot block); PostToolUse fires on state-changing tools (Edit|Write|MultiEdit|NotebookEdit|Bash) AND observation tools (Read|Grep|Glob|Task|Agent|WebFetch|WebSearch) so the histograph live-activity stream moves during exploration, not just edits — but only MUTATING tools contribute `paths` (a Read/search records a live-stream-only `target`, never a 'touched path', so the §6.3/§6.4 audit signals stay edit-scoped). The hooks only CAPTURE when AGENTLOG_CAPTURE_ACTIVE=1 is set in that session's environment — installed but un-armed they only passively log, so installing this cannot disrupt your normal sessions. AGENTLOG_DISABLE=1 no-ops everything.",
+  "_comment": "Merge the 'hooks' block into your Claude Code settings.json (~/.claude/settings.json for global, or .claude/settings.json in a test project). Stop ignores its matcher; PreCompact with no matcher fires for both manual and auto; SessionEnd fires on clear/logout/exit (cannot block); PostToolUse fires on state-changing tools (Edit|Write|MultiEdit|NotebookEdit|Bash|PowerShell) AND observation tools (Read|Grep|Glob|Task|Agent|WebFetch|WebSearch) so the histograph live-activity stream moves during exploration, not just edits — but only MUTATING tools contribute `paths` (a Read/search records a live-stream-only `target`, never a 'touched path', so the §6.3/§6.4 audit signals stay edit-scoped). The hooks only CAPTURE when AGENTLOG_CAPTURE_ACTIVE=1 is set in that session's environment — installed but un-armed they only passively log, so installing this cannot disrupt your normal sessions. AGENTLOG_DISABLE=1 no-ops everything.",
   "hooks": {
     "SessionStart": [
       {
@@ -47,7 +47,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash|Read|Grep|Glob|Task|Agent|WebFetch|WebSearch",
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash|PowerShell|Read|Grep|Glob|Task|Agent|WebFetch|WebSearch",
         "hooks": [
           {
             "type": "command",

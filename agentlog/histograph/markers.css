@@ -254,6 +254,12 @@
   color: var(--ae-color-fg-subtle);
   font-size: 0.6875rem;
 }
+/* declared intent — the agent's forward-looking "what & why", in the accent hue so it
+   reads as a deliberately-pinned task header, distinct from the info-blue decision. */
+.hg-entry__glyph--intent {
+  color: var(--ae-color-accent);
+  font-size: var(--ae-font-size-sm);
+}
 
 /* the quiet integrity glyph beneath the type glyph (only when it carries signal). */
 .hg-integrity {
@@ -281,6 +287,12 @@
 }
 .hg-entry--milestone .hg-entry__title {
   color: var(--ae-color-fg-muted);
+}
+/* a declared-intent title carries a faint accent tint (the agent's own forward
+   statement), a notch warmer than a plain decision. color-mix over fg keeps it legible
+   in every theme. */
+.hg-entry--intent .hg-entry__title {
+  color: color-mix(in oklch, var(--ae-color-accent) 30%, var(--ae-color-fg));
 }
 
 /* ----- reversal stitch — the amber "reversed" tag + tinted successor ----- */
@@ -370,6 +382,17 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* the tool's own one-line `description` (first-party "what this does"), a faint second
+   line under the telemetry. Lives in the entry body, so it indents under the tool line. */
+.hg-entry__activity-desc {
+  font-size: var(--ae-font-size-xs);
+  color: var(--ae-color-fg-subtle);
+  line-height: var(--ae-line-height-snug);
+  margin-top: var(--ae-space-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* ==========================================================================
    COMPLETED-TURN TOOL CALLS (the click-to-expand accordion)
@@ -443,6 +466,15 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* the tool's first-party one-liner inside the accordion row — muted, after the target. */
+.hg-tools__desc {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ae-color-fg-muted);
+  opacity: 0.85;
 }
 .hg-tools__time {
   flex: 0 0 auto;

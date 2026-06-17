@@ -370,6 +370,10 @@ def detect_reversal(record, prior_tasks):
 # Bounded so a long turn's tool stream can't flood the decision history.
 _ACTIVITY_LIMIT = 10
 
+# cap for a node's `detail` second line (the tool's first-party `desc`, the intent's
+# `why`) — long enough to carry the reasoning, short enough to stay one or two lines.
+_DETAIL_CAP = 200
+
 # how many of a COMPLETED turn's tool calls the per-task accordion carries. A
 # completed task folds its turn's tool stream behind a click-to-expand disclosure;
 # this bounds the payload (the true count rides alongside as `toolCount`).
@@ -396,7 +400,8 @@ def _tool_calls_in_window(tool_acts, lo_epoch, hi_epoch):
     nodes = []
     for a in win[-_TURN_TOOL_LIMIT:]:
         tool, target = _activity_label(a)
-        nodes.append({"tool": tool or "tool", "target": target, "at": a.get("ts")})
+        nodes.append({"tool": tool or "tool", "target": target,
+                      "desc": R.clean(a.get("desc") or "", _DETAIL_CAP), "at": a.get("ts")})
     return nodes, count
 
 
@@ -451,10 +456,84 @@ def _activity_tail(ledger, sid, since_epoch):
         tool, target = _activity_label(a)
         nodes.append({
             "id": "act-%d" % i, "kind": "activity", "tool": tool or "tool",
-            "summary": target, "at": a.get("ts"), "topic": "", "reversal": None,
+            "summary": target,
+            # the agent's first-party one-liner for this action (Bash `description`),
+            # surfaced as the activity node's second line. "" when the tool carried none.
+            "detail": R.clean(a.get("desc") or "", _DETAIL_CAP),
+            "at": a.get("ts"), "topic": "", "reversal": None,
             "now": False,
         })
     return nodes
+
+
+def _intent_tasks(ledger, sid):
+    """First-party DECLARED-INTENT entries for a session: the `intent` activity records
+    the agent volunteered as it started a task ("what I'm doing and why"), OLDEST->NEWEST.
+    Unlike a reconstructed decision (a later model pass INFERS the rationale), these carry
+    the agent's OWN stated why — captured live, verbatim. They persist in the trail as the
+    first-party 'why', distinct from (and durable across) any decision that later lands for
+    the same work. integrity is always 'volunteered'. Fail-open: [] on any read error."""
+    try:
+        acts = ledger._acts(sid)
+    except Exception:
+        return []
+    out = []
+    for i, a in enumerate(acts):
+        if not isinstance(a, dict) or a.get("type") != "intent":
+            continue
+        title = R.clean(a.get("title") or "", 240)
+        if not title:
+            continue
+        out.append({
+            "id": "intent-%d" % i,
+            "kind": "intent",
+            "summary": title,
+            "detail": R.clean(a.get("why") or "", _DETAIL_CAP),
+            "integrity": "volunteered",
+            "at": a.get("ts"),
+            "topic": "",
+            "reversal": None,
+        })
+    return out
+
+
+def _live_edge_ts(t):
+    """The effective sort time of a trail task for intent-weaving. The in-flight live
+    edge (an activity now-tip, or a bloomed 'live' checkpoint) and the trailing 'pending'
+    anchor to the END of the trail regardless of clock — so a declared intent, even one
+    the producer stamps in the SAME (second-resolution) instant, can never displace the
+    pulsing NOW card or sort below the ghosted next. Everything else sorts by its real ts."""
+    if t.get("now") or t.get("kind") == "live" or not t.get("at"):
+        return float("inf")
+    return R.parse_ts(t.get("at"))
+
+
+def _weave_intents(tasks, intents):
+    """Insert declared-intent tasks into an already-ordered trail by timestamp (stable):
+    an intent sorts ABOVE the first existing NON-intent task at-or-after its instant, so
+    the intent the agent declared lands just above that turn's decision/tools even when the
+    producer stamps both in the same (second-resolution) second. The live edge (the NOW
+    tip / bloomed 'live') and the trailing 'pending' are pinned to the end (_live_edge_ts
+    -> inf), so an intent never displaces the pulsing tip. Intents sharing a second keep
+    their own declaration order (an already-woven same-second intent is not pushed below a
+    later one). A missing/garbage `at` (parse_ts -> 0.0) degrades to the trail tail rather
+    than anchoring the intent to 1970 at the very top."""
+    if not intents:
+        return tasks
+    result = list(tasks)
+    for it in intents:
+        it_ts = R.parse_ts(it.get("at")) or float("inf")
+        pos = len(result)
+        for i, t in enumerate(result):
+            eff = _live_edge_ts(t)
+            # stop before the first task strictly newer, OR one that ties this instant but
+            # is NOT itself an intent — so the intent lands above its same-second decision/
+            # tool, yet after any same-second intent already woven in (order preserved).
+            if eff > it_ts or (eff == it_ts and t.get("kind") != "intent"):
+                pos = i
+                break
+        result.insert(pos, it)
+    return result
 
 
 def build_tasks(ledger, sid, *, include_activity=False, working_now=False):
@@ -580,6 +659,12 @@ def build_tasks(ledger, sid, *, include_activity=False, working_now=False):
                 "reversal": None,
             })
 
+    # weave first-party DECLARED-INTENT entries into the trail by timestamp. Only on the
+    # focused trail (include_activity) — sibling trails stay lean. These persist as the
+    # agent's verbatim "why", so they survive even after the reconstructed decision lands.
+    if include_activity:
+        tasks = _weave_intents(tasks, _intent_tasks(ledger, sid))
+
     # strip the internal 'topic' helper from the wire shape; keep reversal only on
     # supersedes; normalize every timestamp to UTC-Z (consistent with generatedAt).
     out = []
@@ -599,7 +684,7 @@ def build_tasks(ledger, sid, *, include_activity=False, working_now=False):
             # a completed turn's tool calls, for the click-to-expand accordion.
             wire["toolCalls"] = [
                 {"tool": tc.get("tool") or "tool", "target": tc.get("target") or "",
-                 "at": _norm_ts(tc.get("at"))}
+                 "desc": tc.get("desc") or "", "at": _norm_ts(tc.get("at"))}
                 for tc in t["_toolCalls"]
             ]
             wire["toolCount"] = t.get("_toolCount", len(t["_toolCalls"]))

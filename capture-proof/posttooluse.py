@@ -30,12 +30,28 @@ import agentlog_common as A
 
 _CMD_CAP = 500
 _TARGET_CAP = 200
+_DESC_CAP = 200
 
 # Tools that MUTATE the workspace. Only these contribute `paths` — the field the
 # §6.3 ground-truth / §6.4 suspected-gap audit harvests as "paths the session
 # touched". A Read/Grep OBSERVES; it must never land in `paths` or it would falsely
 # fire the migration/manifest/flagged-glob signals on files we merely looked at.
-_MUTATING = ("Edit", "Write", "MultiEdit", "NotebookEdit")
+_MUTATING = ("Edit", "Write", "MultiEdit", "NotebookEdit", "apply_patch")
+
+
+def _paths_from_patch(text):
+    paths = []
+    if not isinstance(text, str):
+        return paths
+    prefixes = ("*** Update File: ", "*** Add File: ", "*** Delete File: ")
+    for line in text.splitlines():
+        for prefix in prefixes:
+            if line.startswith(prefix):
+                p = line[len(prefix):].strip()
+                if p and p not in paths:
+                    paths.append(p)
+                break
+    return paths
 
 
 def _observe_target(ti):
@@ -73,12 +89,28 @@ def tool_use_record(data, now_iso=None):
             p = ti.get(key)
             if isinstance(p, str) and p.strip():
                 paths.append(p)
+        if tool == "apply_patch":
+            for key in ("patch", "input", "changes"):
+                paths.extend(p for p in _paths_from_patch(ti.get(key)) if p not in paths)
     command = ""
     c = ti.get("command")
     if isinstance(c, str) and c.strip():
         command = A.redact(c.strip())
         if len(command) > _CMD_CAP:
             command = command[:_CMD_CAP - 1] + "…"
+    # The agent's OWN one-line label for a command-bearing tool (Bash's `description`,
+    # "Push commits to remote"). Bash sets `command` first, so _observe_target never
+    # reaches its description branch — the first-party human label was being discarded.
+    # Capture it as a supplementary `desc` (the live-stream second line), never a touched
+    # path. Only when a command is present, so a Task/Agent description still surfaces as
+    # its `target` (no duplication). Redacted + capped at write time (§10).
+    desc = ""
+    if command:
+        dv = ti.get("description")
+        if isinstance(dv, str) and dv.strip():
+            desc = A.redact(dv.strip())
+            if len(desc) > _DESC_CAP:
+                desc = desc[:_DESC_CAP - 1] + "…"
     target = ""
     if not paths and not command:
         t = _observe_target(ti)
@@ -95,21 +127,68 @@ def tool_use_record(data, now_iso=None):
         rec["paths"] = paths
     if command:
         rec["command"] = command
+    if desc:
+        rec["desc"] = desc
     if target:
         rec["target"] = target
     return rec
 
 
+def intent_record(data, text, now_iso=None):
+    """Pure: a block of assistant text -> a first-class `intent` activity record when the
+    agent declared one (`▸ intent: <what> — <why>`), else None. This is the DECLARED-intent
+    layer (the live, first-party "why"), the complement to the out-of-band reconstructed
+    decision (a later model pass inferring the why). Title/why are redacted + capped inside
+    A.extract_intent (§10 at-rest)."""
+    parsed = A.extract_intent(text)
+    if not parsed:
+        return None
+    return {"type": "intent", "session_id": data.get("session_id") or "unknown",
+            "cwd": data.get("cwd") or "", "title": parsed["title"],
+            "why": parsed["why"], "ts": now_iso or A.now_iso()}
+
+
+def maybe_capture_intent(data):
+    """Scrape the transcript tail for a declared `▸ intent:` line and, if it is NEW
+    (deduped per session — the line lingers in the tail all turn), append an `intent`
+    record. Bounded tail read; armed-only (called only when armed); fail-open."""
+    tpath = data.get("transcript_path") or ""
+    if not tpath:
+        return
+    rec = intent_record(data, A.tail_assistant_text(tpath))
+    if rec is None:
+        return
+    sid = rec["session_id"]
+    key = rec["title"] + "\x1f" + rec["why"]
+    if A.last_intent_key(sid) == key:
+        return   # this exact declaration was already emitted earlier in the turn
+    # Gate the dedup marker on a SUCCESSFUL write: if the ledger append fails (disk full,
+    # permission), the marker stays unset so the same declaration is re-captured next call.
+    if A.append_jsonl(A.ACTIVITY, rec):
+        A.set_intent_key(sid, key)
+
+
 def main():
-    data = A.read_stdin_json()
+    # Kill switch first: disabled() only reads an env var, so checking it BEFORE
+    # read_stdin_json keeps AGENTLOG_DISABLE=1 a true zero-footprint no-op (a malformed
+    # stdin must not create the ledger dir / hook.log when capture is disabled).
     if A.disabled():
         sys.exit(0)
+    data = A.read_stdin_json()
     try:
         rec = tool_use_record(data)
         if rec:
             A.append_jsonl(A.ACTIVITY, rec)
     except Exception as e:
         A.log("posttooluse hook error (fail-open): %r" % e)
+    # Declared intent is volunteered JUDGMENT (like a checkpoint), so it is ARMED-ONLY —
+    # a normal un-armed session pays zero extra cost (no transcript read at all). Wrapped
+    # separately so an intent-scrape error can never lose the passive tool_use fact above.
+    if A.armed():
+        try:
+            maybe_capture_intent(data)
+        except Exception as e:
+            A.log("posttooluse intent capture error (fail-open): %r" % e)
     sys.exit(0)
 
 

@@ -1406,5 +1406,212 @@ class TestNowLine(unittest.TestCase):
         self.assertEqual(nl["text"], "shipped the parser")
 
 
+# --------------------------------------------------------------------------- #
+# activity desc — the tool's first-party one-liner rides the activity node's detail
+# --------------------------------------------------------------------------- #
+class TestActivityDesc(unittest.TestCase):
+    """Part 1: a command-bearing tool_use now carries the agent's own `desc` (Bash's
+    `description`); build_tasks surfaces it as the activity node's `detail` second line
+    (in-flight) and in the completed-turn accordion."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def test_inflight_activity_carries_desc_as_detail(self):
+        cps = [_cp("ad", "2026-06-10T10:00:00-04:00", decisions=[_decision("a", "d")])]
+        acts = [_act("tool_use", "ad", "2026-06-10T10:05:00-04:00", tool="Bash",
+                     command="git push origin main", desc="Push commits to remote")]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        tasks = S.build_tasks(led, "ad", include_activity=True, working_now=True)
+        act = next(t for t in tasks if t["kind"] == "activity")
+        self.assertEqual(act["summary"], "git push origin main")   # the command (line 1)
+        self.assertEqual(act["detail"], "Push commits to remote")  # the first-party label (line 2)
+
+    def test_activity_without_desc_has_empty_detail(self):
+        cps = [_cp("ad", "2026-06-10T10:00:00-04:00", decisions=[_decision("a", "d")])]
+        acts = [_act("tool_use", "ad", "2026-06-10T10:05:00-04:00", tool="Edit", paths=["x.js"])]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        act = next(t for t in S.build_tasks(led, "ad", include_activity=True) if t["kind"] == "activity")
+        self.assertEqual(act["detail"], "")
+
+    def test_completed_turn_accordion_carries_desc(self):
+        cps = [_cp("ad", "2026-06-10T10:00:00-04:00", decisions=[_decision("a", "first")]),
+               _cp("ad", "2026-06-10T10:10:00-04:00", decisions=[_decision("b", "second")])]
+        acts = [_act("tool_use", "ad", "2026-06-10T10:05:00-04:00", tool="Bash",
+                     command="cargo test", desc="Run the workspace suite")]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        t = next(x for x in S.build_tasks(led, "ad", include_activity=True) if x.get("toolCalls"))
+        self.assertEqual(t["toolCalls"][0]["desc"], "Run the workspace suite")
+
+
+# --------------------------------------------------------------------------- #
+# declared-intent trail — first-party "why" that PERSISTS past reconstruction
+# --------------------------------------------------------------------------- #
+class TestIntentTrail(unittest.TestCase):
+    """Part 2: an `intent` activity record (the agent's volunteered, in-the-moment "what
+    & why") becomes a 'volunteered' intent task woven into the focused trail by timestamp,
+    durable alongside any later reconstructed decision for the same work."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def test_intent_record_becomes_a_volunteered_intent_task(self):
+        cps = [_cp("it", "2026-06-10T10:00:00-04:00", decisions=[_decision("a", "d")])]
+        acts = [_act("intent", "it", "2026-06-10T10:05:00-04:00",
+                     title="Model client as a single bidi stream", why="preserves message ordering")]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        intent = next(t for t in S.build_tasks(led, "it", include_activity=True) if t["kind"] == "intent")
+        self.assertEqual(intent["summary"], "Model client as a single bidi stream")
+        self.assertEqual(intent["detail"], "preserves message ordering")
+        self.assertEqual(intent["integrity"], "volunteered")
+
+    def test_intent_weaves_above_the_decision_it_precedes(self):
+        # intent declared at 10:05; the decision checkpoint is captured at turn-end 10:10.
+        # The intent must sort ABOVE that decision — it is the why stated BEFORE the work.
+        cps = [_cp("it", "2026-06-10T10:10:00-04:00",
+                   decisions=[_decision("transport", "use a single bidi stream")])]
+        acts = [_act("intent", "it", "2026-06-10T10:05:00-04:00",
+                     title="use a single bidi stream", why="preserves ordering")]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        kinds = [t["kind"] for t in S.build_tasks(led, "it", include_activity=True)]
+        self.assertLess(kinds.index("intent"), kinds.index("decision"))
+
+    def test_intent_persists_alongside_a_later_reconstructed_decision(self):
+        # the user's core ask: the first-party why must SURVIVE even after the
+        # reconstructed decision lands. Both appear; the intent is not consumed.
+        cps = [_cp("it", "2026-06-10T10:10:00-04:00",
+                   decisions=[_decision("transport", "use a single bidi stream")])]
+        acts = [_act("intent", "it", "2026-06-10T10:05:00-04:00",
+                     title="use a single bidi stream", why="the verbatim why")]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        tasks = S.build_tasks(led, "it", include_activity=True)
+        self.assertEqual(sum(1 for t in tasks if t["kind"] == "intent"), 1)
+        self.assertEqual(sum(1 for t in tasks if t["kind"] == "decision"), 1)
+        intent = next(t for t in tasks if t["kind"] == "intent")
+        self.assertEqual(intent["detail"], "the verbatim why")   # verbatim, not inferred
+
+    def test_intent_omitted_from_lean_sibling_trail(self):
+        cps = [_cp("it", "2026-06-10T10:10:00-04:00", decisions=[_decision("a", "d")])]
+        acts = [_act("intent", "it", "2026-06-10T10:05:00-04:00", title="t", why="w")]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        self.assertNotIn("intent", [t["kind"] for t in S.build_tasks(led, "it")])
+
+    def test_intent_does_not_inflate_decision_count(self):
+        # an intent + a decision both ride the trail, but only the decision counts —
+        # else the intent and its reconstructed decision double-count the same work.
+        cps = [_cp("it", "2026-06-10T10:10:00-04:00", decisions=[_decision("a", "use bidi")])]
+        acts = [_act("intent", "it", "2026-06-10T10:05:00-04:00", title="use bidi", why="w")]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        tasks = S.build_tasks(led, "it", include_activity=True)
+        self.assertEqual(S.decision_count(tasks), 1)
+
+    def test_intent_flows_through_build_state_focus(self):
+        cps = [_cp("it", "2026-06-10T10:10:00-04:00",
+                   decisions=[_decision("a", "d")], project="Mortar")]
+        acts = [_act("stop_boundary", "it", "2026-06-10T10:10:00-04:00"),
+                _act("intent", "it", "2026-06-10T10:05:00-04:00",
+                     title="declared task", why="the stated why")]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        state = S.build_state(led, _epics([]), now_epoch=_t("2026-06-10T10:11:00-04:00"))
+        intent = next(t for t in state["focus"]["activeStory"]["tasks"] if t["kind"] == "intent")
+        self.assertEqual(intent["summary"], "declared task")
+        self.assertEqual(intent["detail"], "the stated why")
+        self.assertEqual(intent["integrity"], "volunteered")
+
+
+# --------------------------------------------------------------------------- #
+# intent-weave ordering — the live edge is never displaced, an intent sorts above
+# its same-second decision, inter-intent order holds, corrupt ts degrades to tail
+# --------------------------------------------------------------------------- #
+class TestIntentWeaveOrdering(unittest.TestCase):
+    """Regression guards for the second-resolution-timestamp collisions the producer
+    routinely emits (now_iso is second-granular). The intent-weave must never bury the
+    pulsing NOW tip, must render a first-party 'why' ABOVE the work it introduces, must
+    keep inter-intent declaration order, and must not anchor a corrupt-ts intent to 1970."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def test_intent_same_second_as_now_tip_keeps_the_now_edge_last(self):
+        # the in-flight tool and the intent share a wall-clock second (the COMMON case:
+        # both stamped by now_iso() in the same PostToolUse invocation). The pulsing NOW
+        # tip must stay the trail's LAST element so auto-scroll lands on it, not the intent.
+        cps = [_cp("nt", "2026-06-10T10:00:00-04:00", decisions=[_decision("a", "d")], next_action="")]
+        acts = [_act("tool_use", "nt", "2026-06-10T10:05:30-04:00", tool="Bash", command="cargo test"),
+                _act("intent", "nt", "2026-06-10T10:05:30-04:00", title="declared", why="why")]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        tasks = S.build_tasks(led, "nt", include_activity=True, working_now=True)
+        self.assertEqual(tasks[-1]["kind"], "activity")     # the NOW tip is still the tail
+        self.assertTrue(tasks[-1]["now"])
+        self.assertIn("intent", [t["kind"] for t in tasks])  # the intent still appears (above the tip)
+
+    def test_intent_same_second_as_decision_sorts_above_it(self):
+        # intent and its decision checkpoint stamped in the SAME second -> the first-party
+        # why must render ABOVE the work it introduces, not below (strict '>' got this wrong).
+        cps = [_cp("ss", "2026-06-10T10:05:00-04:00",
+                   decisions=[_decision("transport", "use bidi")], next_action="")]
+        acts = [_act("intent", "ss", "2026-06-10T10:05:00-04:00", title="use bidi", why="why")]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        kinds = [t["kind"] for t in S.build_tasks(led, "ss", include_activity=True)]
+        self.assertLess(kinds.index("intent"), kinds.index("decision"))
+
+    def test_multiple_intents_each_weave_above_their_turn_in_order(self):
+        cps = [_cp("mi", "2026-06-10T10:10:00-04:00", cid="c1", decisions=[_decision("a", "first")]),
+               _cp("mi", "2026-06-10T10:30:00-04:00", cid="c2",
+                   decisions=[_decision("b", "second")], next_action="")]
+        acts = [_act("intent", "mi", "2026-06-10T10:05:00-04:00", title="intent one", why="w1"),
+                _act("intent", "mi", "2026-06-10T10:25:00-04:00", title="intent two", why="w2")]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        s = [t["summary"] for t in S.build_tasks(led, "mi", include_activity=True)]
+        self.assertLess(s.index("intent one"), s.index("first"))
+        self.assertLess(s.index("first"), s.index("intent two"))
+        self.assertLess(s.index("intent two"), s.index("second"))
+
+    def test_two_same_second_intents_keep_declaration_order(self):
+        cps = [_cp("tw", "2026-06-10T10:10:00-04:00", decisions=[_decision("a", "d")], next_action="")]
+        acts = [_act("intent", "tw", "2026-06-10T10:05:00-04:00", title="first declared", why="w1"),
+                _act("intent", "tw", "2026-06-10T10:05:00-04:00", title="second declared", why="w2")]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        s = [t["summary"] for t in S.build_tasks(led, "tw", include_activity=True) if t["kind"] == "intent"]
+        self.assertEqual(s, ["first declared", "second declared"])
+
+    def test_intent_newer_than_live_tool_does_not_steal_the_now_edge(self):
+        # an intent stamped AFTER the last in-flight tool (skew, or declared post-tool) must
+        # still leave the tool as the sole pulsing live edge, pinned to the tail.
+        cps = [_cp("nl", "2026-06-10T10:00:00-04:00", decisions=[_decision("a", "d")], next_action="")]
+        acts = [_act("tool_use", "nl", "2026-06-10T10:05:00-04:00", tool="Read", target="x.rs"),
+                _act("intent", "nl", "2026-06-10T10:06:00-04:00", title="declared later", why="w")]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        tasks = S.build_tasks(led, "nl", include_activity=True, working_now=True)
+        nows = [t for t in tasks if t.get("now")]
+        self.assertEqual(len(nows), 1)
+        self.assertEqual(nows[0]["kind"], "activity")   # the tool, not the intent, is the edge
+        self.assertIs(tasks[-1], nows[0])               # and it stays the tail
+
+    def test_garbage_ts_intent_does_not_crash_and_sorts_to_tail_not_1970(self):
+        cps = [_cp("gb", "2026-06-10T10:10:00-04:00", decisions=[_decision("a", "d")], next_action="")]
+        acts = [_act("intent", "gb", "not-a-timestamp", title="corrupt ts", why="w")]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        tasks = S.build_tasks(led, "gb", include_activity=True)   # must not raise
+        kinds = [t["kind"] for t in tasks]
+        # a corrupt-ts intent degrades to the tail (after the real decision), NOT 1970-top.
+        self.assertGreater(kinds.index("intent"), kinds.index("decision"))
+
+
 if __name__ == "__main__":
     unittest.main()

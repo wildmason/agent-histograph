@@ -274,6 +274,335 @@ class TestToolUseRecord(unittest.TestCase):
         self.assertEqual(rec["paths"], ["C:/r/x.py"])
         self.assertNotIn("target", rec)
 
+    def test_apply_patch_extracts_paths_from_patch_headers(self):
+        rec = PT.tool_use_record({"tool_name": "apply_patch", "session_id": "s1",
+                                  "tool_input": {"patch": "\n".join([
+                                      "*** Begin Patch",
+                                      "*** Update File: src/app.py",
+                                      "@@",
+                                      "*** Add File: docs/new.md",
+                                      "+hello",
+                                      "*** End Patch",
+                                  ])}})
+        self.assertEqual(rec["paths"], ["src/app.py", "docs/new.md"])
+        self.assertNotIn("target", rec)
+
+
+class TestToolDescription(unittest.TestCase):
+    """Part 1: a command-bearing tool's own one-line `description` (Bash's human label)
+    was being discarded — Bash sets `command` first, so _observe_target never reached its
+    description branch. It now rides the record as a supplementary `desc` (the live-stream
+    second line), never a touched path, and only when a command is present (so a Task's
+    description still surfaces as its `target`, no duplication)."""
+
+    def test_bash_description_captured_as_desc_alongside_command(self):
+        rec = PT.tool_use_record({"tool_name": "Bash", "session_id": "s1",
+                                  "tool_input": {"command": "git push origin main",
+                                                 "description": "Push commits to remote"}})
+        self.assertEqual(rec["command"], "git push origin main")
+        self.assertEqual(rec["desc"], "Push commits to remote")   # the first-party label, no longer dropped
+        self.assertNotIn("paths", rec)                            # a desc is never a touched path
+
+    def test_bash_description_redacted_and_capped(self):
+        rec = PT.tool_use_record({"tool_name": "Bash",
+                                  "tool_input": {"command": "deploy",
+                                                 "description": "use token=sk-abcdefghijklmnop1234 " + "x" * 400}})
+        self.assertNotIn("sk-abcdefghijklmnop1234", rec["desc"])  # §10 at-rest redaction
+        self.assertLessEqual(len(rec["desc"]), PT._DESC_CAP)
+
+    def test_bash_description_cap_marks_truncation_and_keeps_leading_content(self):
+        # the cap contract is `desc[:_DESC_CAP-1] + "…"` — assert the ELLIPSIS marker and
+        # that the leading (real) content survives the cut, not just the length bound (a
+        # broken cap returning "" or a hard slice without the marker also satisfies len<=cap).
+        rec = PT.tool_use_record({"tool_name": "Bash",
+                                  "tool_input": {"command": "deploy", "description": "Compile and " + "x" * 400}})
+        self.assertEqual(len(rec["desc"]), PT._DESC_CAP)          # cut to exactly the cap
+        self.assertTrue(rec["desc"].endswith("…"))                # with the truncation marker
+        self.assertTrue(rec["desc"].startswith("Compile and "))   # leading real content survives
+
+    def test_no_description_means_no_desc_key(self):
+        rec = PT.tool_use_record({"tool_name": "Bash", "tool_input": {"command": "ls"}})
+        self.assertNotIn("desc", rec)
+
+    def test_read_edit_never_carry_desc(self):
+        # observation/mutation tools carry no `command`, so a stray description (they
+        # don't have one in practice) must never become a desc — desc is command-scoped.
+        r_read = PT.tool_use_record({"tool_name": "Read", "tool_input": {"file_path": "C:/r/x.py",
+                                                                         "description": "ignored"}})
+        self.assertNotIn("desc", r_read)
+        r_edit = PT.tool_use_record({"tool_name": "Edit", "tool_input": {"file_path": "C:/r/x.py"}})
+        self.assertNotIn("desc", r_edit)
+
+    def test_task_description_stays_target_not_desc(self):
+        # Task has a description but no command -> it surfaces as `target` (its only label),
+        # and must NOT ALSO be a desc (that would double-render the same string).
+        rec = PT.tool_use_record({"tool_name": "Task",
+                                  "tool_input": {"description": "audit billing flow",
+                                                 "prompt": "long body"}})
+        self.assertEqual(rec["target"], "audit billing flow")
+        self.assertNotIn("desc", rec)
+
+
+class TestExtractIntent(unittest.TestCase):
+    """Part 2: extract_intent pulls a first-party `▸ intent: <what> — <why>` declaration
+    out of assistant text. Pure; the load-bearing parsing logic (separator split, last-
+    wins, leading-marker tolerance, redaction) — not a tautology."""
+
+    def test_title_and_why_split_on_em_dash(self):
+        got = A.extract_intent("▸ intent: Model the client as a single bidi stream — "
+                               "preserves message ordering and halves setup")
+        self.assertEqual(got["title"], "Model the client as a single bidi stream")
+        self.assertEqual(got["why"], "preserves message ordering and halves setup")
+
+    def test_title_only_when_no_separator(self):
+        got = A.extract_intent("intent: Wire the half-close path")
+        self.assertEqual(got["title"], "Wire the half-close path")
+        self.assertEqual(got["why"], "")
+
+    def test_tolerates_leading_markdown_and_glyph_markers(self):
+        for prefix in ("▸ ", "- ", "* ", "> ", "» ", "  • ", ""):
+            got = A.extract_intent(prefix + "intent: Do X :: because Y")
+            self.assertEqual(got["title"], "Do X", "prefix %r" % prefix)
+            self.assertEqual(got["why"], "because Y")
+
+    def test_hyphenated_title_is_not_split_on_a_bare_hyphen(self):
+        # the separator must be SPACE-PADDED, so a hyphenated word stays in the title.
+        got = A.extract_intent("intent: Add a write-through cache — cuts read latency")
+        self.assertEqual(got["title"], "Add a write-through cache")
+        self.assertEqual(got["why"], "cuts read latency")
+
+    def test_last_declaration_wins(self):
+        text = ("intent: First task — first why\n"
+                "...some work...\n"
+                "intent: Second task — second why")
+        got = A.extract_intent(text)
+        self.assertEqual(got["title"], "Second task")
+        self.assertEqual(got["why"], "second why")
+
+    def test_no_intent_line_is_none(self):
+        self.assertIsNone(A.extract_intent("Just normal prose mentioning the word intent: inline mid-sentence is fine."))
+        self.assertIsNone(A.extract_intent(""))
+        self.assertIsNone(A.extract_intent(None))
+
+    def test_only_line_start_matches_not_mid_prose(self):
+        # "intent:" buried mid-line (not at line start after markers) must NOT match.
+        self.assertIsNone(A.extract_intent("I considered the user's intent: but that's prose."))
+
+    def test_redacts_secrets_in_why(self):
+        got = A.extract_intent("intent: probe the API — using token=sk-abcdefghijklmnop1234")
+        self.assertNotIn("sk-abcdefghijklmnop1234", got["why"])
+
+    def test_title_and_why_capped_with_ellipsis_at_boundary(self):
+        # the title_cap=200 / why_cap=400 truncation paths must actually fire and mark the cut.
+        got = A.extract_intent("intent: " + "T" * 250 + " — " + "W" * 500)
+        self.assertEqual(len(got["title"]), 200)
+        self.assertTrue(got["title"].endswith("…"))
+        self.assertEqual(len(got["why"]), 400)
+        self.assertTrue(got["why"].endswith("…"))
+
+    def test_dangling_separator_stays_in_title(self):
+        # a space-padded separator needs content on BOTH sides; a trailing dangling dash
+        # therefore rides into the title (pinned behavior — no phantom empty why).
+        got = A.extract_intent("intent: Do the thing —")
+        self.assertEqual(got["why"], "")
+        self.assertEqual(got["title"], "Do the thing —")
+
+    def test_empty_declaration_after_colon_is_none(self):
+        self.assertIsNone(A.extract_intent("intent:"))
+        self.assertIsNone(A.extract_intent("▸ intent:   "))
+
+
+class TestIntentRecord(unittest.TestCase):
+    def test_builds_record_from_declared_text(self):
+        rec = PT.intent_record({"session_id": "s9", "cwd": "C:/r"},
+                               "▸ intent: Do the thing — for the reason",
+                               now_iso="2026-06-17T10:00:00-04:00")
+        self.assertEqual(rec["type"], "intent")
+        self.assertEqual(rec["session_id"], "s9")
+        self.assertEqual(rec["title"], "Do the thing")
+        self.assertEqual(rec["why"], "for the reason")
+        self.assertEqual(rec["ts"], "2026-06-17T10:00:00-04:00")
+
+    def test_none_when_no_intent_declared(self):
+        self.assertIsNone(PT.intent_record({"session_id": "s9"}, "no declaration here"))
+
+
+class _ActivityTempMixin(_TempStateMixin):
+    """_TempStateMixin redirects STATE_DIR/HOOK_LOG/AGENTLOG_DIR but NOT the ACTIVITY
+    path constant (set at import). Tests that EXERCISE writes to the ledger must redirect
+    it too, or they would append to the real ~/.agent-histograph/activity.jsonl."""
+    def setUp(self):
+        super().setUp()
+        self._saved_activity = A.ACTIVITY
+        A.ACTIVITY = os.path.join(self.tmp, "activity.jsonl")
+
+    def tearDown(self):
+        A.ACTIVITY = self._saved_activity
+        super().tearDown()
+
+    def _read_activity(self):
+        try:
+            with open(A.ACTIVITY, "r", encoding="utf-8") as f:
+                return [json.loads(l) for l in f if l.strip()]
+        except FileNotFoundError:
+            return []
+
+
+class TestTailAssistantText(_ActivityTempMixin, unittest.TestCase):
+    def _transcript(self, *msgs):
+        p = os.path.join(self.tmp, "transcript.jsonl")
+        with open(p, "w", encoding="utf-8") as f:
+            for role, text in msgs:
+                f.write(json.dumps({"message": {"role": role,
+                        "content": [{"type": "text", "text": text}]}}) + "\n")
+        return p
+
+    def test_returns_only_assistant_text(self):
+        p = self._transcript(("user", "please ▸ intent: not from a user line"),
+                             ("assistant", "▸ intent: Real task — real why"),
+                             ("user", "ok"))
+        txt = A.tail_assistant_text(p)
+        self.assertIn("Real task", txt)
+        self.assertNotIn("not from a user line", txt)   # user-side text is never scraped
+
+    def test_missing_file_is_empty(self):
+        self.assertEqual(A.tail_assistant_text("Z:/nope/none.jsonl"), "")
+        self.assertEqual(A.tail_assistant_text(""), "")
+
+
+class TestMaybeCaptureIntent(_ActivityTempMixin, unittest.TestCase):
+    def _transcript(self, text):
+        p = os.path.join(self.tmp, "transcript.jsonl")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"message": {"role": "assistant",
+                    "content": [{"type": "text", "text": text}]}}) + "\n")
+        return p
+
+    def test_declared_intent_is_recorded_once_then_deduped(self):
+        p = self._transcript("▸ intent: Model the client as a bidi stream — preserves ordering")
+        data = {"session_id": "sx", "cwd": "C:/r", "transcript_path": p}
+        PT.maybe_capture_intent(data)
+        PT.maybe_capture_intent(data)   # same declaration still in the tail -> no second record
+        intents = [r for r in self._read_activity() if r.get("type") == "intent"]
+        self.assertEqual(len(intents), 1)
+        self.assertEqual(intents[0]["title"], "Model the client as a bidi stream")
+        self.assertEqual(intents[0]["why"], "preserves ordering")
+
+    def test_new_declaration_emits_a_second_record(self):
+        data = {"session_id": "sx", "cwd": "C:/r",
+                "transcript_path": self._transcript("intent: First — a")}
+        PT.maybe_capture_intent(data)
+        data["transcript_path"] = self._transcript("intent: First — a\nintent: Second — b")
+        PT.maybe_capture_intent(data)
+        titles = [r["title"] for r in self._read_activity() if r.get("type") == "intent"]
+        self.assertEqual(titles, ["First", "Second"])
+
+    def test_no_declaration_writes_nothing(self):
+        data = {"session_id": "sx", "cwd": "C:/r",
+                "transcript_path": self._transcript("just working, no declaration")}
+        PT.maybe_capture_intent(data)
+        self.assertEqual([r for r in self._read_activity() if r.get("type") == "intent"], [])
+
+
+class TestIntentDedupOnWriteFailure(_ActivityTempMixin, unittest.TestCase):
+    """The dedup marker is gated on a SUCCESSFUL ledger write — if the append fails, the
+    marker must stay unset so the SAME declaration is re-captured next call (else one
+    transient write failure would drop the intent forever). The single most important
+    failure mode of Part 2; mutating `if append(): set_marker()` -> `append(); set_marker()`
+    must turn this test red."""
+
+    def _transcript(self, text):
+        p = os.path.join(self.tmp, "t.jsonl")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"message": {"role": "assistant",
+                    "content": [{"type": "text", "text": text}]}}) + "\n")
+        return p
+
+    def test_failed_write_leaves_marker_unset_so_retry_succeeds(self):
+        data = {"session_id": "fw", "cwd": "C:/r",
+                "transcript_path": self._transcript("intent: Persist this — even after a failed write")}
+        orig = A.append_jsonl
+        calls = {"n": 0}
+        def flaky(path, obj):
+            calls["n"] += 1
+            return False if calls["n"] == 1 else orig(path, obj)   # first write fails, then succeeds
+        A.append_jsonl = flaky
+        try:
+            PT.maybe_capture_intent(data)
+            self.assertEqual(A.last_intent_key("fw"), "")   # marker NOT set after a failed write
+            PT.maybe_capture_intent(data)                   # retry: write now succeeds
+        finally:
+            A.append_jsonl = orig
+        intents = [r for r in self._read_activity() if r.get("type") == "intent"]
+        self.assertEqual(len(intents), 1)                   # exactly once, not dropped, not doubled
+        self.assertEqual(intents[0]["title"], "Persist this")
+
+
+class TestTailWindow(_ActivityTempMixin, unittest.TestCase):
+    """The bounded tail read's seek branch (size > max_bytes) is the COMMON production
+    path — real transcripts routinely exceed 64KB. A stale intent in the dropped prefix
+    must not resurface, and a multibyte char straddling the seek offset must not corrupt
+    the recovered intent."""
+
+    def _amsg(self, text):
+        return json.dumps({"message": {"role": "assistant",
+                "content": [{"type": "text", "text": text}]}}) + "\n"
+
+    def test_window_drops_stale_intent_beyond_max_bytes(self):
+        p = os.path.join(self.tmp, "big.jsonl")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(self._amsg("intent: STALE TASK — old why"))
+            for i in range(60):                                  # ~96KB of filler > the 64KB window
+                f.write(self._amsg("working on step %d %s" % (i, "padding " * 200)))
+            f.write(self._amsg("intent: CURRENT TASK — fresh why"))
+        text = A.tail_assistant_text(p)
+        self.assertIn("CURRENT TASK", text)
+        self.assertNotIn("STALE TASK", text)                     # scrolled out of the window
+        self.assertEqual(A.extract_intent(text)["title"], "CURRENT TASK")
+
+    def test_multibyte_char_near_seek_boundary_does_not_corrupt_intent(self):
+        # em-dashes (3 UTF-8 bytes each) pepper the filler so one straddles the seek offset;
+        # seek + errors='replace' + partial-first-line discard must still recover the intent.
+        p = os.path.join(self.tmp, "mb.jsonl")
+        with open(p, "w", encoding="utf-8") as f:
+            for i in range(50):
+                f.write(self._amsg("filler — line %d %s" % (i, "x" * 1500)))
+            f.write(self._amsg("intent: Wire the half-close — drains cleanly"))
+        got = A.extract_intent(A.tail_assistant_text(p))
+        self.assertEqual(got["title"], "Wire the half-close")
+        self.assertEqual(got["why"], "drains cleanly")
+
+
+class TestKillSwitchZeroFootprint(unittest.TestCase):
+    """AGENTLOG_DISABLE=1 is documented as an instant no-op. main() must check disabled()
+    BEFORE reading stdin, so malformed stdin under the kill switch does not create the
+    ledger dir / hook.log (read_stdin_json logs a parse error, which would _ensure_dirs)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="agentlog-kill-")
+        self._saved = (A.AGENTLOG_DIR, A.STATE_DIR, A.HOOK_LOG, A.ACTIVITY)
+        d = os.path.join(self.tmp, "ledger")   # a dir that does NOT exist yet
+        A.AGENTLOG_DIR, A.STATE_DIR = d, os.path.join(d, "state")
+        A.HOOK_LOG, A.ACTIVITY = os.path.join(d, "hook.log"), os.path.join(d, "activity.jsonl")
+
+    def tearDown(self):
+        A.AGENTLOG_DIR, A.STATE_DIR, A.HOOK_LOG, A.ACTIVITY = self._saved
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_disabled_with_malformed_stdin_creates_no_ledger_dir(self):
+        import io
+        os.environ["AGENTLOG_DISABLE"] = "1"
+        saved_stdin = sys.stdin
+        sys.stdin = io.StringIO("{{{ not json")
+        try:
+            with self.assertRaises(SystemExit):
+                PT.main()
+        finally:
+            sys.stdin = saved_stdin
+            os.environ.pop("AGENTLOG_DISABLE", None)
+        self.assertFalse(os.path.exists(A.AGENTLOG_DIR),
+                         "AGENTLOG_DISABLE=1 must be a zero-footprint no-op even on malformed stdin")
+
 
 class TestIntegrityClassStamp(unittest.TestCase):
     def test_quiet_stamp_is_reconstructed_claim(self):

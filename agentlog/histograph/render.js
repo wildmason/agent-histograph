@@ -14,8 +14,8 @@
 //   renderFocus(mountEl, focus, { changed, fresh })
 //       -> the pinned ORIENTATION HEADER (working-toward epic + story title + a
 //          "now —" live line + segmented roadmap bar) over a scrolling TRANSCRIPT
-//          TRAIL: a chronological feed of typed entries (◆ decision · step
-//          ↺ reversal ○ milestone, a highlighted NOW card, a ghosted next).
+//          TRAIL: a chronological feed of typed entries (▸ intent ◆ decision
+//          · step ↺ reversal ○ milestone, a highlighted NOW card, a ghosted next).
 //   titlebarMeta(state) -> { needs, count, time } small derived strings.
 //
 // The contract is null-tolerant by design (cold: focus===null; no-epic:
@@ -172,6 +172,7 @@ function toolAccordion(task) {
       el("span", { class: "hg-tools__tool", text: c.tool || "tool" })
     );
     if (c.target) row.append(el("span", { class: "hg-tools__target", text: c.target }));
+    if (c.desc) row.append(el("span", { class: "hg-tools__desc", text: c.desc }));
     const t = clock(c.at);
     if (t) row.append(el("span", { class: "hg-tools__time", text: t }));
     listEl.append(row);
@@ -642,7 +643,24 @@ function entryActivity(task) {
     el("span", { class: "hg-entry__activity-tool", text: tool })
   );
   if (task.summary) line.append(el("span", { class: "hg-entry__activity-target", text: task.summary }));
-  return el("div", { class: "hg-entry hg-entry--activity" }, gutter, el("div", { class: "hg-entry__body" }, line));
+  const body = el("div", { class: "hg-entry__body" }, line);
+  // the agent's first-party one-liner for this action (the tool's `description`),
+  // a faint second line beneath the telemetry — "" renders nothing.
+  if (task.detail) body.append(el("div", { class: "hg-entry__activity-desc", text: task.detail }));
+  return el("div", { class: "hg-entry hg-entry--activity" }, gutter, body);
+}
+
+// a declared-intent entry — the agent's first-party "what I'm doing and why", stated
+// live as it picks up a task (▸). Renders like a typed entry (bold title + the why as
+// the second line); its 'volunteered' integrity glyph (◈) marks it as the agent's own
+// words, distinct from a reconstructed decision (◇).
+function entryIntent(task) {
+  return el(
+    "div",
+    { class: "hg-entry hg-entry--intent" },
+    entryGutter(task, "▸", "intent"),
+    entryBody(task)
+  );
 }
 
 // the ghosted next item — the latest next_action, dashed ○ + "next" label.
@@ -672,6 +690,8 @@ function renderEntry(task) {
       return task.now ? entryNow(task) : entryActivity(task);
     case "pending":
       return entryPending(task);
+    case "intent":
+      return entryIntent(task);
     case "decision":
       return entryTyped(task, "decision", "◆");
     case "milestone":

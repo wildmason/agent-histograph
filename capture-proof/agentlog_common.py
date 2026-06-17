@@ -107,6 +107,30 @@ def save_state(sid, st):
     except Exception as e:
         log("save_state error: %r" % e)
 
+# ---- declared-intent dedup marker (decoupled from the shared session state) ----
+# The agent's volunteered `▸ intent:` line stays in the transcript tail for the rest
+# of the turn, so every subsequent PostToolUse would re-emit it. We dedup on a tiny
+# per-session marker file (NOT the shared session-state json, so a per-tool intent
+# write can never clobber a concurrent capture_extract state update).
+def _intent_marker_path(sid):
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", sid or "unknown")
+    return os.path.join(STATE_DIR, safe + ".intent")
+
+def last_intent_key(sid):
+    try:
+        with open(_intent_marker_path(sid), "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception:
+        return ""
+
+def set_intent_key(sid, key):
+    _ensure_dirs()
+    try:
+        with open(_intent_marker_path(sid), "w", encoding="utf-8") as f:
+            f.write(key)
+    except Exception as e:
+        log("set_intent_key error: %r" % e)
+
 # ---- Claude Code transcript reading ----
 def transcript_size(path):
     try:
@@ -161,6 +185,82 @@ def last_assistant_text(msgs):
         if m["role"] == "assistant" and m["text"].strip():
             return m["text"]
     return ""
+
+def tail_assistant_text(path, max_bytes=65536):
+    """Concatenated text of the ASSISTANT messages in the last `max_bytes` of a Claude
+    Code transcript jsonl, oldest->newest within the window. A BOUNDED tail read for
+    the PostToolUse hot path (it fires once per tool call): we seek near the end rather
+    than parsing the whole transcript, and only assistant-role text is collected (the
+    injected SessionStart context / capture prompt are user-side, so they can never
+    self-trigger the intent scrape). Fail-open to '' on any error."""
+    if not path:
+        return ""
+    try:
+        size = os.path.getsize(path)
+        with open(path, "rb") as f:
+            if size > max_bytes:
+                f.seek(size - max_bytes)
+                f.readline()   # discard the partial first line after the seek
+            raw = f.read()
+        text = raw.decode("utf-8", errors="replace")
+    except Exception as e:
+        log("tail_assistant_text error: %r" % e)
+        return ""
+    out = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            o = json.loads(line)
+        except Exception:
+            continue
+        m = o.get("message")
+        if not isinstance(m, dict) or m.get("role") != "assistant":
+            continue
+        t = _content_text(m.get("content"))
+        if t.strip():
+            out.append(t)
+    return "\n".join(out)
+
+# A first-party DECLARED-INTENT line the agent volunteers as it starts a task:
+#   ▸ intent: <what> — <why>
+# The marker tolerates an optional leading bullet/quote/glyph (markdown `-`/`*`/`>`,
+# or ▸ » •) so it works whether the agent writes it bare or inside a list/quote. The
+# title/why split is on a SPACE-PADDED separator (— – :: -- |) so a hyphenated word in
+# the title is never mistaken for the boundary; with no separator the whole line is the
+# title (why=""). Anchored to line start (MULTILINE) to avoid matching "intent:" mid-prose.
+_INTENT_RE = re.compile(
+    r"^[ \t>*\-•▸»]*intent\s*:\s*(.+?)\s*$",
+    re.IGNORECASE | re.MULTILINE)
+_INTENT_SEP = re.compile(r"\s+(?:—|–|::|--|\|)\s+")
+
+def extract_intent(text, *, title_cap=200, why_cap=400):
+    """Pure: pull the LAST `▸ intent: <what> — <why>` the agent declared from a block of
+    assistant text -> {"title", "why"} (redacted + capped at write time, §10), or None
+    when no intent line is present. The last one wins so a re-declaration supersedes an
+    earlier one still in the tail window. A title-only declaration yields why=''."""
+    if not text:
+        return None
+    last = None
+    for m in _INTENT_RE.finditer(text):
+        cand = (m.group(1) or "").strip()
+        if cand:
+            last = cand
+    if not last:
+        return None
+    parts = _INTENT_SEP.split(last, maxsplit=1)
+    title = parts[0].strip()
+    why = parts[1].strip() if len(parts) > 1 else ""
+    if not title:
+        return None
+    title = redact(title)
+    if len(title) > title_cap:
+        title = title[:title_cap - 1] + "…"
+    why = redact(why)
+    if len(why) > why_cap:
+        why = why[:why_cap - 1] + "…"
+    return {"title": title, "why": why}
 
 _JSON_BLOCK = re.compile(r"```json\s*(\{.*?\})\s*```", re.DOTALL)
 

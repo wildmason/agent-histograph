@@ -20,6 +20,7 @@ fail-open, and always passively log the Stop boundary.
 import sys, json, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import agentlog_common as A
+import posttooluse as PT
 from rubric import load_capture_prompt, validate_checkpoint
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -113,6 +114,15 @@ def main():
         if not A.armed():
             A.log("stop (unarmed): passive log only, no capture")
             allow_stop()
+        # Backstop the declared-intent scrape at the turn boundary. PostToolUse captures an
+        # intent on the NEXT tool call after the declaring message persists — but a turn's
+        # FINAL message has no following tool call. At Stop that message IS in the transcript,
+        # so a dedup-guarded scrape here guarantees a declared "why" is never lost. Cheap
+        # (a bounded tail read, no model call); fail-open so it can't disrupt the capture path.
+        try:
+            PT.maybe_capture_intent(data)
+        except Exception as e:
+            A.log("stop intent backstop error (fail-open): %r" % e)
         if A.mode() == "inline":
             inline_capture(sid, cwd, tpath, stop_active, st)
         else:
