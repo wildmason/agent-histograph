@@ -964,6 +964,34 @@ def last_work_ts(ledger, sid):
     return ts
 
 
+def first_work_ts(ledger, sid):
+    """OLDEST timestamp of REAL work for a session — the lane's stable birth instant.
+    Mirror of last_work_ts (same record set, same meta exclusions) but the MIN, so the
+    value never moves as the agent keeps working. This is the lane's sort key: it gives
+    the terminals list a fixed creation order instead of reshuffling on every action.
+    Skips falsy/unparseable timestamps so one bad record can't pin the key to epoch-0.
+    Fail-open to 0.0 (only when a session truly has no parseable work — never for a live
+    lane, which by definition has a positive last_work_ts)."""
+    ts = None
+    try:
+        for a in ledger._acts(sid):
+            if isinstance(a, dict) and a.get("type") not in _META_ACT_TYPES:
+                t = R.parse_ts(a.get("ts"))
+                if t and (ts is None or t < ts):
+                    ts = t
+    except Exception:
+        pass
+    try:
+        for c in ledger._cps(sid):
+            if isinstance(c, dict):
+                t = R.parse_ts(c.get("captured_at"))
+                if t and (ts is None or t < ts):
+                    ts = t
+    except Exception:
+        pass
+    return ts if ts is not None else 0.0
+
+
 def session_ended_at(ledger, sid):
     """Epoch of a TERMINAL session_end (the human exited) with no real work after
     it, else None. A `clear` end (context reset) is never terminal; a session_end
@@ -994,13 +1022,28 @@ def dismissed_at(dismissed, term_id):
         return None
 
 
+def terminal_annotation(annotations, term_id):
+    """User-authored one-line note for a lane, or ''. Fail-open."""
+    if not annotations:
+        return ""
+    try:
+        v = annotations.get(term_id)
+        return v if isinstance(v, str) else ""
+    except Exception:
+        return ""
+
+
 def live_sessions(ledger, now_epoch, dismissed=None):
-    """Session ids the board renders, newest-WORK first. A lane is live iff it has
-    real substance, its most recent *work* is inside LIVE_WINDOW_SECS, the human has
-    not exited the session (a terminal session_end auto-drops it), and it has not
-    been manually dismissed without doing new work since. Older sessions are history;
-    empty/aborted sessions (e.g. a scheduled run that errored before acting) are
-    noise, not lanes."""
+    """Session ids the board renders, in a STABLE creation order — oldest first-WORK
+    first, so a lane holds its slot for its whole life instead of jumping to the top
+    whenever its agent does new work (the reshuffle reads as confusing churn). A lane
+    is live iff it has real substance, its most recent *work* is inside
+    LIVE_WINDOW_SECS, the human has not exited the session (a terminal session_end
+    auto-drops it), and it has not been manually dismissed without doing new work
+    since. Older sessions are history; empty/aborted sessions (e.g. a scheduled run
+    that errored before acting) are noise, not lanes. Note: `last_work_ts` still gates
+    liveness here, but the ORDER is keyed on `first_work_ts`; default-focus
+    (most-recently-active) is selected separately in build_state."""
     now = time.time() if now_epoch is None else now_epoch
     rows = []
     for sid in ledger.session_ids():
@@ -1017,8 +1060,9 @@ def live_sessions(ledger, now_epoch, dismissed=None):
         d = dismissed_at(dismissed, terminal_id(sid))
         if d is not None and work <= d:
             continue                                    # dismissed, no new work since
-        rows.append((work, sid))
-    rows.sort(key=lambda r: r[0], reverse=True)
+        rows.append((first_work_ts(ledger, sid), sid))
+    # oldest-first, sid as a deterministic tiebreak; never re-sorts on new work.
+    rows.sort(key=lambda r: (r[0], r[1]))
     return [sid for _, sid in rows]
 
 
@@ -1055,6 +1099,7 @@ def _build_terminal(ledger, sid, epics, now_epoch):
         "freshnessTone": tone,
         "story": {"title": story_title},
         "epic": epic,
+        "annotation": "",
         "focused": False,
         "statusLine": status_line(sess),
     }, sess
@@ -1158,7 +1203,8 @@ def _build_focus(ledger, focus_sid, epics, now_epoch):
         return None
 
 
-def build_state(ledger, epics, *, now_epoch=None, focus_terminal_id=None, dismissed=None):
+def build_state(ledger, epics, *, now_epoch=None, focus_terminal_id=None,
+                dismissed=None, annotations=None):
     """Assemble the FROZEN /api/state dict. Pure over (ledger, epics, now_epoch,
     dismissed).
 
@@ -1168,7 +1214,8 @@ def build_state(ledger, epics, *, now_epoch=None, focus_terminal_id=None, dismis
       - live-but-empty: focus.activeStory.tasks:[]
     `dismissed` maps a terminal id → dismissed-at epoch (manual close-out); such
     lanes are hidden until they do new work. Fail-open: a per-terminal derivation
-    exception drops that lane only."""
+    exception drops that lane only. `annotations` is a terminal-id map of
+    user-authored one-line notes."""
     now = time.time() if now_epoch is None else now_epoch
     epics = epics if isinstance(epics, list) else []
 
@@ -1180,17 +1227,23 @@ def build_state(ledger, epics, *, now_epoch=None, focus_terminal_id=None, dismis
             term, sess = _build_terminal(ledger, sid, epics, now)
         except Exception:
             continue   # fail-open: drop this lane, keep the rest
+        term["annotation"] = terminal_annotation(annotations, term["id"])
         terminals.append(term)
         sess_by_term[term["id"]] = sess
         sid_by_term[term["id"]] = sid
 
-    # focus selection: an explicit (persisted) focus if it is still a live lane,
-    # else the most-recently-active lane. live_sessions is newest-first, so [0].
+    # focus selection: an explicit (persisted) focus if it is still a live lane, else
+    # the most-recently-active lane. The display list is now in STABLE creation order
+    # (oldest first), so terminals[0] is the OLDEST — pick the max-last_work_ts lane
+    # explicitly instead. Ties resolve to the earlier-listed (older) lane via max()'s
+    # first-max rule, which is deterministic given the stable order.
     focus_tid = None
     if focus_terminal_id and focus_terminal_id in sid_by_term:
         focus_tid = focus_terminal_id
     elif terminals:
-        focus_tid = terminals[0]["id"]
+        focus_tid = max(
+            terminals, key=lambda t: last_work_ts(ledger, sid_by_term[t["id"]])
+        )["id"]
 
     focus = None
     if focus_tid is not None:

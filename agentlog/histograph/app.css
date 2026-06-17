@@ -253,11 +253,6 @@ body {
   flex-direction: column;
   gap: var(--ae-space-px);
 }
-.hg-terms__divider {
-  height: var(--ae-border-width-1);
-  background: var(--ae-color-border-subtle);
-  margin: var(--ae-space-1) var(--ae-space-2);
-}
 
 /* one fleet lane — clickable, keyboard-operable. */
 .hg-trow {
@@ -337,9 +332,22 @@ body {
 .hg-trow__annotation {
   min-width: 0;
   max-width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--ae-space-1);
   font-size: var(--ae-font-size-xs);
   line-height: var(--ae-line-height-tight);
   color: var(--ae-color-fg-subtle);
+}
+.hg-trow__annotation-icon {
+  width: 0.75rem;
+  height: 0.75rem;
+  flex: 0 0 0.75rem;
+  fill: currentColor;
+  opacity: 0.72;
+}
+.hg-trow__annotation-text {
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -418,7 +426,9 @@ body {
 .hg-context-menu {
   position: fixed;
   z-index: 60;
-  min-width: 132px;
+  inset: auto;
+  margin: 0;
+  min-width: 180px;
   padding: var(--ae-space-1);
   border: var(--ae-border-width-1) solid var(--ae-color-border-subtle);
   border-radius: var(--ae-radius-md);
@@ -427,6 +437,9 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--ae-space-px);
+}
+.hg-context-menu:popover-open {
+  display: flex;
 }
 .hg-context-menu__item {
   width: 100%;
@@ -441,6 +454,9 @@ body {
   line-height: var(--ae-line-height-tight);
   text-align: left;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--ae-space-2);
 }
 .hg-context-menu__item:hover {
   background: var(--ae-color-hover-overlay);
@@ -451,6 +467,12 @@ body {
 }
 .hg-context-menu__item--danger {
   color: var(--ae-color-danger);
+}
+.hg-context-menu__icon {
+  flex: 0 0 0.875rem;
+  width: 0.875rem;
+  height: 0.875rem;
+  fill: currentColor;
 }
 
 /* thin, theme-toned scrollbar for capped bodies. */
@@ -604,6 +626,27 @@ body {
   gap: var(--ae-space-2);
   padding-top: 1px;
 }
+/* tool-call gutter — the timestamp and the type glyph share ONE line (not stacked).
+   flex-shrink:0 + nowrap + auto basis hold the column exactly as wide as "HH:MM glyph"
+   needs, so neither ever wraps; the tabular timestamp keeps every tool row aligned. */
+.hg-entry__gutter--inline {
+  flex: 0 0 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--ae-space-1);
+  white-space: nowrap;
+}
+/* NOW-card gutter — the "NOW" word was removed; only the pulsing live dot remains.
+   Sit it at the gutter's left edge (like every other entry's glyph) and center it on
+   the title's line, rather than tucked at the top where the label used to anchor it. */
+.hg-entry__gutter--now {
+  flex-direction: row;
+  align-items: center;
+  padding-top: 0;
+}
+.hg-entry__gutter--now .hg-entry__nowdot {
+  margin-top: 0;
+}
 .hg-entry__time {
   font-family: var(--hg-mono);
   font-size: var(--ae-font-size-xs);
@@ -641,7 +684,7 @@ body {
 /* the NOW card — the highlighted live edge. A faint success wash that fades from
    the right edge to transparent on the left (a directional highlight, not a solid
    block); guaranteed distinct from bg in every theme (bg-elevated collapses to bg
-   in light schemes); the green NOW label + pulsing dot complete it. */
+   in light schemes); the pulsing green dot completes it (no "NOW" word needed). */
 .hg-entry--now {
   border-bottom: 0;
   background: linear-gradient(

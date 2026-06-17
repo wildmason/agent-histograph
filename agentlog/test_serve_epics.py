@@ -261,5 +261,32 @@ class TestDismissalPersistence(_TmpEnv):
         self.assertEqual(E.load_dismissed(), {"term-good": 5.0})
 
 
+class TestAnnotationPersistence(_TmpEnv):
+    def test_missing_file_is_empty(self):
+        self.assertEqual(E.load_annotations(), {})
+
+    def test_set_and_load_roundtrip_collapses_to_one_line(self):
+        E.set_annotation("term-42", "working on\nupdating codex\tfeatures")
+        self.assertEqual(E.load_annotations(),
+                         {"term-42": "working on updating codex features"})
+
+    def test_annotations_are_per_terminal(self):
+        E.set_annotation("term-1", "first lane")
+        E.set_annotation("term-2", "second lane")
+        self.assertEqual(E.load_annotations(), {"term-1": "first lane",
+                                                "term-2": "second lane"})
+
+    def test_empty_annotation_clears_only_that_terminal(self):
+        E.set_annotation("term-1", "first lane")
+        E.set_annotation("term-2", "second lane")
+        E.set_annotation("term-1", "   ")
+        self.assertEqual(E.load_annotations(), {"term-2": "second lane"})
+
+    def test_corrupt_values_are_dropped_not_fatal(self):
+        with open(E.annotations_path(), "w", encoding="utf-8") as f:
+            json.dump({"annotations": {"term-good": "note", "term-bad": ["oops"]}}, f)
+        self.assertEqual(E.load_annotations(), {"term-good": "note"})
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -17,6 +17,7 @@ Routes:
   POST /api/focus        -> persist focus {"terminalId": ...}; 200 {"ok": true}
   POST /api/dismiss      -> close out a lane (hidden until new work); 200 {"ok": true}
   POST /api/undismiss    -> restore a dismissed lane immediately; 200 {"ok": true}
+  POST /api/annotate     -> persist a one-line lane note; 200 {"ok": true}
   *                      -> 404 {"error": "not found"}
 
 Path-traversal guard: a /static/** request is resolved with os.path.realpath and
@@ -92,8 +93,10 @@ def _state_payload(now_epoch=None):
         epics = E.list_epics(E.load(), led, now_epoch=now_epoch)
         focus_tid = E.load_focus()
         dismissed = E.load_dismissed()
+        annotations = E.load_annotations()
         state = S.build_state(led, epics, now_epoch=now_epoch,
-                              focus_terminal_id=focus_tid, dismissed=dismissed)
+                              focus_terminal_id=focus_tid, dismissed=dismissed,
+                              annotations=annotations)
         # which ledger dir produced this state (+ session count / source). The renderer's
         # empty-state names it and flags a likely misconfiguration ("reading X — no data;
         # capture may be writing elsewhere"), turning a silent blank board into a self-
@@ -301,7 +304,7 @@ class HistographHandler(BaseHTTPRequestHandler):
     # ---- POST ----
     # state-mutating POST routes and the persistence action each performs. All share
     # the same CSRF/origin guard, body cap, and {"terminalId": "..."} payload shape.
-    _POST_ROUTES = ("/api/focus", "/api/dismiss", "/api/undismiss",
+    _POST_ROUTES = ("/api/focus", "/api/dismiss", "/api/undismiss", "/api/annotate",
                     "/api/ledger-dir", "/api/settings")
 
     def do_POST(self):
@@ -353,6 +356,13 @@ class HistographHandler(BaseHTTPRequestHandler):
             # stamp the dismissal now; serve_state hides the lane until it logs work
             # newer than this (the "returns on new work" contract).
             E.dismiss_terminal(tid, time.time())
+        elif path == "/api/annotate":
+            note = data.get("annotation")
+            if not isinstance(note, str):
+                return self._send_json({"error": "annotation required"}, status=400)
+            annotations = E.set_annotation(tid, note)
+            return self._send_json({"ok": True, "terminalId": tid,
+                                    "annotation": annotations.get(tid, "")})
         else:  # /api/undismiss — restore a lane immediately.
             E.undismiss_terminal(tid)
         return self._send_json({"ok": True, "terminalId": tid})

@@ -19,6 +19,7 @@ const POLL_ACTIVE_MS = 1500; // the focused lane is working: refresh quickly
 const STATE_URL = "/api/state";
 const FOCUS_URL = "/api/focus";
 const DISMISS_URL = "/api/dismiss";
+const ANNOTATE_URL = "/api/annotate";
 
 // ---- element handles -----------------------------------------------------
 const els = {
@@ -46,6 +47,10 @@ let inFlight = false;
 // focus-pane render memo — drives the auto-scroll policy in paint().
 let lastFocusSig = null;
 let lastFocusTerminal = null;
+let stateRequestSeq = 0;
+let latestPaintedStateSeq = 0;
+let annotationMutationSeq = 0;
+const pendingAnnotations = new Map();
 
 // ---- theme switcher + settings modal -------------------------------------
 initThemeSwitcher({
@@ -114,6 +119,7 @@ function focusSig(focus) {
 }
 
 function paint(state) {
+  state = stateWithPendingAnnotations(state);
   lastState = state;
 
   // The needs/running counts + clock now ride the fleet-switcher header (rendered
@@ -125,6 +131,7 @@ function paint(state) {
   renderTriage(els.mosaic, state.terminals, {
     onFocus: requestFocus,
     onDismiss: requestDismiss,
+    onAnnotate: requestAnnotate,
     time: meta.time,
     // the ledger block drives the cold-state diagnostic; the action opens settings
     // (where the picker lets you switch to the right dir).
@@ -152,6 +159,21 @@ function paint(state) {
   lastFocusTerminal = state.focus ? state.focus.terminalId : null;
 }
 
+function stateWithPendingAnnotations(state) {
+  if (!pendingAnnotations.size || !state || !Array.isArray(state.terminals)) {
+    return state;
+  }
+  let changed = false;
+  const terminals = state.terminals.map((t) => {
+    const pending = pendingAnnotations.get(t.id);
+    if (!pending) return t;
+    if (t.annotation === pending.text) return t;
+    changed = true;
+    return { ...t, annotation: pending.text };
+  });
+  return changed ? { ...state, terminals } : state;
+}
+
 // ---- connection status (calm) --------------------------------------------
 
 function showConnTrouble(show) {
@@ -161,15 +183,22 @@ function showConnTrouble(show) {
 
 // ---- fetch + poll --------------------------------------------------------
 
-async function fetchState() {
-  if (inFlight) return;
-  inFlight = true;
+async function fetchState({ allowOverlap = false } = {}) {
+  if (inFlight && !allowOverlap) return false;
+  const seq = ++stateRequestSeq;
+  if (!allowOverlap) inFlight = true;
   try {
     const res = await fetch(STATE_URL, { headers: { accept: "application/json" } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const state = await res.json();
+    // Mutation-triggered refreshes may intentionally overlap an older poll. If the
+    // older poll returns later, do not let it repaint stale state over the newer
+    // mutation response.
+    if (seq < latestPaintedStateSeq) return true;
+    latestPaintedStateSeq = seq;
     showConnTrouble(false);
     paint(state);
+    return true;
   } catch (err) {
     // calm degradation: keep the last good render, surface a quiet strip.
     // Never blank the screen or throw a modal.
@@ -178,8 +207,9 @@ async function fetchState() {
       // first load failed — show a calm cold shell so the page isn't empty.
       paint({ generatedAt: null, terminals: [], focus: null });
     }
+    return false;
   } finally {
-    inFlight = false;
+    if (!allowOverlap) inFlight = false;
   }
 }
 
@@ -253,6 +283,53 @@ async function requestFocus(terminalId) {
     await fetchState();
   } catch {
     // focus POST failed — the next poll will reconcile; surface the quiet strip.
+    showConnTrouble(true);
+  }
+}
+
+// ---- annotation ----------------------------------------------------------
+
+async function requestAnnotate(terminalId, annotationText) {
+  if (!terminalId) return;
+  const annotation = String(annotationText == null ? "" : annotationText)
+    .replace(/\s+/g, " ")
+    .trim();
+  const mutationSeq = ++annotationMutationSeq;
+  pendingAnnotations.set(terminalId, { text: annotation, seq: mutationSeq });
+  if (lastState && Array.isArray(lastState.terminals)) {
+    paint({
+      ...lastState,
+      terminals: lastState.terminals.map((t) =>
+        t.id === terminalId ? { ...t, annotation } : t
+      ),
+    });
+  }
+  try {
+    const res = await fetch(ANNOTATE_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ terminalId, annotation }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const saved = await res.json().catch(() => null);
+    if (saved && typeof saved.annotation === "string") {
+      pendingAnnotations.set(terminalId, {
+        text: saved.annotation.replace(/\s+/g, " ").trim(),
+        seq: mutationSeq,
+      });
+    }
+    await fetchState({ allowOverlap: true });
+    if ((pendingAnnotations.get(terminalId) || {}).seq === mutationSeq) {
+      pendingAnnotations.delete(terminalId);
+    }
+    // Confirm what the backend actually rehydrates without the optimistic overlay.
+    await fetchState({ allowOverlap: true });
+  } catch {
+    if ((pendingAnnotations.get(terminalId) || {}).seq === mutationSeq) {
+      pendingAnnotations.delete(terminalId);
+    }
+    await fetchState({ allowOverlap: true });
+    // annotation POST failed — the authoritative refetch restores the note.
     showConnTrouble(true);
   }
 }

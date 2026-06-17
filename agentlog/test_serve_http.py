@@ -125,7 +125,8 @@ class TestApiState(_Server):
         self.assertTrue(data["terminals"])                       # the seeded lane
         t = data["terminals"][0]
         for key in ("id", "provider", "project", "status", "freshnessLabel",
-                    "freshnessTone", "story", "epic", "focused", "statusLine"):
+                    "freshnessTone", "story", "epic", "annotation", "focused",
+                    "statusLine"):
             self.assertIn(key, t)
         self.assertEqual(sum(1 for x in data["terminals"] if x["focused"]), 1)
 
@@ -449,6 +450,52 @@ class TestDismissEndpoint(_Server):
         status, body = self._post("/api/dismiss", {})
         self.assertEqual(status, 400)
         self.assertIn("terminalId", json.loads(body).get("error", ""))
+
+
+# --------------------------------------------------------------------------- #
+# POST /api/annotate — one-line lane notes persist + reflect in /api/state
+# --------------------------------------------------------------------------- #
+class TestAnnotateEndpoint(_Server):
+    def _terminal_id(self):
+        _, _, body = self._get("/api/state")
+        return json.loads(body)["terminals"][0]["id"]
+
+    def _terminal(self, tid):
+        _, _, body = self._get("/api/state")
+        return next(t for t in json.loads(body)["terminals"] if t["id"] == tid)
+
+    def test_annotate_persists_and_reflects_in_state(self):
+        tid = self._terminal_id()
+        note = "working on\nupdating codex to use new histograph features"
+        status, body = self._post("/api/annotate", {"terminalId": tid,
+                                                    "annotation": note})
+        self.assertEqual(status, 200)
+        resp = json.loads(body)
+        self.assertTrue(resp["ok"])
+        self.assertEqual(resp["annotation"],
+                         "working on updating codex to use new histograph features")
+        self.assertEqual(E.load_annotations(),
+                         {tid: "working on updating codex to use new histograph features"})
+        self.assertEqual(self._terminal(tid)["annotation"],
+                         "working on updating codex to use new histograph features")
+
+    def test_empty_annotation_clears(self):
+        tid = self._terminal_id()
+        self._post("/api/annotate", {"terminalId": tid, "annotation": "temporary"})
+        status, body = self._post("/api/annotate", {"terminalId": tid, "annotation": ""})
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["annotation"], "")
+        self.assertEqual(E.load_annotations(), {})
+        self.assertEqual(self._terminal(tid)["annotation"], "")
+
+    def test_annotate_requires_terminal_id_and_annotation(self):
+        status, body = self._post("/api/annotate", {"annotation": "note"})
+        self.assertEqual(status, 400)
+        self.assertIn("terminalId", json.loads(body).get("error", ""))
+
+        status, body = self._post("/api/annotate", {"terminalId": self._terminal_id()})
+        self.assertEqual(status, 400)
+        self.assertIn("annotation", json.loads(body).get("error", ""))
 
 
 # --------------------------------------------------------------------------- #

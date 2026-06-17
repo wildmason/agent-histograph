@@ -353,14 +353,8 @@
   color: color-mix(in oklch, var(--ae-color-warning-emphasis) 35%, var(--ae-color-fg));
 }
 
-/* ----- the NOW card — the highlighted live edge (box layout in app.css) ----- */
-.hg-entry__nowlabel {
-  font-family: var(--hg-mono);
-  font-size: var(--ae-font-size-xs);
-  font-weight: var(--ae-font-weight-bold);
-  letter-spacing: 0.08em;
-  color: var(--ae-color-success);
-}
+/* ----- the NOW card — the highlighted live edge (box layout in app.css). The "NOW"
+   word was removed; the pulsing green dot alone marks the live edge. ----- */
 .hg-entry__nowdot {
   width: 11px;
   height: 11px;

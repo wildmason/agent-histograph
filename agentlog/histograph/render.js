@@ -189,9 +189,170 @@ function clock(iso) {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
+function oneLine(text) {
+  return String(text == null ? "" : text).replace(/\s+/g, " ").trim();
+}
+
+const FA_EDIT_PATH = "M535.6 85.7C513.7 63.8 478.3 63.8 456.4 85.7L432 110.1L529.9 208L554.3 183.6C576.2 161.7 576.2 126.3 554.3 104.4L535.6 85.7zM236.4 305.7C230.3 311.8 225.6 319.3 222.9 327.6L193.3 416.4C190.4 425 192.7 434.5 199.1 441C205.5 447.5 215 449.7 223.7 446.8L312.5 417.2C320.7 414.5 328.2 409.8 334.4 403.7L496 241.9L398.1 144L236.4 305.7zM160 128C107 128 64 171 64 224L64 480C64 533 107 576 160 576L416 576C469 576 512 533 512 480L512 384C512 366.3 497.7 352 480 352C462.3 352 448 366.3 448 384L448 480C448 497.7 433.7 512 416 512L160 512C142.3 512 128 497.7 128 480L128 224C128 206.3 142.3 192 160 192L256 192C273.7 192 288 177.7 288 160C288 142.3 273.7 128 256 128L160 128z";
+const FA_TRASH_PATH = "M232.7 69.9L224 96L128 96C110.3 96 96 110.3 96 128C96 145.7 110.3 160 128 160L512 160C529.7 160 544 145.7 544 128C544 110.3 529.7 96 512 96L416 96L407.3 69.9C402.9 56.8 390.7 48 376.9 48L263.1 48C249.3 48 237.1 56.8 232.7 69.9zM512 208L128 208L149.1 531.1C150.7 556.4 171.7 576 197 576L443 576C468.3 576 489.3 556.4 490.9 531.1L512 208z";
+const FA_FEATHER_PATH = "M416 64C457 64 496.3 80.3 525.2 109.2L530.7 114.7C559.7 143.7 576 183 576 223.9C576 248 570.3 271.5 559.8 292.7C557.9 296.4 554.5 299.2 550.5 300.4L438.5 334C434.6 335.2 432 338.7 432 342.8C432 347.9 436.1 352 441.2 352L473.4 352C487.7 352 494.8 369.2 484.7 379.3L462.3 401.7C460.4 403.6 458.1 404.9 455.6 405.7L374.6 430C370.7 431.2 368.1 434.7 368.1 438.8C368.1 443.9 372.2 448 377.3 448C390.5 448 396.2 463.7 385.1 470.9C344 497.5 295.8 512 246.1 512L160.1 512L112.1 560C103.3 568.8 88.9 568.8 80.1 560C71.3 551.2 71.3 536.8 80.1 528L320 288C328.8 279.2 328.8 264.8 320 256C311.2 247.2 296.8 247.2 288 256L143.5 400.5C137.8 406.2 128 402.2 128 394.1C128 326.2 155 261.1 203 213.1L306.8 109.2C335.7 80.3 375 64 416 64z";
+const FA_REMOVE_ANNOTATION_PATH = "M88 256L232 256C241.7 256 250.5 250.2 254.2 241.2C257.9 232.2 255.9 221.9 249 215L202.3 168.3C277.6 109.7 386.6 115 455.8 184.2C530.8 259.2 530.8 380.7 455.8 455.7C380.8 530.7 259.3 530.7 184.3 455.7C174.1 445.5 165.3 434.4 157.9 422.7C148.4 407.8 128.6 403.4 113.7 412.9C98.8 422.4 94.4 442.2 103.9 457.1C113.7 472.7 125.4 487.5 139 501C239 601 401 601 501 501C601 401 601 239 501 139C406.8 44.7 257.3 39.3 156.7 122.8L105 71C98.1 64.2 87.8 62.1 78.8 65.8C69.8 69.5 64 78.3 64 88L64 232C64 245.3 74.7 256 88 256z";
+
+function svgIcon(pathD, cls) {
+  if (!document.createElementNS) {
+    return el("span", { class: cls, attrs: { "aria-hidden": "true" } });
+  }
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", cls);
+  svg.setAttribute("viewBox", "0 0 640 640");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", pathD);
+  svg.append(path);
+  return svg;
+}
+
+function menuIcon(pathD) {
+  return svgIcon(pathD, "hg-context-menu__icon");
+}
+
 // ==========================================================================
 // TERMINALS — the fleet switcher (top section)
 // ==========================================================================
+
+let activeTerminalMenu = null;
+let activeTerminalMenuCleanup = null;
+
+function closeTerminalMenu() {
+  if (activeTerminalMenu && typeof activeTerminalMenu.hidePopover === "function") {
+    try {
+      activeTerminalMenu.hidePopover();
+    } catch {
+      /* already hidden or unsupported; remove below still cleans up */
+    }
+  }
+  if (activeTerminalMenu && activeTerminalMenu.parentNode) {
+    activeTerminalMenu.parentNode.removeChild(activeTerminalMenu);
+  }
+  activeTerminalMenu = null;
+  if (activeTerminalMenuCleanup) {
+    activeTerminalMenuCleanup();
+    activeTerminalMenuCleanup = null;
+  }
+}
+
+function menuPosition(menu, x, y) {
+  const margin = 8;
+  const width = 188;
+  const itemCount = menu && menu.children ? menu.children.length : 2;
+  const height = 12 + itemCount * 34;
+  const maxX = typeof window !== "undefined" && window.innerWidth
+    ? window.innerWidth - width - margin
+    : x;
+  const maxY = typeof window !== "undefined" && window.innerHeight
+    ? window.innerHeight - height - margin
+    : y;
+  const left = Math.max(margin, Math.min(x || margin, maxX));
+  const top = Math.max(margin, Math.min(y || margin, maxY));
+  if (menu.style) {
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+  } else {
+    menu.setAttribute("style", `left:${left}px;top:${top}px`);
+  }
+}
+
+function showTerminalMenu(term, name, point, { onAnnotate, onDismiss } = {}) {
+  if (!onAnnotate && !onDismiss) return;
+  const host = document.body || document.documentElement;
+  if (!host || !host.append) return;
+  closeTerminalMenu();
+  const currentAnnotation = oneLine(term.annotation);
+
+  const annotateBtn = el("button", {
+    class: "hg-context-menu__item",
+    attrs: { type: "button", role: "menuitem" },
+  }, menuIcon(FA_EDIT_PATH), el("span", { text: "Annotate" }));
+  annotateBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeTerminalMenu();
+    if (!onAnnotate) return;
+    const ask = typeof window !== "undefined" && typeof window.prompt === "function"
+      ? window.prompt
+      : (typeof globalThis !== "undefined" && typeof globalThis.prompt === "function"
+        ? globalThis.prompt
+        : null);
+    if (!ask) return;
+    const next = ask(`Annotation for ${name}`, currentAnnotation);
+    if (next !== null && next !== undefined) onAnnotate(term.id, next);
+  });
+
+  const items = [annotateBtn];
+  if (currentAnnotation) {
+    const removeAnnotationBtn = el("button", {
+      class: "hg-context-menu__item",
+      attrs: { type: "button", role: "menuitem" },
+    }, menuIcon(FA_REMOVE_ANNOTATION_PATH), el("span", { text: "Remove annotation" }));
+    removeAnnotationBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      closeTerminalMenu();
+      if (onAnnotate) onAnnotate(term.id, "");
+    });
+    items.push(removeAnnotationBtn);
+  }
+
+  const deleteBtn = el("button", {
+    class: "hg-context-menu__item hg-context-menu__item--danger",
+    attrs: { type: "button", role: "menuitem" },
+  }, menuIcon(FA_TRASH_PATH), el("span", { text: "Delete" }));
+  deleteBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeTerminalMenu();
+    if (onDismiss) onDismiss(term.id);
+  });
+  items.push(deleteBtn);
+
+  const menu = el(
+    "div",
+    { class: "hg-context-menu", attrs: { role: "menu", "aria-label": `Actions for ${name}` } },
+    ...items
+  );
+  const usePopover = typeof menu.showPopover === "function";
+  if (usePopover) menu.setAttribute("popover", "manual");
+  host.append(menu);
+  menuPosition(menu, point && point.x, point && point.y);
+  if (usePopover) {
+    try {
+      menu.showPopover();
+      // The top layer uses viewport positioning; re-apply after promotion so the
+      // menu stays anchored to the context-click point rather than UA defaults.
+      menuPosition(menu, point && point.x, point && point.y);
+    } catch {
+      if (menu.removeAttribute) menu.removeAttribute("popover");
+    }
+  }
+  activeTerminalMenu = menu;
+
+  const onPointerDown = (e) => {
+    if (menu.contains && menu.contains(e.target)) return;
+    closeTerminalMenu();
+  };
+  const onKeyDown = (e) => {
+    if (e.key === "Escape") closeTerminalMenu();
+  };
+  if (document.addEventListener) {
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    activeTerminalMenuCleanup = () => {
+      if (document.removeEventListener) {
+        document.removeEventListener("pointerdown", onPointerDown);
+        document.removeEventListener("keydown", onKeyDown);
+      }
+    };
+  }
+  if (annotateBtn.focus) annotateBtn.focus();
+}
 
 // the NEEDS YOU / ▚ VIEWING / IDLE micro-label. Bare colored text (not a chip) —
 // faithful to the mockup; ae-tag would impose a chip background. needs-you wins
@@ -222,7 +383,7 @@ function lanePill(term, needsYou, quiet) {
  * as a SIBLING of the role="button" row (never nested — nested interactives break
  * assistive tech), revealed on hover/focus.
  */
-function renderTerminalRow(term, { onFocus, onDismiss } = {}) {
+function renderTerminalRow(term, { onFocus, onDismiss, onAnnotate } = {}) {
   const prov = providerOf(term.provider);
   const needsYou = isNeedsYou(term);
   const quiet = term.status === "stale" || term.status === "parked" || term.status === "done";
@@ -237,6 +398,25 @@ function renderTerminalRow(term, { onFocus, onDismiss } = {}) {
   const name = hasProject ? term.project : prov.label || "session";
   const taskText = (term.story && term.story.title) || "—";
   const toneKey = freshToneKey(term);
+  const annotation = oneLine(term.annotation);
+  const main = el(
+    "span",
+    { class: "hg-trow__main" },
+    el(
+      "span",
+      { class: "hg-trow__line" },
+      el("span", { class: "hg-trow__name", text: name }),
+      el("span", { class: "hg-trow__task", text: taskText })
+    ),
+    annotation
+      ? el(
+        "span",
+        { class: "hg-trow__annotation", title: annotation },
+        svgIcon(FA_FEATHER_PATH, "hg-trow__annotation-icon"),
+        el("span", { class: "hg-trow__annotation-text", text: annotation })
+      )
+      : null
+  );
 
   const row = el(
     "div",
@@ -245,8 +425,9 @@ function renderTerminalRow(term, { onFocus, onDismiss } = {}) {
         "hg-trow" +
         (term.focused ? " hg-trow--selected" : "") +
         (quiet ? " hg-trow--quiet" : "") +
-        (needsYou ? " hg-trow--attn" : ""),
-      title: `${name} · ${taskText}`,
+        (needsYou ? " hg-trow--attn" : "") +
+        (annotation ? " hg-trow--annotated" : ""),
+      title: `${name} · ${taskText}` + (annotation ? ` · ${annotation}` : ""),
       attrs: {
         role: "button",
         tabindex: "0",
@@ -275,8 +456,7 @@ function renderTerminalRow(term, { onFocus, onDismiss } = {}) {
       // no innerHTML — CSP-safe and DOM-stub-test-safe).
       el("span", { class: "hg-provider__icon" })
     ),
-    el("span", { class: "hg-trow__name", text: name }),
-    el("span", { class: "hg-trow__task", text: taskText }),
+    main,
     lanePill(term, needsYou, quiet),
     el("span", { class: "hg-trow__age hg-card__fresh--" + toneKey, text: term.freshnessLabel || "" })
   );
@@ -288,6 +468,12 @@ function renderTerminalRow(term, { onFocus, onDismiss } = {}) {
       e.preventDefault();
       activate();
     }
+  });
+  row.addEventListener("contextmenu", (e) => {
+    if (!onAnnotate && !onDismiss) return;
+    e.preventDefault();
+    e.stopPropagation();
+    showTerminalMenu(term, name, { x: e.clientX || 0, y: e.clientY || 0 }, { onAnnotate, onDismiss });
   });
 
   // Close-out (×) — a SIBLING of the row, never nested inside the role="button".
@@ -401,21 +587,16 @@ export function renderTriage(mountEl, terminals, opts = {}) {
     return;
   }
 
-  // needs-you-first (stable within each group — preserves the backend's order).
-  const needsRows = [];
-  const rest = [];
-  for (const t of list) (isNeedsYou(t) ? needsRows : rest).push(t);
-
+  // Render in the backend's STABLE creation order (oldest lane first) exactly as
+  // given. We deliberately do NOT float needs-you lanes to the top: any positional
+  // reshuffle reads as confusing churn (the lane you're looking at jumps as another
+  // works). A lane that needs you is surfaced by its status dot, its NEEDS YOU pill,
+  // and the header's "N need you" count — just never by changing position.
   const body = el("div", {
     class: "hg-terms__scroll hg-scroll",
     attrs: { role: "list", "aria-label": `${list.length} terminal${list.length === 1 ? "" : "s"}` },
   });
-  const add = (t) => body.append(renderTerminalRow(t, opts));
-  needsRows.forEach(add);
-  if (needsRows.length && rest.length) {
-    body.append(el("div", { class: "hg-terms__divider", attrs: { "aria-hidden": "true" } }));
-  }
-  rest.forEach(add);
+  for (const t of list) body.append(renderTerminalRow(t, opts));
   mountEl.append(body);
 }
 
@@ -671,11 +852,15 @@ function entryNow(task) {
   } else {
     title = task.summary || "";
   }
+  // the live edge needs no "NOW" word — the glowing green dot alone signals it. The
+  // dot keeps an accessible name (the label's old job) so AT still announces "live".
   const gutter = el(
     "div",
-    { class: "hg-entry__gutter" },
-    el("span", { class: "hg-entry__nowlabel", text: "NOW" }),
-    el("span", { class: "hg-entry__nowdot hg-pulse", attrs: { "aria-hidden": "true" } })
+    { class: "hg-entry__gutter hg-entry__gutter--now" },
+    el("span", {
+      class: "hg-entry__nowdot hg-pulse",
+      attrs: { role: "img", "aria-label": "live" },
+    })
   );
   const body = el(
     "div",
@@ -690,9 +875,11 @@ function entryNow(task) {
 // the trail: a small tool glyph + a muted "tool · target" line.
 function entryActivity(task) {
   const tool = task.tool || "tool";
+  // tool-call gutter: the timestamp and the type glyph ride ONE line (not stacked),
+  // in a column held wide enough that they never wrap (see .hg-entry__gutter--inline).
   const gutter = el(
     "div",
-    { class: "hg-entry__gutter" },
+    { class: "hg-entry__gutter hg-entry__gutter--inline" },
     el("span", { class: "hg-entry__time", text: clock(task.at) }),
     el("span", {
       class: "hg-entry__glyph hg-entry__glyph--activity",

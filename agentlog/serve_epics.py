@@ -4,7 +4,9 @@ serve_epics — the epics layer of `agentlog serve` (the histograph).
 
 Epics are a HUMAN-DECLARED grouping of stories that gives the board a roadmap band.
 This module owns the only persistent state the histograph writes: `epics.json` (the
-declared epic->story links) and `histograph-focus.json` (the persisted focus lane).
+declared epic->story links), `histograph-focus.json` (the persisted focus lane),
+`histograph-dismissed.json` (manual close-outs), and `histograph-annotations.json`
+(per-terminal notes).
 
 Stored fields are human-declared ONLY (id, title, project, integrity, ORDERED
 stories, createdAt). `done` / `total` / `roadmapSegments` / `outcome` are NEVER
@@ -54,9 +56,15 @@ def dismissed_path():
     return os.path.join(Lg.resolved_dir(), "state", "histograph-dismissed.json")
 
 
+def annotations_path():
+    return os.path.join(Lg.resolved_dir(), "state", "histograph-annotations.json")
+
+
 # convenience module constants (snapshot at import; functions above are canonical)
 EPICS_PATH = epics_path()
 FOCUS_PATH = focus_path()
+
+_ANNOTATION_MAX_CHARS = 240
 
 
 # --------------------------------------------------------------------------- #
@@ -349,4 +357,75 @@ def undismiss_terminal(terminal_id):
     if str(terminal_id) in m:
         m.pop(str(terminal_id), None)
         _write_dismissed(m)
+    return m
+
+
+# --------------------------------------------------------------------------- #
+# terminal annotations. These are user-authored one-line notes keyed by the stable
+# public terminal id. They belong to the active ledger's board state, just like
+# focus/dismissed, so switching ledgers switches annotations too.
+# --------------------------------------------------------------------------- #
+def _clean_annotation(text):
+    if not isinstance(text, str):
+        return ""
+    one_line = " ".join(text.split())
+    return one_line[:_ANNOTATION_MAX_CHARS]
+
+
+def load_annotations():
+    """Map of terminal-id -> one-line annotation. Fail-open to {}."""
+    try:
+        with open(annotations_path(), "r", encoding="utf-8") as f:
+            raw = json.load(f)
+    except Exception:
+        return {}
+    out = {}
+    items = (raw.get("annotations") or {}).items() if isinstance(raw, dict) else []
+    for tid, note in items:
+        key = str(tid)
+        val = _clean_annotation(note)
+        if key and val:
+            out[key] = val
+    return out
+
+
+def _write_annotations(mapping):
+    """Persist the annotation map atomically. Fail-open."""
+    path = annotations_path()
+    d = os.path.dirname(path) or "."
+    try:
+        os.makedirs(d, exist_ok=True)
+        clean = {}
+        for tid, note in (mapping or {}).items():
+            key = str(tid)
+            val = _clean_annotation(note)
+            if key and val:
+                clean[key] = val
+        fd, tmp = tempfile.mkstemp(dir=d, prefix=".annotations.", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump({"annotations": clean}, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, path)
+        finally:
+            if os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+
+def set_annotation(terminal_id, annotation):
+    """Set or clear a terminal annotation. Empty/whitespace text clears it."""
+    m = load_annotations()
+    tid = str(terminal_id) if terminal_id is not None else ""
+    if not tid:
+        return m
+    note = _clean_annotation(annotation)
+    if note:
+        m[tid] = note
+    else:
+        m.pop(tid, None)
+    _write_annotations(m)
     return m

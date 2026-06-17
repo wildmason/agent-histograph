@@ -631,6 +631,68 @@ class TestFailOpenPerTerminal(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------- #
+# stable lane order — a lane keeps its slot for life; it does NOT jump to the
+# top when its agent does new work. Display = creation order (oldest first);
+# default focus stays the most-recently-active lane, decoupled from order.
+# --------------------------------------------------------------------------- #
+class TestStableLaneOrder(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def test_first_work_ts_is_earliest_real_work_and_ignores_meta(self):
+        # the lane's birth instant is its earliest REAL work; a meta record
+        # (session_end/capture/…) — even one stamped EARLIER — must not move it.
+        acts = [
+            _act("tool_use", "s", "2026-06-15T09:05:00-04:00", tool="Read", target="a"),
+            _act("tool_use", "s", "2026-06-15T09:20:00-04:00", tool="Edit", paths=["a"]),
+            _act("session_end", "s", "2026-06-15T08:00:00-04:00", source="clear"),
+        ]
+        _write(self.tmp, [], acts)
+        led = R.Ledger.from_dir(self.tmp)
+        self.assertEqual(S.first_work_ts(led, "s"), _t("2026-06-15T09:05:00-04:00"))
+
+    def test_lanes_render_in_creation_order_oldest_first(self):
+        cps = [_cp("A", "2026-06-15T08:00:00-04:00", project="Alpha"),
+               _cp("B", "2026-06-15T09:00:00-04:00", project="Bravo")]
+        acts = [_act("tool_use", "A", "2026-06-15T08:00:00-04:00", tool="Edit", paths=["a"]),
+                _act("tool_use", "B", "2026-06-15T09:00:00-04:00", tool="Edit", paths=["b"])]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        order = [t["project"] for t in
+                 S.build_state(led, _epics([]), now_epoch=_t("2026-06-15T09:10:00-04:00"))["terminals"]]
+        self.assertEqual(order, ["Alpha", "Bravo"])
+
+    def test_order_is_stable_when_an_older_lane_does_the_newest_work(self):
+        # THE guarantee: A born first, B born second. Even after A does the most
+        # recent work, the display order stays [A, B] (no reshuffle) — while default
+        # focus follows the most-recently-active lane (B, then A).
+        cpA = _cp("A", "2026-06-15T08:00:00-04:00", project="Alpha")
+        cpB = _cp("B", "2026-06-15T08:30:00-04:00", project="Bravo")
+
+        def order_and_focus(acts):
+            _write(self.tmp, [cpA, cpB], acts)
+            led = R.Ledger.from_dir(self.tmp)
+            st = S.build_state(led, _epics([]), now_epoch=_t("2026-06-15T09:30:00-04:00"))
+            return ([t["project"] for t in st["terminals"]],
+                    [t["project"] for t in st["terminals"] if t["focused"]])
+
+        base = [
+            _act("tool_use", "A", "2026-06-15T08:00:00-04:00", tool="Edit", paths=["a"]),
+            _act("tool_use", "A", "2026-06-15T08:05:00-04:00", tool="Edit", paths=["a"]),
+            _act("tool_use", "B", "2026-06-15T08:30:00-04:00", tool="Edit", paths=["b"]),
+            _act("tool_use", "B", "2026-06-15T09:00:00-04:00", tool="Edit", paths=["b"]),
+        ]
+        o1, f1 = order_and_focus(base)
+        self.assertEqual(o1, ["Alpha", "Bravo"])
+        self.assertEqual(f1, ["Bravo"])             # B most-recently-active
+
+        o2, f2 = order_and_focus(
+            base + [_act("tool_use", "A", "2026-06-15T09:20:00-04:00", tool="Edit", paths=["a"])])
+        self.assertEqual(o2, ["Alpha", "Bravo"])    # NO reshuffle — stable order
+        self.assertEqual(f2, ["Alpha"])             # focus follows newest work
+
+
+# --------------------------------------------------------------------------- #
 # provider_of — host attribution, incl. the host-less-latest-record fallback
 # --------------------------------------------------------------------------- #
 class TestProviderOf(unittest.TestCase):
@@ -1207,10 +1269,11 @@ class TestSessionCloseOut(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
 
-    def _state(self, cps, acts, *, now, dismissed=None):
+    def _state(self, cps, acts, *, now, dismissed=None, annotations=None):
         _write(self.tmp, cps, acts)
         led = R.Ledger.from_dir(self.tmp)
-        return S.build_state(led, _epics([]), now_epoch=_t(now), dismissed=dismissed)
+        return S.build_state(led, _epics([]), now_epoch=_t(now),
+                             dismissed=dismissed, annotations=annotations)
 
     def _projects(self, state):
         return {t["project"] for t in state["terminals"]}
@@ -1302,6 +1365,23 @@ class TestSessionCloseOut(unittest.TestCase):
         state = self._state(cps, acts, now="2026-06-10T10:06:00-04:00",
                             dismissed={S.terminal_id("s1"): _t("2026-06-10T10:05:00-04:00")})
         self.assertEqual(self._projects(state), {"Bridge"})
+
+    def test_terminal_annotation_rides_the_lane(self):
+        cps = [_cp("s1", "2026-06-10T10:00:00-04:00", project="Mortar")]
+        acts = [_act("tool_use", "s1", "2026-06-10T10:00:00-04:00", tool="Edit")]
+        tid = S.terminal_id("s1")
+        state = self._state(cps, acts, now="2026-06-10T10:06:00-04:00",
+                            annotations={tid: "working on histograph features"})
+        term = next(t for t in state["terminals"] if t["project"] == "Mortar")
+        self.assertEqual(term["annotation"], "working on histograph features")
+
+    def test_terminal_annotation_defaults_empty(self):
+        cps = [_cp("s1", "2026-06-10T10:00:00-04:00", project="Mortar")]
+        acts = [_act("tool_use", "s1", "2026-06-10T10:00:00-04:00", tool="Edit")]
+        state = self._state(cps, acts, now="2026-06-10T10:06:00-04:00")
+        term = next(t for t in state["terminals"] if t["project"] == "Mortar")
+        self.assertIn("annotation", term)
+        self.assertEqual(term["annotation"], "")
 
 
 # --------------------------------------------------------------------------- #

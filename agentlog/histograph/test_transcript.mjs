@@ -175,6 +175,16 @@ const activity = first("hg-entry--activity");
 ok("activity desc line renders the tool's description",
    /Compile the streaming client/.test((activity.queryAll((n) => n.hasClass("hg-entry__activity-desc"))[0] || {}).textContent || ""));
 
+// the tool-call gutter rides the timestamp + the type glyph on ONE line (the inline
+// gutter variant) — both are direct children of a single .hg-entry__gutter--inline,
+// not stacked across two rows.
+const actGutter = activity.queryAll((n) => n.hasClass("hg-entry__gutter--inline"))[0] || null;
+ok("activity gutter is the single-line inline variant", !!actGutter);
+ok("activity gutter holds the timestamp and type glyph side-by-side",
+   !!actGutter &&
+   actGutter.children.some((c) => c.hasClass && c.hasClass("hg-entry__time")) &&
+   actGutter.children.some((c) => c.hasClass && c.hasClass("hg-entry__glyph--activity")));
+
 // the completed-turn accordion also surfaces the tool's first-party desc per call.
 ok("accordion row renders the tool's first-party desc",
    /Compile the streaming client/.test((first("hg-tools__desc") || {}).textContent || ""));
@@ -197,8 +207,17 @@ ok("reversal tag names the overturned time", /overturns \d\d:\d\d/.test(revMeta)
 ok("reversal tag names reversibility", /reversible: high/.test(revMeta));
 
 // the NOW card built from the live activity reads "tool · target".
-const nowTitle = (first("hg-entry--now").queryAll((n) => n.hasClass("hg-entry__title"))[0] || {}).textContent || "";
+const nowCard = first("hg-entry--now");
+const nowTitle = (nowCard.queryAll((n) => n.hasClass("hg-entry__title"))[0] || {}).textContent || "";
 ok("NOW card title is the live tool tip", nowTitle === "Bash · cargo test");
+
+// the live edge is marked by the glowing dot alone — the "NOW" word was removed.
+const liveDot = nowCard.queryAll((n) => n.hasClass("hg-entry__nowdot"))[0] || null;
+ok("NOW card keeps the pulsing live dot", !!liveDot && liveDot.hasClass("hg-pulse"));
+ok("the live dot carries an accessible name (replacing the removed label)",
+   !!liveDot && liveDot.getAttribute("aria-label") === "live");
+ok("NOW card no longer renders the 'NOW' label",
+   nowCard.queryAll((n) => n.hasClass("hg-entry__nowlabel")).length === 0);
 
 // integrity glyph surfaces only when it carries signal (not for passive records).
 ok("volunteered decision shows an integrity glyph",
