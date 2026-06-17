@@ -16,7 +16,7 @@ round-trip.
 
 Run: python -m unittest test_serve_http -v   (or: python -m pytest test_serve_http.py -q)
 """
-import os, sys, json, tempfile, threading, unittest
+import os, re, sys, json, tempfile, threading, unittest
 import urllib.request
 import urllib.error
 
@@ -490,6 +490,34 @@ class TestFrontendModulesServed(_Server):
             if status != 200:
                 broken.append("%s -> %d" % (path, status))
         self.assertFalse(broken, "frontend assets that 404 (a JS one breaks the whole module graph): %s" % broken)
+
+
+class TestProviderIcons(_Server):
+    """The fleet-switcher provider marks are vendored SVGs (from Fireside) painted via CSS
+    mask in markers.css. Guard that (a) each agent SVG serves 200 as image/svg+xml, and (b)
+    EVERY `mask-image: url("static/...")` markers.css references resolves to a served 200 — so
+    a renamed/missing icon can't silently degrade the chip to an empty colored box (the same
+    asset-404 class of bug as the earlier /zoom.js miss, here for a CSS-referenced asset)."""
+
+    def test_agent_svgs_serve_as_svg(self):
+        for name in ("claude", "codex", "gemini"):
+            status, headers, body = self._get("/static/agents/%s.svg" % name)
+            self.assertEqual(status, 200, "%s.svg should serve 200" % name)
+            self.assertIn("image/svg+xml", headers.get("Content-Type", ""))
+            self.assertIn("<svg", body)
+            self.assertIn("<path", body)
+
+    def test_markers_css_mask_urls_all_resolve(self):
+        status, _, css = self._get("/markers.css")
+        self.assertEqual(status, 200)
+        refs = re.findall(r'mask-image:\s*url\(["\']?([^"\')]+)["\']?\)', css)
+        self.assertTrue(any("static/agents/" in r for r in refs),
+                        "markers.css should reference the vendored agent marks via mask-image")
+        for ref in refs:
+            # markers.css is served at /markers.css, so a relative "static/..." → "/static/...".
+            path = ref if ref.startswith("/") else "/" + ref.lstrip("./")
+            st, _, _ = self._get(path)
+            self.assertEqual(st, 200, "mask-image asset %s should serve 200 (got %d)" % (ref, st))
 
 
 if __name__ == "__main__":

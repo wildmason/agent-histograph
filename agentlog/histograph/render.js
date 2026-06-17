@@ -263,12 +263,18 @@ function renderTerminalRow(term, { onFocus, onDismiss } = {}) {
         attrs: { "aria-hidden": "true" },
       })
     ),
-    el("span", {
-      class: "hg-provider " + prov.cls,
-      title: prov.label,
-      attrs: { "aria-hidden": "true" },
-      text: prov.glyph,
-    }),
+    el(
+      "span",
+      {
+        class: "hg-provider " + prov.cls,
+        title: prov.label,
+        attrs: { "aria-hidden": "true" },
+      },
+      // the brand mark (Fireside SVG, masked + tinted in markers.css); an empty child whose
+      // shape comes entirely from CSS, so the renderer stays createElement-only (no SVG DOM,
+      // no innerHTML — CSP-safe and DOM-stub-test-safe).
+      el("span", { class: "hg-provider__icon" })
+    ),
     el("span", { class: "hg-trow__name", text: name }),
     el("span", { class: "hg-trow__task", text: taskText }),
     lanePill(term, needsYou, quiet),
@@ -790,6 +796,30 @@ function renderEntry(task) {
   }
 }
 
+// The OPEN turn's live tool run, rendered as an explicit OWNED group: a pulsing "in progress"
+// header with the in-flight tool calls (and the NOW tip) nested beneath it under a single
+// connector rail. This is what gives an open task a visible owner — tool calls only bind to a
+// task at task COMPLETION (they fold into that checkpoint's accordion), so before the turn's
+// checkpoint lands its in-flight tools would otherwise float at the trail tail at the same
+// level as completed decisions, leaving it ambiguous which task owns them. `run` is the
+// trailing activity nodes, oldest → live tip.
+function renderLiveGroup(run) {
+  const head = el(
+    "div",
+    { class: "hg-livegroup__head" },
+    el("span", { class: "hg-livegroup__dot hg-pulse", attrs: { "aria-hidden": "true" } }),
+    el("span", { class: "hg-livegroup__label", text: "in progress" })
+  );
+  const body = el("div", { class: "hg-livegroup__body" });
+  for (const t of run) body.append(renderEntry(t));
+  return el(
+    "div",
+    { class: "hg-livegroup", attrs: { role: "group", "aria-label": "current turn — in progress" } },
+    head,
+    body
+  );
+}
+
 // ---- focus assembly ------------------------------------------------------
 
 // The scrollable element inside an <ae-scroll-area> is its part="viewport"
@@ -971,7 +1001,22 @@ export function renderFocus(mountEl, focus, opts = {}) {
   }
 
   const transcript = el("div", { class: "hg-transcript" });
-  for (const t of tasks) transcript.append(renderEntry(t));
+  // The OPEN turn's in-flight tool calls (the trailing run of `activity` nodes, sitting just
+  // before any pending "next") render as an explicit OWNED group — a pulsing "in progress"
+  // header the tools nest under — instead of loose tail nodes, so it's unambiguous which task
+  // owns them while the turn is still open. Only while the lane is working (focus.workingNow);
+  // an idle leftover tool run is just history and renders inline as before. A bloomed-`live`
+  // checkpoint is kind "live" (not "activity"), so it stays a normal entry — no false group.
+  const head = tasks.slice();
+  const pendingTail = [];
+  while (head.length && head[head.length - 1].kind === "pending") pendingTail.unshift(head.pop());
+  const liveRun = [];
+  if (focus.workingNow) {
+    while (head.length && head[head.length - 1].kind === "activity") liveRun.unshift(head.pop());
+  }
+  for (const t of head) transcript.append(renderEntry(t));
+  if (liveRun.length) transcript.append(renderLiveGroup(liveRun));
+  for (const t of pendingTail) transcript.append(renderEntry(t));
   region.append(transcript);
   scroll.append(region);
   mountEl.append(scroll);

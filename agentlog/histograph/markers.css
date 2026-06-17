@@ -67,18 +67,38 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-family: var(--hg-mono);
-  font-size: 0.625rem;
-  line-height: 1;
+}
+/* the brand mark itself — vendored from Fireside as single-path SVGs (Claude / Codex /
+   Gemini) and painted via a CSS mask, so it inherits the provider tint (currentColor) and
+   re-tones per theme rather than carrying hardcoded brand hex (keeps the zero-hex /
+   themeable invariant). The mask uses the SVG's alpha, so the path color is irrelevant. */
+.hg-provider__icon {
+  width: 12px;
+  height: 12px;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+          mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+          mask-position: center;
+  -webkit-mask-size: contain;
+          mask-size: contain;
 }
 
 .hg-provider--claude {
   color: var(--ae-color-accent);
   background: color-mix(in oklch, var(--ae-color-accent) 16%, transparent);
 }
+.hg-provider--claude .hg-provider__icon {
+  -webkit-mask-image: url("static/agents/claude.svg");
+          mask-image: url("static/agents/claude.svg");
+}
 .hg-provider--codex {
   color: var(--ae-color-info);
   background: color-mix(in oklch, var(--ae-color-info) 16%, transparent);
+}
+.hg-provider--codex .hg-provider__icon {
+  -webkit-mask-image: url("static/agents/codex.svg");
+          mask-image: url("static/agents/codex.svg");
 }
 .hg-provider--gemini {
   /* a violet anchored on info+danger (NOT accent), so it never collapses into
@@ -90,9 +110,19 @@
     transparent
   );
 }
+.hg-provider--gemini .hg-provider__icon {
+  -webkit-mask-image: url("static/agents/gemini.svg");
+          mask-image: url("static/agents/gemini.svg");
+}
 .hg-provider--unknown {
   color: var(--ae-color-fg-muted);
   background: var(--ae-color-bg-muted);
+}
+/* no brand mark for an unattributed agent — a simple dot in the provider tint. */
+.hg-provider--unknown .hg-provider__icon {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--ae-radius-full);
 }
 
 /* ==========================================================================

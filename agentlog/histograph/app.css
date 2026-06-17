@@ -662,6 +662,60 @@ body {
   color: var(--ae-color-fg-subtle);
 }
 
+/* ----- the OPEN turn's live tool group — give an in-progress task a visible owner -----
+   While a turn is open its checkpoint hasn't landed, so its in-flight tool calls have no
+   parent task node (tools bind to a task only at COMPLETION, folding into its accordion). We
+   render them as an owned group: a pulsing "in progress" header with the tools nested beneath
+   a single connector rail, so they read as the current turn's work — not as siblings of the
+   completed decisions above. The group supplies the indent + rail, so the per-child rails
+   (`.hg-entry--child`) are neutralized inside it to avoid a double indent / double rail. */
+.hg-livegroup {
+  position: relative;
+}
+.hg-livegroup__head {
+  display: flex;
+  align-items: center;
+  gap: var(--ae-space-2);
+  margin-bottom: var(--ae-space-1);
+}
+.hg-livegroup__dot {
+  flex: 0 0 auto;
+  width: var(--ae-space-2);
+  height: var(--ae-space-2);
+  border-radius: var(--ae-radius-full);
+  background: var(--ae-color-success);
+}
+.hg-livegroup__label {
+  font-size: var(--ae-font-size-xs);
+  font-weight: var(--ae-font-weight-medium);
+  letter-spacing: var(--ae-letter-spacing-wide);
+  text-transform: uppercase;
+  color: var(--ae-color-fg-muted);
+}
+.hg-livegroup__body {
+  position: relative;
+  margin-left: var(--ae-space-6);
+  padding-left: var(--ae-space-4);
+}
+/* one continuous rail down the whole group body (the children's own rails are off inside). */
+.hg-livegroup__body::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--ae-border-width-1);
+  background: var(--ae-color-border-subtle);
+}
+.hg-livegroup__body .hg-entry--child {
+  margin-left: 0;
+  padding-left: 0;
+}
+.hg-livegroup__body .hg-entry--child::before,
+.hg-livegroup__body .hg-entry--now.hg-entry--child::before {
+  display: none;
+}
+
 /* --------------------------------------------------------------------------
    Parked-epic crumb (UX §4.1) — one muted line carrying the typed epic seam,
    restored above the orientation header.
