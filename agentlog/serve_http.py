@@ -36,6 +36,7 @@ from urllib.parse import urlparse, unquote
 import agentlog_read as R
 import serve_state as S
 import serve_epics as E
+import serve_ledger as Lg
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 HISTOGRAPH_ROOT = os.path.join(_HERE, "histograph")
@@ -55,6 +56,7 @@ _PAGE_FILES = {
     "/render.js": "render.js",
     "/theme.js": "theme.js",
     "/zoom.js": "zoom.js",
+    "/ledger.js": "ledger.js",
     "/markers.css": "markers.css",
 }
 
@@ -90,8 +92,14 @@ def _state_payload(now_epoch=None):
         epics = E.list_epics(E.load(), led, now_epoch=now_epoch)
         focus_tid = E.load_focus()
         dismissed = E.load_dismissed()
-        return S.build_state(led, epics, now_epoch=now_epoch,
-                             focus_terminal_id=focus_tid, dismissed=dismissed)
+        state = S.build_state(led, epics, now_epoch=now_epoch,
+                              focus_terminal_id=focus_tid, dismissed=dismissed)
+        # which ledger dir produced this state (+ session count / source). The renderer's
+        # empty-state names it and flags a likely misconfiguration ("reading X — no data;
+        # capture may be writing elsewhere"), turning a silent blank board into a self-
+        # explaining one. Reuses the already-loaded ledger — no extra read on the poll path.
+        state["ledger"] = Lg.describe_active(led)
+        return state
     except Exception:
         # per-lane bad data is already isolated inside build_state (it drops one lane);
         # reaching here means the ENVELOPE scaffolding itself threw — a real bug, not a
@@ -100,8 +108,13 @@ def _state_payload(now_epoch=None):
         R.A.log("serve /api/state degraded to cold envelope: %s"
                 % traceback.format_exc().replace("\n", " | "))
         now = time.time() if now_epoch is None else now_epoch
-        return {"generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
+        cold = {"generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
                 "terminals": [], "focus": None}
+        try:
+            cold["ledger"] = Lg.describe_active()
+        except Exception:
+            pass
+        return cold
 
 
 def _epics_payload(now_epoch=None):
@@ -114,9 +127,38 @@ def _epics_payload(now_epoch=None):
         return {"epics": []}
 
 
+def _ledger_payload():
+    """The GET /api/ledger envelope for the settings picker: where the board points,
+    why (override/env/default), and the detected candidate ledger dirs with their
+    session counts. Fail-open to a minimal shape so the picker degrades, not 500s."""
+    try:
+        return Lg.info()
+    except Exception:
+        R.A.log("serve /api/ledger degraded: %s"
+                % traceback.format_exc().replace("\n", " | "))
+        return {"current": A_dir(), "source": "default", "default": A_dir(), "candidates": []}
+
+
+def _settings_payload():
+    """The GET /api/settings envelope: the persisted UI prefs ({theme, variant, zoom}),
+    so the board can restore the user's theme/scheme/zoom across launches even when the
+    ephemeral-port origin has wiped localStorage. Fail-open to {}."""
+    try:
+        return Lg.load_prefs()
+    except Exception:
+        return {}
+
+
+# the page-shell line the prefs are injected into. Kept valid JS verbatim (so the file
+# opened raw still parses) — the server rewrites the `null` with the persisted prefs.
+_PREFS_SENTINEL = "window.__HG_PREFS__ = null;/*__HG_PREFS__*/"
+
+
 def A_dir():
-    """The live AGENTLOG_DIR (env-overridable; resolved at call time for tests)."""
-    return R.A.AGENTLOG_DIR
+    """The ledger dir the board reads: a live in-app override (serve_ledger) if set,
+    else AGENTLOG_DIR (env/default). Resolved at call time so an in-flight ledger swap
+    and the test patches both take effect."""
+    return Lg.resolved_dir()
 
 
 # --------------------------------------------------------------------------- #
@@ -206,6 +248,27 @@ class HistographHandler(BaseHTTPRequestHandler):
             return self._send_json({"error": "read error"}, status=500)
         return self._send_bytes(data, _content_type(abspath), status=status)
 
+    def _serve_index(self):
+        """Serve the page shell with the persisted UI prefs INJECTED into the boot
+        script, so the desktop app — whose ephemeral-port origin wipes localStorage each
+        launch — still paints the saved theme/scheme/zoom on the first frame (no FOUC,
+        no flash-then-jump). Falls back to a verbatim serve if the file or prefs can't be
+        read, so a config hiccup never blanks the page."""
+        index_path = os.path.join(HISTOGRAPH_ROOT, "index.html")
+        try:
+            with open(index_path, "r", encoding="utf-8") as f:
+                html = f.read()
+        except Exception:
+            return self._serve_file(index_path)   # missing/unreadable → normal 404/500 path
+        try:
+            prefs = Lg.load_prefs()
+        except Exception:
+            prefs = {}
+        if prefs:
+            injected = "window.__HG_PREFS__ = %s;/*__HG_PREFS__*/" % json.dumps(prefs)
+            html = html.replace(_PREFS_SENTINEL, injected, 1)
+        return self._send_bytes(html.encode("utf-8"), "text/html; charset=utf-8")
+
     # ---- GET ----
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -215,7 +278,15 @@ class HistographHandler(BaseHTTPRequestHandler):
             return self._send_json(_state_payload())
         if path == "/api/epics":
             return self._send_json(_epics_payload())
+        if path == "/api/ledger":
+            return self._send_json(_ledger_payload())
+        if path == "/api/settings":
+            return self._send_json(_settings_payload())
 
+        # the page shell is templated (persisted UI prefs injected for FOUC-free boot);
+        # every other page file is served verbatim.
+        if path in ("/", "/index.html"):
+            return self._serve_index()
         if path in _PAGE_FILES:
             return self._serve_file(os.path.join(HISTOGRAPH_ROOT, _PAGE_FILES[path]))
 
@@ -230,7 +301,8 @@ class HistographHandler(BaseHTTPRequestHandler):
     # ---- POST ----
     # state-mutating POST routes and the persistence action each performs. All share
     # the same CSRF/origin guard, body cap, and {"terminalId": "..."} payload shape.
-    _POST_ROUTES = ("/api/focus", "/api/dismiss", "/api/undismiss")
+    _POST_ROUTES = ("/api/focus", "/api/dismiss", "/api/undismiss",
+                    "/api/ledger-dir", "/api/settings")
 
     def do_POST(self):
         parsed = urlparse(self.path)
@@ -239,18 +311,17 @@ class HistographHandler(BaseHTTPRequestHandler):
             return self._not_found()
         # reject cross-site writes: these are unauthenticated state-mutating endpoints
         # on a localhost bind, so any local web page could otherwise fetch()-flip the
-        # persisted focus/dismissal state via CSRF. An Origin from anything but our own
-        # loopback origins is forbidden; same-origin requests (and non-browser clients
-        # like curl/the test harness, which send no Origin) are allowed.
+        # persisted focus/dismissal/ledger state via CSRF. An Origin from anything but
+        # our own loopback origins is forbidden; same-origin requests (and non-browser
+        # clients like curl/the test harness, which send no Origin) are allowed.
         origin = self.headers.get("Origin")
         if origin and not origin.startswith(("http://127.0.0.1", "http://localhost",
                                              "http://[::1]")):
             return self._send_json({"error": "forbidden"}, status=403)
-        # cap the declared body BEFORE reading: the only legitimate payload is a tiny
-        # {"terminalId": "..."} (~40 bytes). A bogus Content-Length would otherwise let
-        # a client make rfile.read() either buffer gigabytes into RAM or block the
-        # worker thread waiting for bytes that never arrive (slow-loris). 64 KiB is far
-        # above any honest payload and bounds both failure modes.
+        # cap the declared body BEFORE reading: the only legitimate payloads are tiny
+        # ({"terminalId": "..."} / {"dir": "..."}). A bogus Content-Length would otherwise
+        # let rfile.read() buffer gigabytes into RAM or block the worker thread on bytes
+        # that never arrive (slow-loris). 64 KiB is far above any honest payload.
         try:
             length = int(self.headers.get("Content-Length") or 0)
         except (TypeError, ValueError):
@@ -262,7 +333,17 @@ class HistographHandler(BaseHTTPRequestHandler):
             data = json.loads(raw.decode("utf-8")) if raw.strip() else {}
         except Exception:
             return self._send_json({"error": "bad request"}, status=400)
-        tid = data.get("terminalId") if isinstance(data, dict) else None
+        if not isinstance(data, dict):
+            return self._send_json({"error": "bad request"}, status=400)
+
+        # /api/ledger-dir carries a {"dir": "..."} (or {"reset": true}) — not a terminalId.
+        if path == "/api/ledger-dir":
+            return self._set_ledger_dir(data)
+        # /api/settings carries a partial {theme?, variant?, zoom?} UI-prefs patch.
+        if path == "/api/settings":
+            return self._send_json({"ok": True, "settings": Lg.save_prefs(data)})
+
+        tid = data.get("terminalId")
         if not isinstance(tid, str) or not tid:
             return self._send_json({"error": "terminalId required"}, status=400)
 
@@ -275,6 +356,26 @@ class HistographHandler(BaseHTTPRequestHandler):
         else:  # /api/undismiss — restore a lane immediately.
             E.undismiss_terminal(tid)
         return self._send_json({"ok": True, "terminalId": tid})
+
+    def _set_ledger_dir(self, data):
+        """Switch (or reset) the ledger directory the board reads, live — no relaunch.
+        {"reset": true} clears the in-app override (back to AGENTLOG_DIR/default);
+        otherwise {"dir": "<path>"} sets it. The dir must be an EXISTING directory, so a
+        typo can't silently strand the board on a path that will never have data. The
+        next /api/state poll re-reads from the new dir. Returns the resolved dir+source."""
+        if data.get("reset"):
+            Lg.clear_override()
+            return self._send_json({"ok": True, "dir": Lg.resolved_dir(),
+                                    "source": Lg.active_source()})
+        d = data.get("dir")
+        if not isinstance(d, str) or not d.strip():
+            return self._send_json({"error": "dir required"}, status=400)
+        expanded = os.path.abspath(os.path.expanduser(d.strip()))
+        if not os.path.isdir(expanded):
+            return self._send_json({"error": "no such directory: %s" % expanded}, status=400)
+        Lg.save_override(expanded)
+        return self._send_json({"ok": True, "dir": Lg.resolved_dir(),
+                                "source": Lg.active_source()})
 
     # ---- static with the path-traversal guard ----
     def _serve_static(self, rel):

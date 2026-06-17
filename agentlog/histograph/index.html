@@ -41,6 +41,16 @@
     <link rel="stylesheet" href="/markers.css" />
     <link rel="stylesheet" href="/app.css" />
 
+    <!-- Server-injected UI prefs (theme / scheme / zoom). The desktop app serves the
+         board on an EPHEMERAL port, so the browser origin — and origin-scoped
+         localStorage — changes every launch; settings stored only client-side are lost
+         on reopen. They persist server-side (~/.histograph/config.json) and the server
+         rewrites the `null` below with the saved prefs, so the FOUC guards that follow
+         paint the right theme/zoom on the FIRST frame regardless of port. Served raw
+         (no server), this stays valid JS (null) and the guards fall back to
+         localStorage. MUST precede the guards below. -->
+    <script>window.__HG_PREFS__ = null;/*__HG_PREFS__*/</script>
+
     <!-- FOUC guard: stamp the persisted (or default crucible/dark) theme onto
          <html> BEFORE first paint. Mirrors applyTheme's FULL attribute logic —
          data-theme + data-collection + data-variant — so the page never flashes
@@ -61,10 +71,16 @@
         var COLLECTION = { spectrum: "spectrum" };
         var sel = FALLBACK;
         try {
-          var raw = localStorage.getItem("histograph.theme");
-          if (raw) {
-            var p = JSON.parse(raw);
-            if (p && typeof p.theme === "string") sel = p;
+          // server-injected prefs win (origin-independent); else localStorage.
+          var P = window.__HG_PREFS__;
+          if (P && typeof P.theme === "string") {
+            sel = { theme: P.theme, variant: P.variant };
+          } else {
+            var raw = localStorage.getItem("histograph.theme");
+            if (raw) {
+              var p = JSON.parse(raw);
+              if (p && typeof p.theme === "string") sel = p;
+            }
           }
         } catch (e) {}
         var root = document.documentElement;
@@ -88,7 +104,11 @@
     <script>
       (function () {
         try {
-          var z = parseFloat(localStorage.getItem("histograph.zoom"));
+          // server-injected prefs win (origin-independent); else localStorage.
+          var P = window.__HG_PREFS__;
+          var z = P && typeof P.zoom === "number"
+            ? P.zoom
+            : parseFloat(localStorage.getItem("histograph.zoom"));
           if (z === 1.25 || z === 1.5) {
             document.documentElement.style.fontSize = 16 * z + "px";
           }
@@ -174,6 +194,22 @@
         <div class="hg-settings__control">
           <span class="hg-settings__label" aria-hidden="true">Zoom</span>
           <ae-select id="zoom-select" aria-label="Zoom" placeholder="Zoom"></ae-select>
+        </div>
+        <!-- Ledger directory: switch which ~/.agent* ledger the board reads, live.
+             Detected candidates (with session counts) + a custom path. -->
+        <div class="hg-settings__control hg-settings__control--ledger">
+          <span class="hg-settings__label" aria-hidden="true">Ledger</span>
+          <ae-select id="ledger-select" aria-label="Ledger directory" placeholder="Ledger directory"></ae-select>
+          <div id="ledger-custom" class="hg-settings__ledger-custom" hidden>
+            <ae-input
+              id="ledger-custom-input"
+              aria-label="Custom ledger path"
+              placeholder="C:\path\to\ledger"
+              clearable
+            ></ae-input>
+            <ae-button id="ledger-custom-apply" variant="primary" size="sm">Use</ae-button>
+          </div>
+          <span id="ledger-current" class="hg-settings__hint" data-error="false"></span>
         </div>
       </div>
       <div slot="footer">

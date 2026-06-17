@@ -129,6 +129,16 @@ function resolveSelection(sel) {
 // ---- persistence ---------------------------------------------------------
 
 function load() {
+  // Server-injected prefs (window.__HG_PREFS__) win over localStorage: the desktop app
+  // serves on an ephemeral port, so its origin — and origin-scoped localStorage — changes
+  // every launch, while the server-side prefs are durable. localStorage is the fallback
+  // (browser opened without a server, or before the first server save).
+  try {
+    const P = typeof window !== "undefined" ? window.__HG_PREFS__ : null;
+    if (P && typeof P.theme === "string") return { theme: P.theme, variant: P.variant };
+  } catch {
+    /* ignore and fall through */
+  }
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
@@ -140,12 +150,29 @@ function load() {
   return null;
 }
 
+// Durable, origin-independent persistence (see index.html boot note). Fire-and-forget:
+// localStorage is already written, so a failed/absent fetch never loses the in-session
+// choice. Skipped outside a real browser (no window) so headless tests don't fetch.
+function pushPrefs(partial) {
+  try {
+    if (typeof window === "undefined" || typeof fetch !== "function") return;
+    fetch("/api/settings", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(partial),
+    }).catch(() => {});
+  } catch {
+    /* no-op: persistence is best-effort */
+  }
+}
+
 function persist(sel) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(sel));
   } catch {
     /* storage unavailable (private mode) — selection still applies for the session */
   }
+  pushPrefs({ theme: sel.theme, variant: sel.variant });
 }
 
 // ---- control wiring ------------------------------------------------------

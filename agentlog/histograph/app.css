@@ -154,6 +154,29 @@ body {
   width: 100%;
 }
 
+/* Ledger picker: the custom-path row (revealed when "Custom path…" is chosen) and
+   the hint line showing the active dir + source (or an error). */
+.hg-settings__ledger-custom {
+  display: flex;
+  gap: var(--ae-space-2);
+  align-items: center;
+}
+.hg-settings__ledger-custom[hidden] {
+  display: none;
+}
+.hg-settings__ledger-custom ae-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.hg-settings__hint {
+  font-size: var(--ae-font-size-xs);
+  color: var(--ae-color-fg-subtle);
+  overflow-wrap: anywhere;
+}
+.hg-settings__hint[data-error="true"] {
+  color: var(--ae-color-danger, var(--ae-color-fg-default));
+}
+
 /* --------------------------------------------------------------------------
    Connection / fetch trouble — calm, not alarming. A thin inline strip under
    the titlebar rather than a blocking error.
@@ -647,6 +670,20 @@ body {
 }
 .hg-empty__glyph--calm {
   color: var(--ae-color-success);
+}
+/* the ledger-diagnostic description: a sentence naming the dir being read, with the
+   path itself set in mono so a long absolute path reads as a path (and can wrap). */
+.hg-empty__detail {
+  display: inline;
+}
+.hg-empty__dir {
+  font-family: var(--ae-font-family-mono, ui-monospace, monospace);
+  font-size: var(--ae-font-size-sm);
+  color: var(--ae-color-fg-default);
+  background: var(--ae-color-bg-subtle);
+  padding: 0 var(--ae-space-1);
+  border-radius: var(--ae-radius-sm);
+  overflow-wrap: anywhere;
 }
 
 /* --------------------------------------------------------------------------

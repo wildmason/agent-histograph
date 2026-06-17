@@ -80,7 +80,7 @@ Then **arm** it for the sessions you want on the board, and start/restart Claude
 
 Un-armed, the hooks only passively log and cannot disrupt a session.
 `AGENTLOG_DISABLE=1` no-ops everything. `python capture-proof/install_hooks.py --uninstall` removes them.
-Codex users: `~/.codex/hooks.json` from `capture-proof/codex-hooks.json` (repoint the paths) adds Codex capture; normal Codex TUI sessions must approve hooks with `/hooks`.
+Codex users: `~/.codex/hooks.json` from `capture-proof/codex-hooks.json` (repoint the paths) adds Codex capture; normal Codex TUI sessions must approve hooks with `/hooks`. Keep that file strict JSON with `hooks` as the only top-level key, because Codex rejects helper fields such as `_comment`. The Codex template includes a passive `PostToolUse` hook for live activity, but shell/tool payload details remain best-effort compared with the Claude Code producer.
 
 ### 2. See the board
 
@@ -120,11 +120,25 @@ call "%~dp0run-histograph.cmd"
 `*.local.cmd` / `*.local.sh` are gitignored, so a per-machine ledger choice never
 lands in the repo.
 
+**Switching the ledger from inside the app (no relaunch).** Open **Settings** (the
+gear) → **Ledger** and pick a detected ledger directory — the board scans for sibling
+`~/.agent*` dirs that hold a ledger and lists each with its session count (so
+`~/.agentlog · 44 sessions` vs an empty `~/.agent-histograph` is obvious at a glance) —
+or type a custom path. The board re-reads the new dir on its next poll and remembers
+the choice in `~/.histograph/config.json`, so it **persists across restarts even when
+you launch by double-clicking the exe with no `AGENTLOG_DIR` set** (the override beats
+the env/default; "Reset to default" clears it). This is the durable fix for the classic
+"the board is empty because it's pointed at the wrong/empty ledger" trap: when the board
+has no live lanes **and** the dir it's reading is empty or missing, the empty state now
+**names that dir** and offers a one-click **Change ledger…** action instead of a silent
+blank.
+
 ## Configuration
 
 | Env var | Purpose | Default |
 |---|---|---|
-| `AGENTLOG_DIR` | Where the ledger lives / is read from | `~/.agent-histograph` |
+| `AGENTLOG_DIR` | Where the ledger lives / is read from (the in-app **Settings → Ledger** override takes precedence over this) | `~/.agent-histograph` |
+| `HISTOGRAPH_CONFIG_DIR` | Where the board persists its own settings — the in-app ledger-dir override **and** the theme/scheme/zoom prefs — so they survive a close/reopen even though the desktop app's ephemeral port wipes browser `localStorage` each launch | `~/.histograph` |
 | `AGENTLOG_HOME` | Dir holding `agentlog.py` — **required for an installed desktop build** (point it at `<this repo>/agentlog`) | dev-relative to the crate |
 | `AGENTLOG_PYTHON` | Explicit Python interpreter for the desktop app to spawn | auto-probes `py -3` / `python` / `python3` |
 | `AGENTLOG_CAPTURE_ACTIVE` | `1` arms capture for the session | unset (passive only) |

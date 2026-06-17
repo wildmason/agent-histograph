@@ -45,9 +45,19 @@ class _TmpEnv(unittest.TestCase):
         self._saved = A.AGENTLOG_DIR
         A.AGENTLOG_DIR = self.tmp
         os.makedirs(os.path.join(self.tmp, "state"), exist_ok=True)
+        # isolate the board's in-app ledger-dir override (serve_ledger) to a throwaway
+        # config dir so the machine's REAL ~/.histograph override never leaks in and
+        # repoints epics/focus paths away from this test's tmp ledger.
+        self._cfg = tempfile.mkdtemp()
+        self._saved_cfg = os.environ.get("HISTOGRAPH_CONFIG_DIR")
+        os.environ["HISTOGRAPH_CONFIG_DIR"] = self._cfg
 
     def tearDown(self):
         A.AGENTLOG_DIR = self._saved
+        if self._saved_cfg is None:
+            os.environ.pop("HISTOGRAPH_CONFIG_DIR", None)
+        else:
+            os.environ["HISTOGRAPH_CONFIG_DIR"] = self._saved_cfg
 
     def _epics_path(self):
         return os.path.join(self.tmp, "epics.json")

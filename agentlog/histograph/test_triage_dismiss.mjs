@@ -110,6 +110,12 @@ ok("a VIEWING pill is rendered for the focused lane",
 ok("a NEEDS YOU pill is rendered for the blocked lane",
    pills.some((p) => /NEEDS YOU/.test(p.textContent)));
 
+// the lane NAME is the human project, never the meaningless internal term-N id.
+const names = mount.queryAll((n) => n.hasClass("hg-trow__name"));
+ok("lane name shows the project, not term-N",
+   names.some((n) => n.textContent === "Mortar") && names.some((n) => n.textContent === "Bridge"));
+ok("no lane name leaks the term-N id", names.every((n) => !/^term-/.test(n.textContent)));
+
 // the × is a SIBLING of the row inside the wrap, NOT a descendant of it.
 ok("close shares the wrap parent with its row", closes.every((c) => c.parentNode && c.parentNode.hasClass("hg-trow-wrap")));
 ok("close is never a descendant of the role=button row",
@@ -124,8 +130,9 @@ ok("no nested interactive inside any row",
 ok("close has aria-label + type=button",
    closes.every((c) => /Close out/.test(c.getAttribute("aria-label") || "") && c.getAttribute("type") === "button"));
 
-// clicking the × dismisses that lane and does NOT focus it.
-const closeForTerm1 = closes.find((c) => /term-1/.test(c.getAttribute("aria-label")));
+// clicking the × dismisses that lane and does NOT focus it. The close is labelled
+// by the human project name now (no term-N), so find the Mortar lane's × (term-1).
+const closeForTerm1 = closes.find((c) => /Mortar/.test(c.getAttribute("aria-label")));
 closeForTerm1.click();
 ok("clicking × calls onDismiss(term-1)", dismissed.length === 1 && dismissed[0] === "term-1");
 ok("clicking × does not trigger focus", focused.length === 0);

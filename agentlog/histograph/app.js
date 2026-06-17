@@ -9,6 +9,7 @@
 import { renderTriage, renderFocus, titlebarMeta } from "/render.js";
 import { initThemeSwitcher } from "/theme.js";
 import { initZoom } from "/zoom.js";
+import { initLedger } from "/ledger.js";
 
 // Adaptive poll cadence: snappy while the focused lane is actively turning (so
 // the live tool stream moves in near-real-time), calm otherwise. The backend's
@@ -27,6 +28,11 @@ const els = {
   brandSelect: document.getElementById("brand-select"),
   schemeSelect: document.getElementById("scheme-select"),
   zoomSelect: document.getElementById("zoom-select"),
+  ledgerSelect: document.getElementById("ledger-select"),
+  ledgerCustom: document.getElementById("ledger-custom"),
+  ledgerCustomInput: document.getElementById("ledger-custom-input"),
+  ledgerCustomApply: document.getElementById("ledger-custom-apply"),
+  ledgerCurrent: document.getElementById("ledger-current"),
   settingsBtn: document.getElementById("settings-btn"),
   settingsModal: document.getElementById("settings-modal"),
   settingsDone: document.getElementById("settings-done"),
@@ -51,11 +57,29 @@ initThemeSwitcher({
 // px-sized window controls stay native; only the board content scales.
 initZoom({ zoomSelect: els.zoomSelect });
 
-// the theme picker lives behind a settings modal (gear in the titlebar).
-if (els.settingsBtn && els.settingsModal) {
-  els.settingsBtn.addEventListener("click", () => {
-    els.settingsModal.open = true;
-  });
+// ledger picker — switch which ~/.agent* ledger the board reads, live. onApplied
+// re-fetches /api/state against the newly-chosen dir (no relaunch).
+const ledgerCtl = initLedger(
+  {
+    select: els.ledgerSelect,
+    customRow: els.ledgerCustom,
+    customInput: els.ledgerCustomInput,
+    customApply: els.ledgerCustomApply,
+    current: els.ledgerCurrent,
+  },
+  () => fetchState()
+);
+
+// Open settings and refresh the ledger candidate list (counts/current stay live).
+// Shared by the titlebar gear AND the cold-state "Change ledger…" diagnostic action.
+function openSettings() {
+  if (els.settingsModal) els.settingsModal.open = true;
+  ledgerCtl.refresh();
+}
+
+// the theme/ledger picker lives behind a settings modal (gear in the titlebar).
+if (els.settingsBtn) {
+  els.settingsBtn.addEventListener("click", openSettings);
 }
 if (els.settingsDone && els.settingsModal) {
   els.settingsDone.addEventListener("click", () => {
@@ -102,6 +126,10 @@ function paint(state) {
     onFocus: requestFocus,
     onDismiss: requestDismiss,
     time: meta.time,
+    // the ledger block drives the cold-state diagnostic; the action opens settings
+    // (where the picker lets you switch to the right dir).
+    ledger: state.ledger,
+    onChangeLedger: openSettings,
   });
 
   // Focus pane: only (re)build it when the focused lane SWITCHES (fresh) or its

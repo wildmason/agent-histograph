@@ -216,8 +216,8 @@ function lanePill(term, needsYou, quiet) {
 }
 
 /**
- * One fleet-switcher lane: status dot · provider glyph · term-N · project ·
- * task summary · pill · age. Clickable + keyboard-operable; the focused lane
+ * One fleet-switcher lane: status dot · provider glyph · project · task summary ·
+ * pill · age. Clickable + keyboard-operable; the focused lane
  * gets a full-fill raised surface (no edge bar). The × close-out rides alongside
  * as a SIBLING of the role="button" row (never nested — nested interactives break
  * assistive tech), revealed on hover/focus.
@@ -227,11 +227,14 @@ function renderTerminalRow(term, { onFocus, onDismiss } = {}) {
   const needsYou = isNeedsYou(term);
   const quiet = term.status === "stale" || term.status === "parked" || term.status === "done";
 
-  // Identity. When the project couldn't be resolved (codex lanes carry no cwd, so
-  // project falls back to a session-id fragment that equals the id), show the id
-  // alone rather than a misleading id-as-project suffix.
+  // Identity = the PROJECT (what the lane is, in human terms). The internal term-N
+  // (a hash of the session id) is never shown — it carries no meaning for the reader
+  // and is kept only as the DOM/focus/dismiss key (data-terminal). When the project
+  // can't be resolved (e.g. a codex lane with no cwd → project falls back to a
+  // session-id fragment that equals the id), show the provider name instead of a
+  // meaningless hash; the story summary below still says what it's doing.
   const hasProject = term.project && term.project !== term.id;
-  const fullLabel = hasProject ? `${term.id} · ${term.project}` : term.id;
+  const name = hasProject ? term.project : prov.label || "session";
   const taskText = (term.story && term.story.title) || "—";
   const toneKey = freshToneKey(term);
 
@@ -243,12 +246,12 @@ function renderTerminalRow(term, { onFocus, onDismiss } = {}) {
         (term.focused ? " hg-trow--selected" : "") +
         (quiet ? " hg-trow--quiet" : "") +
         (needsYou ? " hg-trow--attn" : ""),
-      title: `${fullLabel} · ${taskText}`,
+      title: `${name} · ${taskText}`,
       attrs: {
         role: "button",
         tabindex: "0",
         "aria-pressed": term.focused ? "true" : "false",
-        "aria-label": `Focus ${fullLabel}` + (needsYou ? " — needs you" : ""),
+        "aria-label": `Focus ${name}` + (needsYou ? " — needs you" : ""),
         "data-terminal": term.id,
       },
     },
@@ -266,7 +269,7 @@ function renderTerminalRow(term, { onFocus, onDismiss } = {}) {
       attrs: { "aria-hidden": "true" },
       text: prov.glyph,
     }),
-    el("span", { class: "hg-trow__name", text: fullLabel }),
+    el("span", { class: "hg-trow__name", text: name }),
     el("span", { class: "hg-trow__task", text: taskText }),
     lanePill(term, needsYou, quiet),
     el("span", { class: "hg-trow__age hg-card__fresh--" + toneKey, text: term.freshnessLabel || "" })
@@ -288,7 +291,7 @@ function renderTerminalRow(term, { onFocus, onDismiss } = {}) {
     class: "hg-trow__close",
     attrs: {
       type: "button",
-      "aria-label": `Close out ${fullLabel}`,
+      "aria-label": `Close out ${name}`,
       title: "Close out — hides this lane until it does new work",
     },
     text: "×",
@@ -301,11 +304,68 @@ function renderTerminalRow(term, { onFocus, onDismiss } = {}) {
   return el("div", { class: "hg-trow-wrap", attrs: { role: "listitem" } }, row, closeBtn);
 }
 
+// The cold (no-live-lanes) placeholder. Two very different situations land here and
+// they must NOT read the same:
+//   • the ledger we're reading is EMPTY or MISSING — almost always a misconfiguration
+//     (the board is pointed at the wrong folder while capture writes elsewhere; the
+//     exact "double-clicked the exe → read the empty default → nothing rendered" bug).
+//     Name the dir and offer a one-click "Change ledger…" so it's self-fixing, not a
+//     silent blank.
+//   • the ledger HAS data, there's just nothing live right now — the legitimate "your
+//     agents are quiet" case. Stay calm; no alarm, no action.
+// `ledger` is the /api/state ledger block ({dir, exists, sessions, hasData, source});
+// undefined on an old payload / transient cold shell → treat as the calm case.
+function renderColdState(ledger, onChangeLedger) {
+  const known = ledger && typeof ledger === "object";
+  const misconfigured = known && !ledger.hasData; // empty OR missing dir
+  if (!misconfigured) {
+    return el(
+      "ae-empty-state",
+      { attrs: { compact: true } },
+      el("span", { attrs: { slot: "icon" }, class: "hg-empty__glyph" }, "▚"),
+      el("span", { attrs: { slot: "title" } }, "No live terminals"),
+      "Start an agent and it appears here within a few seconds."
+    );
+  }
+  const missing = !ledger.exists;
+  const detail = el(
+    "span",
+    { class: "hg-empty__detail" },
+    document.createTextNode(missing ? "Configured to read " : "Reading "),
+    el("code", { class: "hg-empty__dir", text: ledger.dir || "(unknown)" }),
+    document.createTextNode(
+      missing
+        ? " — that folder doesn't exist. Capture is likely writing to a different one."
+        : " — no sessions here yet. If your agents are running, capture is writing to a different folder."
+    )
+  );
+  const children = [
+    el("span", { attrs: { slot: "icon" }, class: "hg-empty__glyph" }, "▚"),
+    el("span", { attrs: { slot: "title" } }, missing ? "Ledger folder not found" : "This ledger is empty"),
+    detail,
+  ];
+  if (onChangeLedger) {
+    children.push(
+      el(
+        "span",
+        { attrs: { slot: "actions" } },
+        el(
+          "ae-button",
+          { attrs: { variant: "primary", size: "sm" }, on: { click: () => onChangeLedger() } },
+          "Change ledger…"
+        )
+      )
+    );
+  }
+  return el("ae-empty-state", { attrs: { compact: true } }, ...children);
+}
+
 /**
  * Draw (or redraw) the fleet switcher: a "terminals · N need you · M running" +
  * clock header over a height-capped, scrollable, needs-you-first list of lanes.
  * The cap (CSS) keeps a high lane count from ever swallowing the transcript below.
  * opts.time is the board clock (HH:MM) the controller derives from generatedAt.
+ * opts.ledger / opts.onChangeLedger drive the cold-state diagnostic (see renderColdState).
  */
 export function renderTriage(mountEl, terminals, opts = {}) {
   clear(mountEl);
@@ -329,16 +389,9 @@ export function renderTriage(mountEl, terminals, opts = {}) {
   mountEl.append(head);
 
   if (list.length === 0) {
-    // cold / no lanes — a calm placeholder rather than an empty list.
-    mountEl.append(
-      el(
-        "ae-empty-state",
-        { attrs: { compact: true } },
-        el("span", { attrs: { slot: "icon" }, class: "hg-empty__glyph" }, "▚"),
-        el("span", { attrs: { slot: "title" } }, "No live terminals"),
-        "Start an agent and it appears here within a few seconds."
-      )
-    );
+    // cold / no lanes — calm "agents are quiet", or an actionable diagnostic when the
+    // ledger we're reading is empty/missing (the wrong-folder failure mode).
+    mountEl.append(renderColdState(opts.ledger, opts.onChangeLedger));
     return;
   }
 

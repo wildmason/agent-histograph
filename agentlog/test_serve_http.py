@@ -50,6 +50,11 @@ class _Server(unittest.TestCase):
         self._saved = A.AGENTLOG_DIR
         A.AGENTLOG_DIR = self.tmp
         os.makedirs(os.path.join(self.tmp, "state"), exist_ok=True)
+        # isolate the in-app ledger-dir override to a throwaway config dir so the
+        # machine's real ~/.histograph choice can't repoint the server off self.tmp.
+        self._cfg = tempfile.mkdtemp()
+        self._saved_cfg = os.environ.get("HISTOGRAPH_CONFIG_DIR")
+        os.environ["HISTOGRAPH_CONFIG_DIR"] = self._cfg
         # seed a tiny live ledger so /api/state has at least one terminal. The server
         # uses the REAL wall clock (now_epoch=None), so the seed must be fresh relative
         # to now (inside LIVE_WINDOW_SECS / under the idle floor) — stamp it ~1 min ago.
@@ -78,6 +83,10 @@ class _Server(unittest.TestCase):
         except Exception:
             pass
         A.AGENTLOG_DIR = self._saved
+        if self._saved_cfg is None:
+            os.environ.pop("HISTOGRAPH_CONFIG_DIR", None)
+        else:
+            os.environ["HISTOGRAPH_CONFIG_DIR"] = self._saved_cfg
 
     def _get(self, path):
         url = "http://127.0.0.1:%d%s" % (self.port, path)
@@ -232,6 +241,138 @@ class TestFocusPost(_Server):
             code = e.code
         self.assertEqual(code, 200)
         self.assertEqual(E.load_focus(), tid)
+
+
+# --------------------------------------------------------------------------- #
+# Ledger directory — /api/state ledger block, GET /api/ledger, POST /api/ledger-dir.
+# This is the fix for "double-clicked the exe -> read the empty default -> nothing
+# rendered": the board can name the dir it reads and switch it live.
+# --------------------------------------------------------------------------- #
+class TestLedgerApi(_Server):
+    def test_api_state_carries_ledger_block(self):
+        status, _, body = self._get("/api/state")
+        self.assertEqual(status, 200)
+        led = json.loads(body).get("ledger")
+        self.assertIsInstance(led, dict)
+        self.assertEqual(os.path.abspath(led["dir"]), os.path.abspath(self.tmp))
+        self.assertTrue(led["exists"])
+        self.assertGreaterEqual(led["sessions"], 1)   # the seeded live lane
+        self.assertIn(led["source"], ("default", "env", "override"))
+
+    def test_api_ledger_envelope_shape(self):
+        status, _, body = self._get("/api/ledger")
+        self.assertEqual(status, 200)
+        data = json.loads(body)
+        for key in ("current", "source", "default", "candidates"):
+            self.assertIn(key, data)
+        self.assertIsInstance(data["candidates"], list)
+
+    def test_post_ledger_dir_switches_active_read_then_resets(self):
+        # a second populated ledger dir, distinct from the seeded self.tmp
+        other = tempfile.mkdtemp()
+        os.makedirs(os.path.join(other, "state"), exist_ok=True)
+        fresh = A.now_iso()
+        with open(os.path.join(other, "checkpoints.jsonl"), "w", encoding="utf-8") as f:
+            f.write(json.dumps(_cp("other1", fresh, project="Other")) + "\n")
+        with open(os.path.join(other, "activity.jsonl"), "w", encoding="utf-8") as f:
+            f.write(json.dumps(_act("other1", fresh)) + "\n")
+
+        st, resp = self._post("/api/ledger-dir", {"dir": other})
+        self.assertEqual(st, 200)
+        self.assertEqual(os.path.abspath(json.loads(resp)["dir"]), os.path.abspath(other))
+
+        # /api/state now reads the NEW dir (the whole point: no relaunch needed)
+        _, _, body = self._get("/api/state")
+        self.assertEqual(os.path.abspath(json.loads(body)["ledger"]["dir"]),
+                         os.path.abspath(other))
+
+        # reset clears the override -> back to the configured default (self.tmp)
+        st, _ = self._post("/api/ledger-dir", {"reset": True})
+        self.assertEqual(st, 200)
+        _, _, body = self._get("/api/state")
+        self.assertEqual(os.path.abspath(json.loads(body)["ledger"]["dir"]),
+                         os.path.abspath(self.tmp))
+
+    def test_post_ledger_dir_nonexistent_is_400_and_does_not_switch(self):
+        bogus = os.path.join(self.tmp, "no-such-ledger-dir")
+        st, resp = self._post("/api/ledger-dir", {"dir": bogus})
+        self.assertEqual(st, 400)
+        self.assertIn("error", json.loads(resp))
+        # the board still reads the original dir — a typo can't strand it
+        _, _, body = self._get("/api/state")
+        self.assertEqual(os.path.abspath(json.loads(body)["ledger"]["dir"]),
+                         os.path.abspath(self.tmp))
+
+    def test_post_ledger_dir_cross_site_origin_forbidden(self):
+        url = "http://127.0.0.1:%d/api/ledger-dir" % self.port
+        data = json.dumps({"dir": self.tmp}).encode("utf-8")
+        req = urllib.request.Request(url, data=data, method="POST",
+                                     headers={"Content-Type": "application/json",
+                                              "Origin": "http://evil.example.com"})
+        try:
+            with urllib.request.urlopen(req, timeout=5) as r:
+                code = r.status
+        except urllib.error.HTTPError as e:
+            code = e.code
+        self.assertEqual(code, 403)
+
+
+# --------------------------------------------------------------------------- #
+# UI settings persistence — theme/scheme/zoom survive a close/reopen even though the
+# desktop app's ephemeral-port origin wipes localStorage each launch (they persist
+# server-side and are injected into the page shell for a FOUC-free boot).
+# --------------------------------------------------------------------------- #
+class TestSettingsApi(_Server):
+    def test_get_settings_empty_by_default(self):
+        st, _, body = self._get("/api/settings")
+        self.assertEqual(st, 200)
+        self.assertEqual(json.loads(body), {})
+
+    def test_post_settings_persists_and_reflects(self):
+        st, resp = self._post("/api/settings", {"theme": "metro", "variant": "dark", "zoom": 1.25})
+        self.assertEqual(st, 200)
+        self.assertEqual(json.loads(resp)["settings"]["theme"], "metro")
+        _, _, body = self._get("/api/settings")
+        p = json.loads(body)
+        self.assertEqual(p["theme"], "metro")
+        self.assertEqual(p["variant"], "dark")
+        self.assertEqual(p["zoom"], 1.25)
+
+    def test_partial_post_does_not_clobber(self):
+        self._post("/api/settings", {"theme": "cinnabar", "variant": "light"})
+        self._post("/api/settings", {"zoom": 1.5})
+        p = json.loads(self._get("/api/settings")[2])
+        self.assertEqual(p["theme"], "cinnabar")   # preserved across a zoom-only write
+        self.assertEqual(p["zoom"], 1.5)
+
+    def test_index_injects_saved_prefs_into_boot_script(self):
+        self._post("/api/settings", {"theme": "cinnabar", "variant": "light"})
+        st, headers, body = self._get("/")
+        self.assertEqual(st, 200)
+        self.assertIn("text/html", headers.get("Content-Type", ""))
+        # the bare `null` sentinel is rewritten with the saved prefs object
+        self.assertIn("window.__HG_PREFS__ = {", body)
+        self.assertIn("cinnabar", body)
+        self.assertNotIn("window.__HG_PREFS__ = null", body)
+
+    def test_index_keeps_null_sentinel_when_no_prefs(self):
+        st, _, body = self._get("/")
+        self.assertEqual(st, 200)
+        self.assertIn("window.__HG_PREFS__ = null", body)
+
+    def test_post_settings_cross_site_origin_forbidden(self):
+        url = "http://127.0.0.1:%d/api/settings" % self.port
+        data = json.dumps({"theme": "metro"}).encode("utf-8")
+        req = urllib.request.Request(url, data=data, method="POST",
+                                     headers={"Content-Type": "application/json",
+                                              "Origin": "http://evil.example.com"})
+        try:
+            with urllib.request.urlopen(req, timeout=5) as r:
+                code = r.status
+        except urllib.error.HTTPError as e:
+            code = e.code
+        self.assertEqual(code, 403)
+        self.assertEqual(json.loads(self._get("/api/settings")[2]), {})  # nothing persisted
 
 
 # --------------------------------------------------------------------------- #

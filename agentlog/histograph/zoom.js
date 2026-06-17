@@ -61,10 +61,35 @@ export function applyZoom(factor, root) {
 // ---- persistence (mirrors theme.js) --------------------------------------
 
 function load() {
+  // Server-injected prefs (window.__HG_PREFS__) win over localStorage — the desktop
+  // app's ephemeral-port origin wipes localStorage each launch, so the server-side
+  // value is the durable source. localStorage is the fallback. resolveZoom coerces
+  // either a number (injected) or a string (localStorage).
+  try {
+    const P = typeof window !== "undefined" ? window.__HG_PREFS__ : null;
+    if (P && typeof P.zoom === "number") return P.zoom;
+  } catch {
+    /* fall through */
+  }
   try {
     return localStorage.getItem(STORAGE_KEY);
   } catch {
     return null;
+  }
+}
+
+// Durable, origin-independent persistence (see theme.js). Fire-and-forget; skipped
+// outside a real browser so headless tests don't fetch.
+function pushPrefs(factor) {
+  try {
+    if (typeof window === "undefined" || typeof fetch !== "function") return;
+    fetch("/api/settings", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ zoom: resolveZoom(factor) }),
+    }).catch(() => {});
+  } catch {
+    /* no-op: persistence is best-effort */
   }
 }
 
@@ -74,6 +99,7 @@ function persist(factor) {
   } catch {
     /* storage unavailable (private mode) — applies for the session anyway */
   }
+  pushPrefs(factor);
 }
 
 // ---- control wiring ------------------------------------------------------

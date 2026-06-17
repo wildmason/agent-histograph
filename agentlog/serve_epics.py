@@ -29,24 +29,29 @@ import tempfile
 
 import agentlog_common as A
 import serve_state as S
+import serve_ledger as Lg
 
 SCHEMA_VERSION = "0.1"
 _VALID_INTEGRITY = ("reconstructed", "human-confirmed")
 
 
 # --------------------------------------------------------------------------- #
-# path resolvers (live — honour AGENTLOG_DIR overrides + tests)
+# path resolvers (live — follow the ACTIVE ledger dir: in-app override > env >
+# default). epics/focus/dismissed are board state for whichever ledger is being
+# VIEWED, so they must track serve_ledger.resolved_dir() — switching ledgers in the
+# app loads that ledger's own epics + focus, not the previous dir's. Resolved at
+# call time so the override and the AGENTLOG_DIR/test patches all take effect.
 # --------------------------------------------------------------------------- #
 def epics_path():
-    return os.path.join(A.AGENTLOG_DIR, "epics.json")
+    return os.path.join(Lg.resolved_dir(), "epics.json")
 
 
 def focus_path():
-    return os.path.join(A.AGENTLOG_DIR, "state", "histograph-focus.json")
+    return os.path.join(Lg.resolved_dir(), "state", "histograph-focus.json")
 
 
 def dismissed_path():
-    return os.path.join(A.AGENTLOG_DIR, "state", "histograph-dismissed.json")
+    return os.path.join(Lg.resolved_dir(), "state", "histograph-dismissed.json")
 
 
 # convenience module constants (snapshot at import; functions above are canonical)
