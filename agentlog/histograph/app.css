@@ -91,7 +91,10 @@ body {
    -------------------------------------------------------------------------- */
 .hg-titlebar {
   flex: 0 0 auto;
-  height: 44px;
+  /* min- not fixed height: at 125/150% zoom the rem-scaled brand/meta must be
+     able to grow the bar instead of clipping. The injected window-control overlay
+     measures the bar height on wire, so it tracks this automatically. */
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: space-between;

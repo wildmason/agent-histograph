@@ -8,6 +8,7 @@
 
 import { renderTriage, renderFocus, titlebarMeta } from "/render.js";
 import { initThemeSwitcher } from "/theme.js";
+import { initZoom } from "/zoom.js";
 
 // Adaptive poll cadence: snappy while the focused lane is actively turning (so
 // the live tool stream moves in near-real-time), calm otherwise. The backend's
@@ -28,6 +29,7 @@ const els = {
   conn: document.getElementById("conn"),
   brandSelect: document.getElementById("brand-select"),
   schemeSelect: document.getElementById("scheme-select"),
+  zoomSelect: document.getElementById("zoom-select"),
   settingsBtn: document.getElementById("settings-btn"),
   settingsModal: document.getElementById("settings-modal"),
   settingsDone: document.getElementById("settings-done"),
@@ -47,6 +49,10 @@ initThemeSwitcher({
   brandSelect: els.brandSelect,
   schemeSelect: els.schemeSelect,
 });
+
+// board zoom (100/125/150%) — rem-based, scales the root font-size. The injected
+// px-sized window controls stay native; only the board content scales.
+initZoom({ zoomSelect: els.zoomSelect });
 
 // the theme picker lives behind a settings modal (gear in the titlebar).
 if (els.settingsBtn && els.settingsModal) {

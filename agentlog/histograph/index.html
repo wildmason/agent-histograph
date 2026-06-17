@@ -81,6 +81,21 @@
       })();
     </script>
 
+    <!-- Zoom FOUC guard: stamp the persisted board zoom onto <html> BEFORE first
+         paint so the board never flashes at 100% then jumps. The whole UI is rem
+         (Aegis --ae-* tokens), so root font-size IS the zoom; 100% leaves it
+         unset (UA/user base respected). zoom.js re-applies idempotently on load. -->
+    <script>
+      (function () {
+        try {
+          var z = parseFloat(localStorage.getItem("histograph.zoom"));
+          if (z === 1.25 || z === 1.5) {
+            document.documentElement.style.fontSize = 16 * z + "px";
+          }
+        } catch (e) {}
+      })();
+    </script>
+
     <!-- Register the ae-* custom elements. Module, deferred by nature. -->
     <script type="module" src="/static/aegis/aegis.js"></script>
   </head>
@@ -163,6 +178,10 @@
         <div class="hg-settings__control">
           <span class="hg-settings__label" aria-hidden="true">Scheme</span>
           <ae-select id="scheme-select" aria-label="Scheme" placeholder="Scheme"></ae-select>
+        </div>
+        <div class="hg-settings__control">
+          <span class="hg-settings__label" aria-hidden="true">Zoom</span>
+          <ae-select id="zoom-select" aria-label="Zoom" placeholder="Zoom"></ae-select>
         </div>
       </div>
       <div slot="footer">
