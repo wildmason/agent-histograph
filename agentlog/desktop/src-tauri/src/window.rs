@@ -1,13 +1,15 @@
 //! The frameless main window + the script injected into its content to provide
-//! window chrome (drag / pin / minimize / close) for a decorations-less window
-//! whose page is a REMOTE (loopback) origin Tauri did not bundle.
+//! window chrome (an explicit drag/move handle + pin / minimize / close, plus a
+//! whole-titlebar drag) for a decorations-less window whose page is a REMOTE
+//! (loopback) origin Tauri did not bundle.
 
 use tauri::{AppHandle, Url, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_window_state::{StateFlags, WindowExt};
 
 /// Injected into EVERY top-level navigation — the bundled splash AND the remote
 /// histograph page. It makes the in-page `.hg-titlebar` a drag handle and renders
-/// pin / minimize / close controls in a FIXED top-right overlay.
+/// an explicit drag/move handle + pin / minimize / close controls in a FIXED
+/// top-right overlay.
 ///
 /// Why an overlay and not appended-into-the-titlebar: the histograph titlebar is
 /// `justify-content:space-between` with its own children (brand, live meta, the
@@ -91,7 +93,7 @@ const DRAG_PIN_CLOSE_JS: &str = r##"
     const style = document.createElement('style');
     style.setAttribute('data-hg-affordance', '');
     style.textContent = [
-      '.hg-titlebar{-webkit-user-select:none;user-select:none;padding-right:108px !important;}',
+      '.hg-titlebar{-webkit-user-select:none;user-select:none;padding-right:140px !important;}',
       '#hg-winctl{position:fixed;top:0;right:0;display:flex;align-items:center;gap:2px;padding:0 6px;z-index:2147483647;pointer-events:none;}',
       // NB: do NOT reintroduce `all:unset` here. The previous build set
       // pointer-events:auto and THEN ran all:unset, which — because pointer-events
@@ -104,6 +106,8 @@ const DRAG_PIN_CLOSE_JS: &str = r##"
       '#hg-winctl button:focus-visible{outline:var(--ae-focus-ring-width,2px) solid var(--ae-color-focus-ring,#5b9dd9);outline-offset:-2px;}',
       '#hg-winctl button.hg-close:hover{background:var(--ae-color-danger,#e5484d);color:var(--ae-color-fg-on-danger,#fff);}',
       '#hg-winctl button.hg-pin[aria-pressed="true"]{color:var(--ae-color-accent,#5b9dd9);}',
+      '#hg-winctl button.hg-drag{cursor:grab;}',
+      '#hg-winctl button.hg-drag:active{cursor:grabbing;}',
       '#hg-winctl svg{width:14px;height:14px;display:block;}'
     ].join('');
     document.head.appendChild(style);
@@ -159,7 +163,23 @@ const DRAG_PIN_CLOSE_JS: &str = r##"
     const close = mk('hg-close', 'Close', 'Close', icon(['M6 6l12 12', 'M18 6 6 18']));
     close.addEventListener('click', () => call(appWindow.close(), 'close'));
 
-    ctl.append(pin, min, close);
+    // Explicit drag/move handle, IN ADDITION to the whole-titlebar drag. A clear,
+    // always-grabbable target so the window can be picked up reliably even after a
+    // cross-monitor DPI reflow shuffles the titlebar's thin draggable dead-space
+    // (the "couldn't move it where I wanted" case). The 4-arrow "move" glyph reads
+    // unambiguously as pick-this-up. Same native startDragging() the titlebar uses;
+    // preventDefault stops a stray text-selection drag from starting.
+    const drag = mk('hg-drag', 'Move window', 'Drag to move the window', icon([
+      'M5 9 2 12 5 15', 'M9 5 12 2 15 5', 'M15 19 12 22 9 19', 'M19 9 22 12 19 15',
+      'M2 12H22', 'M12 2V22',
+    ]));
+    drag.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      call(appWindow.startDragging(), 'startDragging');
+    });
+
+    ctl.append(drag, pin, min, close);
     document.body.appendChild(ctl);
   };
 
