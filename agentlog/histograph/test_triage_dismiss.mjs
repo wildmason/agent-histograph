@@ -1,7 +1,7 @@
-// Headless DOM-stub test for the triage close-out affordance. No browser here, so
-// a minimal document stub exercises render.js's real renderTriage(): it asserts the
-// × is a non-nested SIBLING of the role="button" row (no nested interactives), the
-// header carries an alignment spacer, and clicks route to onDismiss / onFocus.
+// Headless DOM-stub test for the fleet-switcher close-out affordance. No browser
+// here, so a minimal document stub exercises render.js's real renderTriage(): it
+// asserts the × is a non-nested SIBLING of the role="button" lane (no nested
+// interactives), and that clicks route to onDismiss / onFocus.
 //
 // Run: node histograph/test_triage_dismiss.mjs   (exit 0 = pass)
 
@@ -42,14 +42,17 @@ class El {
     const ev = { type: "click", stopPropagation() {}, preventDefault() {} };
     for (const fn of this._handlers.click || []) fn(ev);
   }
-  // depth-first descendants (excludes self)
+  // depth-first ELEMENT descendants (excludes self + text nodes). Recurses through
+  // all children but collects only elements, so raw .every()/.find() predicates can
+  // safely call hasClass/getAttribute (a TextNode — e.g. the "▚ VIEWING" pill label
+  // — has neither, and no `.children` to iterate).
   descendants() {
     const out = [];
-    const walk = (n) => { for (const c of n.children) { out.push(c); walk(c); } };
+    const walk = (n) => { for (const c of n.children || []) { if (c.nodeType === 1) out.push(c); walk(c); } };
     walk(this);
     return out;
   }
-  queryAll(pred) { return this.descendants().filter(pred); }
+  queryAll(pred) { return this.descendants().filter((n) => n.nodeType === 1 && pred(n)); }
 }
 
 class TextNode {
@@ -68,12 +71,14 @@ const { renderTriage } = await import("./render.js");
 let focused = [];
 let dismissed = [];
 const terminals = [
+  // focused + active -> ▚ VIEWING pill; an active lane is "running".
   { id: "term-1", project: "Mortar", provider: "claude", status: "active",
     story: { title: "wire the parser" }, freshnessLabel: "2m", freshnessTone: "muted",
-    focused: false },
+    focused: true },
+  // needs-you (not focused) -> NEEDS YOU pill; floats to the top.
   { id: "term-2", project: "Bridge", provider: "codex", status: "needs-you",
     story: { title: "review the diff" }, freshnessLabel: "5m", freshnessTone: "warning",
-    focused: true, statusLine: { kind: "needs-you", text: "needs you" } },
+    focused: false, statusLine: { kind: "needs-you", text: "needs you" } },
 ];
 
 const mount = new El("div");
@@ -89,12 +94,21 @@ const ok = (name, cond) => { if (!cond) { failures++; console.log("  ✗ " + nam
 const closes = mount.queryAll((n) => n.tagName === "BUTTON" && n.hasClass("hg-trow__close"));
 const rows = mount.queryAll((n) => n.hasClass("hg-trow"));
 const wraps = mount.queryAll((n) => n.hasClass("hg-trow-wrap"));
-const spacers = mount.queryAll((n) => n.hasClass("hg-trow__close-spacer"));
+const heads = mount.queryAll((n) => n.hasClass("hg-terms__head"));
 
 ok("one close button per lane (2)", closes.length === 2);
 ok("two lane rows", rows.length === 2);
 ok("two row wraps", wraps.length === 2);
-ok("header has exactly one alignment spacer", spacers.length === 1);
+ok("fleet header rendered once", heads.length === 1);
+// the needs-you lane (term-2) floats to the top, ahead of the active lane.
+const orderedTerms = rows.map((r) => r.getAttribute("data-terminal"));
+ok("needs-you lane sorts first", orderedTerms[0] === "term-2");
+// the focused lane carries a ▚ VIEWING pill; the needs-you lane a NEEDS YOU pill.
+const pills = mount.queryAll((n) => n.hasClass("hg-trow__pill"));
+ok("a VIEWING pill is rendered for the focused lane",
+   pills.some((p) => /VIEWING/.test(p.textContent)));
+ok("a NEEDS YOU pill is rendered for the blocked lane",
+   pills.some((p) => /NEEDS YOU/.test(p.textContent)));
 
 // the × is a SIBLING of the row inside the wrap, NOT a descendant of it.
 ok("close shares the wrap parent with its row", closes.every((c) => c.parentNode && c.parentNode.hasClass("hg-trow-wrap")));

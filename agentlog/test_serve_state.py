@@ -1277,5 +1277,134 @@ class TestSessionCloseOut(unittest.TestCase):
         self.assertEqual(self._projects(state), {"Bridge"})
 
 
+# --------------------------------------------------------------------------- #
+# task detail — the decision's rationale rides the wire as the transcript's 2nd line
+# --------------------------------------------------------------------------- #
+class TestTaskDetail(unittest.TestCase):
+    """The "Transcript + terminals" design renders each entry as a title + a
+    reasoning line. build_tasks must surface the decision's `rationale` as `detail`
+    (distinct from `summary`, the choice); steps/pending carry "" (title-only)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def test_decision_detail_is_the_rationale_not_the_choice(self):
+        # _decision defaults rationale="because"; assert detail==rationale and
+        # summary==choice — they must be DIFFERENT fields, not the same string echoed.
+        cps = [_cp("d1", "2026-06-10T10:00:00-04:00",
+                   decisions=[_decision("transport", "use a single bidi stream")])]
+        acts = [_act("stop_boundary", "d1", "2026-06-10T10:00:00-04:00")]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        dec = next(t for t in S.build_tasks(led, "d1") if t["kind"] == "decision")
+        self.assertEqual(dec["summary"], "use a single bidi stream")   # the choice (title)
+        self.assertEqual(dec["detail"], "because")                     # the rationale (line 2)
+
+    def test_decision_without_rationale_has_empty_detail(self):
+        d = _decision("transport", "use a single bidi stream")
+        d["rationale"] = ""
+        cps = [_cp("d2", "2026-06-10T10:00:00-04:00", decisions=[d])]
+        acts = [_act("stop_boundary", "d2", "2026-06-10T10:00:00-04:00")]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        dec = next(t for t in S.build_tasks(led, "d2") if t["kind"] == "decision")
+        self.assertEqual(dec["detail"], "")
+
+    def test_step_has_empty_detail(self):
+        # a passive checkpoint (no decisions) -> a step with no rationale.
+        cps = [_cp("s1", "2026-06-10T10:00:00-04:00", decisions=[], summary="touched files")]
+        acts = [_act("stop_boundary", "s1", "2026-06-10T10:00:00-04:00")]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        step = next(t for t in S.build_tasks(led, "s1") if t["kind"] == "step")
+        self.assertEqual(step["summary"], "touched files")
+        self.assertEqual(step["detail"], "")
+
+    def test_every_wire_task_carries_a_detail_key(self):
+        # contract guard: detail is ALWAYS present, so the renderer can read
+        # task.detail unconditionally across decision / step / activity / pending.
+        cps = [_cp("e1", "2026-06-10T10:00:00-04:00",
+                   decisions=[_decision("a", "did a thing")], next_action="do the next thing")]
+        acts = [_act("tool_use", "e1", "2026-06-10T10:06:30-04:00", tool="Edit", paths=["x.js"])]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        tasks = S.build_tasks(led, "e1", include_activity=True, working_now=True)
+        # decision + in-flight activity + pending are all present in one trail.
+        self.assertTrue({"decision", "activity", "pending"} <= {t["kind"] for t in tasks})
+        self.assertTrue(all("detail" in t for t in tasks))
+
+
+# --------------------------------------------------------------------------- #
+# now_line — the orientation header's pinned live-edge read-out
+# --------------------------------------------------------------------------- #
+class TestNowLine(unittest.TestCase):
+    """now_line surfaces the live edge for the pinned orientation header, mirroring
+    build_tasks' live-edge precedence so the header and the transcript NOW card
+    never disagree about what the lane is doing."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def test_activity_now_is_tool_and_target(self):
+        tasks = [
+            {"kind": "decision", "summary": "decided", "at": "t"},
+            {"kind": "activity", "tool": "Edit", "summary": "render.js", "now": False, "at": "t"},
+            {"kind": "activity", "tool": "Bash", "summary": "cargo test", "now": True, "at": "t"},
+        ]
+        nl = S.now_line(tasks, True)
+        self.assertEqual(nl["text"], "Bash · cargo test")    # the LIVE (now=True) tip, not the earlier Edit
+        self.assertTrue(nl["working"])
+
+    def test_activity_now_without_target_is_just_the_tool(self):
+        tasks = [{"kind": "activity", "tool": "Read", "summary": "", "now": True, "at": "t"}]
+        self.assertEqual(S.now_line(tasks, True)["text"], "Read")
+
+    def test_live_bloom_is_the_checkpoint_summary(self):
+        tasks = [{"kind": "live", "summary": "verifying the half-close path", "at": "t"}]
+        self.assertEqual(S.now_line(tasks, True)["text"], "verifying the half-close path")
+
+    def test_idle_falls_back_to_newest_non_pending(self):
+        # no live edge: orient on the last real thing done, NEVER the pending next_action.
+        tasks = [
+            {"kind": "decision", "summary": "older", "at": "t1"},
+            {"kind": "milestone", "summary": "the latest real thing", "at": "t2"},
+            {"kind": "pending", "summary": "the next thing", "at": None},
+        ]
+        nl = S.now_line(tasks, False)
+        self.assertEqual(nl["text"], "the latest real thing")
+        self.assertFalse(nl["working"])
+
+    def test_empty_or_none_is_blank(self):
+        self.assertEqual(S.now_line([], True)["text"], "")
+        self.assertEqual(S.now_line(None, False), {"text": "", "working": False})
+
+    def test_build_state_focus_exposes_nowLine_consistent_with_live_edge(self):
+        # end-to-end: a working lane whose last tool fired 15s ago -> nowLine is the
+        # tool tip, working True, matching the transcript's 'activity' now node.
+        cps = [_cp("nl", "2026-06-10T10:00:00-04:00",
+                   decisions=[_decision("a", "did a thing")], project="Mortar")]
+        acts = [_act("stop_boundary", "nl", "2026-06-10T10:00:00-04:00"),
+                _act("tool_use", "nl", "2026-06-10T10:06:30-04:00", tool="Bash", command="npm test")]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        state = S.build_state(led, _epics([]), now_epoch=_t("2026-06-10T10:06:45-04:00"))
+        nl = state["focus"]["activeStory"]["nowLine"]
+        self.assertTrue(nl["working"])
+        self.assertEqual(nl["text"], "Bash · npm test")
+
+    def test_build_state_idle_focus_nowLine_not_working(self):
+        # an idle lane: nowLine.working is False and it reads the last decision, not
+        # a perpetual "now" (mirrors the no-stuck-live-tip contract).
+        cps = [_cp("id", "2026-06-10T10:00:00-04:00",
+                   decisions=[_decision("a", "shipped the parser")], project="Mortar", next_action="")]
+        acts = [_act("tool_use", "id", "2026-06-10T09:58:00-04:00", tool="Edit", paths=["x.js"])]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        state = S.build_state(led, _epics([]), now_epoch=_t("2026-06-10T10:10:00-04:00"))
+        nl = state["focus"]["activeStory"]["nowLine"]
+        self.assertFalse(nl["working"])
+        self.assertEqual(nl["text"], "shipped the parser")
+
+
 if __name__ == "__main__":
     unittest.main()

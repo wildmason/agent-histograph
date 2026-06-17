@@ -505,6 +505,10 @@ def build_tasks(ledger, sid, *, include_activity=False, working_now=False):
                     "id": "tk-%s-%d" % (cid or "x", i),
                     "kind": kind,
                     "summary": R.clean(d.get("choice") or d.get("topic") or "", 240),
+                    # the decision's rationale — the "why" a future reader needs. The
+                    # transcript surfaces it as the entry's second line; "" when the
+                    # producer logged a choice without a rationale (degrade to title-only).
+                    "detail": R.clean(d.get("rationale") or "", 240),
                     "integrity": map_integrity(d),
                     "at": at,
                     "topic": (d.get("topic") or ""),   # internal: reversal matching
@@ -517,6 +521,9 @@ def build_tasks(ledger, sid, *, include_activity=False, working_now=False):
                 "id": "tk-%s" % (cid or "x"),
                 "kind": "step",
                 "summary": R.clean(c.get("summary") or "", 240),
+                # a passive/working checkpoint carries no decision rationale; the step
+                # is one line. ("" so the transcript renders title-only, not an empty row.)
+                "detail": "",
                 "integrity": map_integrity(c),
                 "at": at,
                 "topic": "",
@@ -566,6 +573,7 @@ def build_tasks(ledger, sid, *, include_activity=False, working_now=False):
                 "id": "tk-pending",
                 "kind": "pending",
                 "summary": R.clean(na, 240),
+                "detail": "",
                 "integrity": "passive",
                 "at": None,
                 "topic": "",
@@ -577,6 +585,7 @@ def build_tasks(ledger, sid, *, include_activity=False, working_now=False):
     out = []
     for t in tasks:
         wire = {"id": t["id"], "kind": t["kind"], "summary": t["summary"],
+                "detail": t.get("detail") or "",
                 "integrity": t.get("integrity"), "at": _norm_ts(t["at"])}
         if t["kind"] == "supersedes" and t.get("reversal"):
             rev = dict(t["reversal"])
@@ -603,6 +612,41 @@ def decision_count(tasks):
     Activity/live/pending/step nodes don't count — only recorded decisions."""
     return sum(1 for t in (tasks or [])
                if t.get("kind") in ("decision", "supersedes", "milestone"))
+
+
+def now_line(tasks, working):
+    """The orientation header's pinned 'now' line — a one-line read of the live edge
+    so "what is this lane doing right now" stays in view while the transcript scrolls
+    beneath it. Returns {"text", "working"}. Pure over the already-built WIRE tasks
+    (no ledger access); mirrors build_tasks' live-edge precedence so the header and
+    the transcript's NOW card never disagree:
+        in-flight tool tip (activity, now=True)  -> "<tool> · <target>"
+        bloomed live checkpoint (kind 'live')     -> the checkpoint summary
+        neither (idle, or working-but-no-tip-yet) -> the newest recorded, non-pending
+                                                     summary, so the header still orients
+                                                     on the last thing the lane did
+    `working` is the lane's workingNow — it drives the pulsing dot, independent of
+    whether a live tip exists (a just-landed checkpoint can be working with no tip)."""
+    tasks = tasks or []
+    live = None
+    for t in tasks:
+        k = t.get("kind")
+        if k == "live" or (k == "activity" and t.get("now")):
+            live = t            # last one wins (newest live edge)
+    if live is not None:
+        if live.get("kind") == "activity":
+            tool = (live.get("tool") or "tool").strip()
+            tgt = (live.get("summary") or "").strip()
+            text = (tool + " · " + tgt) if tgt else tool
+        else:
+            text = (live.get("summary") or "").strip()
+    else:
+        text = ""
+        for t in reversed(tasks):
+            if t.get("kind") != "pending":
+                text = (t.get("summary") or "").strip()
+                break
+    return {"text": text, "working": bool(working)}
 
 
 # how recently a tool action must have fired for a lane to read "working now".
@@ -943,6 +987,9 @@ def _build_focus(ledger, focus_sid, epics, now_epoch):
                 "title": title,
                 "startedAt": started_at,
                 "indexLabel": index_label,
+                # the pinned orientation-header "now" line (the live edge, surfaced at
+                # the top so it stays in view as the transcript scrolls).
+                "nowLine": now_line(tasks, wn),
                 "tasks": tasks,
             },
         }

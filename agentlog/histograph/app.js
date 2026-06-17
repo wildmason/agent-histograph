@@ -23,9 +23,6 @@ const DISMISS_URL = "/api/dismiss";
 const els = {
   mosaic: document.getElementById("mosaic"),
   focus: document.getElementById("focus"),
-  needs: document.getElementById("tb-needs"),
-  count: document.getElementById("tb-count"),
-  time: document.getElementById("tb-time"),
   conn: document.getElementById("conn"),
   brandSelect: document.getElementById("brand-select"),
   schemeSelect: document.getElementById("scheme-select"),
@@ -95,25 +92,17 @@ function focusSig(focus) {
 function paint(state) {
   lastState = state;
 
-  // titlebar meta
+  // The needs/running counts + clock now ride the fleet-switcher header (rendered
+  // by renderTriage), per the Transcript + terminals design — the titlebar is just
+  // the wordmark + settings + window controls. We still derive the board clock here
+  // and hand it to renderTriage.
   const meta = titlebarMeta(state);
-  if (els.needs) {
-    if (meta.needs > 0) {
-      els.needs.textContent = `${meta.needs} needs you`;
-      els.needs.style.display = "";
-      // re-emphasize: a board that went clear → needs-you must drop the muted
-      // de-emphasis class, or the indicator stays quiet exactly when it most
-      // needs to surface. (LOW-1)
-      els.needs.classList.remove("hg-titlebar__time");
-    } else {
-      els.needs.textContent = "all clear";
-      els.needs.classList.add("hg-titlebar__time"); // de-emphasize when calm
-    }
-  }
-  if (els.count) els.count.textContent = `${meta.count} terminal${meta.count === 1 ? "" : "s"}`;
-  if (els.time) els.time.textContent = meta.time;
 
-  renderTriage(els.mosaic, state.terminals, { onFocus: requestFocus, onDismiss: requestDismiss });
+  renderTriage(els.mosaic, state.terminals, {
+    onFocus: requestFocus,
+    onDismiss: requestDismiss,
+    time: meta.time,
+  });
 
   // Focus pane: only (re)build it when the focused lane SWITCHES (fresh) or its
   // content actually CHANGES. Idle polls leave the existing DOM — and the

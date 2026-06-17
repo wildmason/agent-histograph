@@ -6,10 +6,17 @@
 // All color / type / spacing comes from --ae-* tokens (in app.css / markers.css);
 // this module only chooses class names and ae-* elements, never hex.
 //
-// Public surface:
-//   renderTriage(mountEl, terminals, { onFocus })   -> draws the mosaic
-//   renderFocus(mountEl, focus)                      -> draws the hero column
-//   renderTitlebarMeta(state)                        -> { needs, terminals, time }
+// Layout (the "Transcript + terminals" design):
+//   renderTriage(mountEl, terminals, { onFocus, onDismiss, time })
+//       -> the fleet switcher: a header line ("terminals · N need you · M running"
+//          + clock) over a needs-you-first, height-capped scroll of one-line lanes,
+//          each carrying a NEEDS YOU / ▚ VIEWING / IDLE micro-label.
+//   renderFocus(mountEl, focus, { changed, fresh })
+//       -> the pinned ORIENTATION HEADER (working-toward epic + story title + a
+//          "now —" live line + segmented roadmap bar) over a scrolling TRANSCRIPT
+//          TRAIL: a chronological feed of typed entries (◆ decision · step
+//          ↺ reversal ○ milestone, a highlighted NOW card, a ghosted next).
+//   titlebarMeta(state) -> { needs, count, time } small derived strings.
 //
 // The contract is null-tolerant by design (cold: focus===null; no-epic:
 // focus.epic===null; live-but-empty: activeStory.tasks===[]). Every builder
@@ -87,6 +94,20 @@ function providerOf(p) {
 }
 function integrityOf(i) {
   return INTEGRITY[i] || INTEGRITY.reconstructed;
+}
+
+// A lane "needs you" by its status OR by an open blocking-ask status line.
+function isNeedsYou(t) {
+  return t.status === "needs-you" || (t.statusLine && t.statusLine.kind === "needs-you");
+}
+
+// freshness tone -> class, clamped to the known set (muted/warning/danger) with a
+// muted fallback; a "mid-turn" beat reads warning even when the backend collapsed it.
+function freshToneKey(term) {
+  const FRESH_TONES = { muted: 1, warning: 1, danger: 1 };
+  let toneKey = FRESH_TONES[term.freshnessTone] ? term.freshnessTone : "muted";
+  if (term.freshnessLabel === "mid-turn") toneKey = "warning";
+  return toneKey;
 }
 
 // tool glyph for an in-flight activity node (the live tool stream). Presentation
@@ -168,180 +189,60 @@ function clock(iso) {
 }
 
 // ==========================================================================
-// TRIAGE — the status mosaic
+// TERMINALS — the fleet switcher (top section)
 // ==========================================================================
 
-/**
- * One triage card. ae-card (interactive) hosts a bespoke body:
- *   identity line: provider glyph + name + status dot + freshness
- *   story line:    the active story title (bold)
- *   epic micro-label OR statusLine/needs-you callout
- */
-export function renderTriageCard(term, { onFocus } = {}) {
-  const prov = providerOf(term.provider);
-  const quiet = term.status === "stale" || term.status === "parked" || term.status === "done";
-
-  // Identity label. When the project couldn't be resolved (codex lanes carry no
-  // cwd, so project falls back to a session-id fragment that equals the id),
-  // show the id alone rather than a misleading id-as-project suffix (m1).
-  const hasProject = term.project && term.project !== term.id;
-  const identityLabel = hasProject ? `${term.id} · ${term.project}` : term.id;
-
-  const card = el("ae-card", {
-    class: "hg-card" + (quiet ? " hg-card--quiet" : ""),
-    attrs: {
-      elevation: "low",
-      padding: "sm",
-      interactive: true,
-      role: "button",
-      tabindex: "0",
-      "aria-pressed": term.focused ? "true" : "false",
-      "aria-label": `Focus ${identityLabel}`,
-      "data-terminal": term.id,
-    },
-  });
-
-  // focused-cell ring is painted in CSS via .hg-card[aria-pressed="true"]::part(card)
-  // so it clips to the card's rounded inner surface and layers on TOP of the
-  // needs-you border tint instead of clobbering the host box-shadow (M2/M3).
-  // Here we only set the needs-you border tint (a host token the inner .card
-  // consumes); a card that is both focused AND needs-you keeps this tint and
-  // gets the focus ring from the ::part rule.
-  if (term.status === "needs-you") {
-    card.style.setProperty(
-      "--ae-card-border",
-      "color-mix(in oklch, var(--ae-color-danger) 40%, var(--ae-color-border))"
+// the NEEDS YOU / ▚ VIEWING / IDLE micro-label. Bare colored text (not a chip) —
+// faithful to the mockup; ae-tag would impose a chip background. needs-you wins
+// over viewing (a stuck lane you happen to be on still shouts), then viewing, then
+// idle; an active running lane carries no label.
+function lanePill(term, needsYou, quiet) {
+  if (needsYou) {
+    return el("span", { class: "hg-trow__pill hg-trow__pill--attn", text: "NEEDS YOU" });
+  }
+  if (term.focused) {
+    return el(
+      "span",
+      { class: "hg-trow__pill hg-trow__pill--view" },
+      el("span", { attrs: { "aria-hidden": "true" } }, "▚ "),
+      "VIEWING"
     );
   }
-
-  // freshness tone. Clamp to the known class set (muted/warning/danger) with a
-  // muted fallback so an unexpected tone can't emit an unstyled class (L3). A
-  // "mid-turn" beat is the spec's honest "actively turning" tell and must read
-  // warning amber even though the backend collapses sub-10-min idle to muted —
-  // the LABEL carries the meaning the tone field lost (M3).
-  const FRESH_TONES = { muted: 1, warning: 1, danger: 1 };
-  let toneKey = FRESH_TONES[term.freshnessTone] ? term.freshnessTone : "muted";
-  if (term.freshnessLabel === "mid-turn") toneKey = "warning";
-  const freshTone = "hg-card__fresh--" + toneKey;
-
-  const identity = el(
-    "div",
-    { class: "hg-card__identity" },
-    el("span", {
-      class: "hg-provider " + prov.cls,
-      title: prov.label,
-      attrs: { "aria-hidden": "true" },
-      text: prov.glyph,
-    }),
-    el("span", { class: "hg-card__name", text: identityLabel }),
-    el("span", {
-      class: "hg-statusdot " + (STATUS_DOT[term.status] || "hg-statusdot--stale"),
-      attrs: { "aria-hidden": "true" },
-    }),
-    el("span", { class: "hg-card__fresh " + freshTone, text: term.freshnessLabel || "" })
-  );
-
-  const story = el("div", {
-    class: "hg-card__story",
-    text: (term.story && term.story.title) || "—",
-  });
-
-  const body = el("div", { class: "hg-card-body" }, identity, story);
-
-  // status row: needs-you callout owns the eye; otherwise epic micro-label +
-  // status line.
-  if (term.statusLine && term.statusLine.kind === "needs-you") {
-    body.append(
-      el(
-        "div",
-        { class: "hg-card__needs" },
-        el("ae-tag", { attrs: { tone: "danger", variant: "soft", size: "sm" } }, "needs you")
-      )
-    );
-  } else {
-    if (term.epic) {
-      body.append(
-        el(
-          "div",
-          { class: "hg-card__epic" },
-          el("span", { attrs: { "aria-hidden": "true" } }, "▚"),
-          `${term.epic.title} · ${term.epic.done}/${term.epic.total}`
-        )
-      );
-    } else {
-      body.append(
-        el("div", { class: "hg-card__epic hg-card__epic--standalone" }, "standalone · no epic")
-      );
-    }
-    if (term.statusLine && term.statusLine.text) {
-      body.append(renderStatusLine(term.statusLine.text));
-    }
+  if (quiet) {
+    return el("span", { class: "hg-trow__pill hg-trow__pill--idle", text: "IDLE" });
   }
-
-  card.append(body);
-
-  const activate = () => onFocus && onFocus(term.id);
-  card.addEventListener("click", activate);
-  card.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      activate();
-    }
-  });
-
-  return card;
+  return null;
 }
-
-// statusLine.text may carry a "mid-turn" beat we want to tint warning.
-function renderStatusLine(text) {
-  const wrap = el("div", { class: "hg-card__statusline" });
-  const parts = String(text).split(/(mid-turn)/g);
-  for (const p of parts) {
-    if (p === "mid-turn") wrap.append(el("span", { class: "hg-card__midturn", text: p }));
-    else if (p) wrap.append(document.createTextNode(p));
-  }
-  return wrap;
-}
-
-// Short status word when the backend hands over no explicit statusLine.text.
-const STATUS_WORD = {
-  active: "active", "needs-you": "needs you", stale: "idle", parked: "parked", done: "done",
-};
 
 /**
- * One process-table lane row: status dot · provider glyph + id · focus title ·
- * status · age. Clickable + keyboard-operable; the focused lane gets an inset
- * accent bar. Token-driven (no hex) — the dot, provider tint, and freshness tone
- * reuse the same --ae-* classes the old cards used. The full "id · project"
- * rides the row's title so the project survives the denser layout (hover).
+ * One fleet-switcher lane: status dot · provider glyph · term-N · project ·
+ * task summary · pill · age. Clickable + keyboard-operable; the focused lane
+ * gets a full-fill raised surface (no edge bar). The × close-out rides alongside
+ * as a SIBLING of the role="button" row (never nested — nested interactives break
+ * assistive tech), revealed on hover/focus.
  */
-function renderTriageRow(term, { onFocus, onDismiss } = {}) {
+function renderTerminalRow(term, { onFocus, onDismiss } = {}) {
   const prov = providerOf(term.provider);
-  const needsYou =
-    term.status === "needs-you" || (term.statusLine && term.statusLine.kind === "needs-you");
+  const needsYou = isNeedsYou(term);
   const quiet = term.status === "stale" || term.status === "parked" || term.status === "done";
 
+  // Identity. When the project couldn't be resolved (codex lanes carry no cwd, so
+  // project falls back to a session-id fragment that equals the id), show the id
+  // alone rather than a misleading id-as-project suffix.
   const hasProject = term.project && term.project !== term.id;
   const fullLabel = hasProject ? `${term.id} · ${term.project}` : term.id;
-
-  // age tone — clamp to the known class set (muted/warning/danger) with a muted
-  // fallback; a "mid-turn" beat reads warning even when the backend collapsed it.
-  const FRESH_TONES = { muted: 1, warning: 1, danger: 1 };
-  let toneKey = FRESH_TONES[term.freshnessTone] ? term.freshnessTone : "muted";
-  if (term.freshnessLabel === "mid-turn") toneKey = "warning";
-
-  // status cell: needs-you owns the eye (danger); else the backend's short
-  // status text; else a plain status word.
-  const statusText = needsYou
-    ? "needs you"
-    : (term.statusLine && term.statusLine.text) || STATUS_WORD[term.status] || "";
-  const statusTone = needsYou ? "danger" : quiet ? "muted" : "success";
+  const taskText = (term.story && term.story.title) || "—";
+  const toneKey = freshToneKey(term);
 
   const row = el(
     "div",
     {
-      class: "hg-trow" + (term.focused ? " hg-trow--selected" : "") + (quiet ? " hg-trow--quiet" : ""),
-      title: fullLabel,
+      class:
+        "hg-trow" +
+        (term.focused ? " hg-trow--selected" : "") +
+        (quiet ? " hg-trow--quiet" : "") +
+        (needsYou ? " hg-trow--attn" : ""),
+      title: `${fullLabel} · ${taskText}`,
       attrs: {
         role: "button",
         tabindex: "0",
@@ -358,19 +259,15 @@ function renderTriageRow(term, { onFocus, onDismiss } = {}) {
         attrs: { "aria-hidden": "true" },
       })
     ),
-    el(
-      "span",
-      { class: "hg-trow__term" },
-      el("span", {
-        class: "hg-provider " + prov.cls,
-        title: prov.label,
-        attrs: { "aria-hidden": "true" },
-        text: prov.glyph,
-      }),
-      el("span", { class: "hg-trow__id", text: term.id })
-    ),
-    el("span", { class: "hg-trow__focus", text: (term.story && term.story.title) || "—" }),
-    el("span", { class: "hg-trow__status hg-trow__status--" + statusTone, text: statusText }),
+    el("span", {
+      class: "hg-provider " + prov.cls,
+      title: prov.label,
+      attrs: { "aria-hidden": "true" },
+      text: prov.glyph,
+    }),
+    el("span", { class: "hg-trow__name", text: fullLabel }),
+    el("span", { class: "hg-trow__task", text: taskText }),
+    lanePill(term, needsYou, quiet),
     el("span", { class: "hg-trow__age hg-card__fresh--" + toneKey, text: term.freshnessLabel || "" })
   );
 
@@ -383,10 +280,9 @@ function renderTriageRow(term, { onFocus, onDismiss } = {}) {
     }
   });
 
-  // Close-out (×) — a SIBLING of the row, never nested inside the role="button"
-  // (nested interactives break assistive tech). It stays hidden until the lane is
-  // hovered or focus-enters, and reads danger on hover (a destructive low-emphasis
-  // ghost, per Aegis). Dismissing hides the lane until it does new work.
+  // Close-out (×) — a SIBLING of the row, never nested inside the role="button".
+  // Hidden until hover/focus; danger on hover. Dismissing hides the lane until it
+  // does new work.
   const closeBtn = el("button", {
     class: "hg-trow__close",
     attrs: {
@@ -401,26 +297,38 @@ function renderTriageRow(term, { onFocus, onDismiss } = {}) {
     if (onDismiss) onDismiss(term.id);
   });
 
-  return el(
-    "div",
-    { class: "hg-trow-wrap", attrs: { role: "listitem" } },
-    row,
-    closeBtn
-  );
+  return el("div", { class: "hg-trow-wrap", attrs: { role: "listitem" } }, row, closeBtn);
 }
 
 /**
- * Draw (or redraw) the triage as a process table: a column-hint header + a
- * height-capped, scrollable body of one-line lane rows. Lanes that NEED YOU
- * float to the top (then a divider), so triage is "the stuck ones are already
- * on top," not "read all of them." The 120px cap (CSS) keeps a high terminal
- * count from ever swallowing the trail below — at scale it scrolls instead.
+ * Draw (or redraw) the fleet switcher: a "terminals · N need you · M running" +
+ * clock header over a height-capped, scrollable, needs-you-first list of lanes.
+ * The cap (CSS) keeps a high lane count from ever swallowing the transcript below.
+ * opts.time is the board clock (HH:MM) the controller derives from generatedAt.
  */
 export function renderTriage(mountEl, terminals, opts = {}) {
   clear(mountEl);
   const list = Array.isArray(terminals) ? terminals : [];
+
+  const needs = list.filter(isNeedsYou).length;
+  const running = list.filter((t) => t.status === "active" && !isNeedsYou(t)).length;
+
+  const head = el(
+    "div",
+    { class: "hg-terms__head" },
+    el("span", { class: "hg-terms__label", text: "terminals" })
+  );
+  if (needs) {
+    head.append(el("span", { class: "hg-terms__stat hg-terms__stat--attn", text: `· ${needs} need you` }));
+  }
+  if (running) {
+    head.append(el("span", { class: "hg-terms__stat hg-terms__stat--run", text: `· ${running} running` }));
+  }
+  if (opts.time) head.append(el("span", { class: "hg-terms__time", text: opts.time }));
+  mountEl.append(head);
+
   if (list.length === 0) {
-    // cold / no lanes — a calm placeholder rather than an empty table.
+    // cold / no lanes — a calm placeholder rather than an empty list.
     mountEl.append(
       el(
         "ae-empty-state",
@@ -434,49 +342,28 @@ export function renderTriage(mountEl, terminals, opts = {}) {
   }
 
   // needs-you-first (stable within each group — preserves the backend's order).
-  const needs = [];
+  const needsRows = [];
   const rest = [];
-  for (const t of list) {
-    (t.status === "needs-you" || (t.statusLine && t.statusLine.kind === "needs-you") ? needs : rest).push(t);
-  }
+  for (const t of list) (isNeedsYou(t) ? needsRows : rest).push(t);
 
-  const table = el("div", { class: "hg-triage-table" });
-  table.append(
-    el(
-      "div",
-      { class: "hg-triage__head", attrs: { "aria-hidden": "true" } },
-      el("span", { class: "hg-trow__dot" }),
-      el("span", { class: "hg-trow__term", text: "term" }),
-      el("span", { class: "hg-trow__focus", text: "focus" }),
-      el("span", { class: "hg-trow__status", text: "status" }),
-      el("span", { class: "hg-trow__age", text: "age" }),
-      // spacer so the header columns line up with rows, which carry a trailing × .
-      el("span", { class: "hg-trow__close-spacer", attrs: { "aria-hidden": "true" } })
-    )
-  );
-
-  // list semantics: a list of clickable lanes; each row is role="button", wrapped
-  // in a role="listitem" so AT gets the "N items" count without double-roling.
   const body = el("div", {
-    class: "hg-triage__scroll hg-scroll",
+    class: "hg-terms__scroll hg-scroll",
     attrs: { role: "list", "aria-label": `${list.length} terminal${list.length === 1 ? "" : "s"}` },
   });
-  const add = (t) => body.append(renderTriageRow(t, opts));
-  needs.forEach(add);
-  if (needs.length && rest.length) {
-    body.append(el("div", { class: "hg-triage__divider", attrs: { "aria-hidden": "true" } }));
+  const add = (t) => body.append(renderTerminalRow(t, opts));
+  needsRows.forEach(add);
+  if (needsRows.length && rest.length) {
+    body.append(el("div", { class: "hg-terms__divider", attrs: { "aria-hidden": "true" } }));
   }
   rest.forEach(add);
-
-  table.append(body);
-  mountEl.append(table);
+  mountEl.append(body);
 }
 
 // ==========================================================================
-// FOCUS — the hero column (epic band + story rail + task trail)
+// ORIENTATION HEADER — the pinned "where am I" block (selected terminal)
 // ==========================================================================
 
-/** parked-epic crumb (UX §4.1) — typed epic seam, one muted line. */
+/** parked-epic crumb (UX §4.1) — typed epic seam, one muted line above the header. */
 function renderSeam(seam) {
   if (!seam) return null;
   const outcomeCls =
@@ -515,317 +402,289 @@ function renderSeam(seam) {
   return row;
 }
 
-/** the bespoke segmented roadmap bar (done / active / not-started / blocked). */
-function renderRoadmapBar(segments) {
-  const bar = el("div", { class: "hg-roadmap", attrs: { "aria-hidden": "true" } });
-  const segs = Array.isArray(segments) ? segments : [];
-  for (const s of segs) {
-    bar.append(el("span", { class: "hg-roadmap__seg hg-roadmap__seg--" + (s.state || "not-started") }));
+/**
+ * The segmented roadmap bar (one segment per linked story, in link order). Built
+ * from focus.stories so each segment carries the story's title + state as a hover
+ * tooltip — this preserves the per-story detail the flat transcript layout drops
+ * from the body (the old design listed every story; here the bar IS the roadmap).
+ */
+function renderOrientBar(stories) {
+  const bar = el("div", { class: "hg-orient__bar", attrs: { role: "img", "aria-label": "story roadmap" } });
+  for (const s of stories) {
+    const state = s.state || "not-started";
+    bar.append(
+      el("span", {
+        class: "hg-roadmap__seg hg-roadmap__seg--" + state,
+        title: (s.title || "untitled story") + " — " + state,
+      })
+    );
   }
   return bar;
 }
 
 /**
- * epic band (tier 1) — ae-page-header for eyebrow + title; the progress
- * read-out rides the header's default (trailing) slot; the roadmap bar sits
- * beneath. Boxless: the page-header rule is suppressed in CSS.
+ * The pinned orientation header for the focused lane: "working toward" epic +
+ * "N / M stories" · the big active-story title · a live "now —" line · the
+ * segmented roadmap bar. Degrades cleanly when the lane is standalone (no epic):
+ * a faint "standalone · no epic" eyebrow and no progress count/bar.
  */
-function renderEpicBand(epic, integrity) {
-  const header = el("ae-page-header", {
-    attrs: {
-      level: "1",
-      eyebrow: `EPIC · ${epic.project || epic.eyebrow || ""}`.trim(),
-      heading: epic.title || "",
-    },
-  });
+function renderOrient(focus) {
+  const a = focus.activeStory || {};
+  const wrap = el("div", { class: "hg-orient" });
 
-  // eyebrow mark icon (the ▚ glyph) in the dedicated icon slot
-  const iconSpan = el("span", {
-    attrs: { slot: "icon", "aria-hidden": "true" },
-    class: "hg-epic__eyebrow-mark",
-  });
-  iconSpan.textContent = "▚";
-  header.append(iconSpan);
+  // parked-epic crumb (typed seam), restored above the header.
+  const seam = renderSeam(focus.parkedEpicSeam);
+  if (seam) wrap.append(seam);
 
-  // progress read-out — "N / M stories", N tinted success. Default slot →
-  // sits in the page-header's right status/actions column.
-  const progress = el("div", { class: "hg-epic__progress" });
-  progress.append(
-    el("span", { class: "hg-epic__progress-count", text: String(epic.done) }),
-    ` / ${epic.total} stories`
-  );
-  // integrity hint: reconstructed epics read faintly; confirmed ones are plain.
-  if (integrity === "reconstructed") {
-    progress.append(
+  if (focus.epic) {
+    wrap.append(el("div", { class: "hg-orient__label", text: "working toward" }));
+    const epicLine = el(
+      "div",
+      { class: "hg-orient__epic" },
+      el("span", { class: "hg-orient__epic-mark", attrs: { "aria-hidden": "true" }, text: "▚" }),
       el("span", {
-        title: "epic name reconstructed — not yet human-confirmed",
-        class: "hg-integrity hg-integrity--reconstructed",
-        style: "margin-left:var(--ae-space-2)",
-        text: "◇",
-      })
+        class: "hg-orient__epic-title",
+        text: focus.epic.title || "—",
+        title: focus.epic.title || "",
+      }),
+      el(
+        "span",
+        { class: "hg-orient__epic-count" },
+        el("span", { class: "hg-orient__epic-done", text: String(focus.epic.done) }),
+        ` / ${focus.epic.total} stories`
+      )
+    );
+    wrap.append(epicLine);
+  } else {
+    wrap.append(
+      el("div", { class: "hg-orient__label hg-orient__label--standalone", text: "standalone · no epic" })
     );
   }
-  header.append(progress);
 
-  const band = el("div", { class: "hg-epic" }, header, renderRoadmapBar(epic.roadmapSegments));
-  return band;
-}
+  // the big active-story title (the hero line).
+  wrap.append(el("div", { class: "hg-orient__story", text: a.title || "—" }));
 
-/** a done / not-started / blocked story row on the continuous rail. */
-function renderStoryRow(story) {
-  const state = story.state || "not-started";
-  const markerCls =
-    state === "done"
-      ? "hg-story__marker--done"
-      : state === "blocked"
-        ? "hg-story__marker--blocked"
-        : "hg-story__marker--not-started";
-
-  const markerGlyph = state === "done" ? "✓" : state === "blocked" ? "!" : "";
-
-  const crumb =
-    state === "done"
-      ? `${story.decisionCount || 0} decision${story.decisionCount === 1 ? "" : "s"}`
-      : state === "blocked"
-        ? "blocked"
-        : "not started";
-
-  return el(
+  // the live "now —" line: a pulsing green dot + the live edge when working; a
+  // calm muted dot + the last thing done when idle. nowLine is backend-derived.
+  const now = a.nowLine || { text: "", working: !!focus.workingNow };
+  const nowRow = el(
     "div",
-    { class: `hg-story hg-story--row hg-story--${state}` },
-    el("span", { class: "hg-story__marker " + markerCls, attrs: { "aria-hidden": "true" } }, markerGlyph),
-    el("span", { class: "hg-story__title", text: story.title || "—" }),
-    el("span", { class: "hg-story__crumb", text: crumb })
+    { class: "hg-orient__now" + (now.working ? " hg-orient__now--working" : "") },
+    el("span", { class: "hg-orient__now-dot", attrs: { "aria-hidden": "true" } }),
+    el(
+      "span",
+      { class: "hg-orient__now-text" },
+      el("span", { class: "hg-orient__now-label", text: (now.working ? "now" : "idle") + " — " }),
+      now.text || (now.working ? "working…" : "paused")
+    )
   );
-}
+  wrap.append(nowRow);
 
-/** the active story bloomed open inline + its nested task trail. */
-function renderActiveStory(activeStory, state) {
-  const blocked = state === "blocked";
-  const head = el(
-    "div",
-    { class: "hg-story__head" },
-    el("span", {
-      class: "hg-story__pulse" + (blocked ? "" : " hg-pulse"),
-      attrs: { "aria-hidden": "true" },
-    }),
-    el("div", { class: "hg-story__active-title", text: activeStory.title || "—" }),
-    el("span", {
-      class: "hg-story__index" + (blocked ? " hg-story__index--blocked" : ""),
-      text: activeStory.indexLabel || "active",
-    })
-  );
+  // segmented roadmap bar — only when an epic owns this story (the bar represents
+  // the epic's stories). Standalone lanes show no bar.
+  if (focus.epic && Array.isArray(focus.stories) && focus.stories.length) {
+    wrap.append(renderOrientBar(focus.stories));
+  }
 
-  const wrap = el("div", { class: "hg-story hg-story--active" }, head);
-  wrap.append(renderTrail(activeStory.tasks));
   return wrap;
 }
 
-/** the task trail (tier 3). tasks oldest→newest; live tip + pending at end. */
-function renderTrail(tasks) {
-  const list = Array.isArray(tasks) ? tasks : [];
-  if (list.length === 0) {
-    // live-but-empty — calm, not broken (UX §10.6).
-    return el("div", { class: "hg-trail--empty" }, "No decisions yet — the agent just picked this up.");
-  }
-  const trail = el("div", { class: "hg-trail" });
-  for (const t of list) trail.append(renderTask(t));
-  return trail;
-}
+// ==========================================================================
+// TRANSCRIPT TRAIL — the chronological feed of typed entries
+// ==========================================================================
 
-function renderTask(task) {
-  let node;
-  switch (task.kind) {
-    case "decision":
-      node = taskRow(task, "decision");
-      break;
-    case "step":
-      node = taskRow(task, "step");
-      break;
-    case "milestone":
-      node = taskRow(task, "milestone");
-      break;
-    case "supersedes":
-      node = renderReversal(task);
-      break;
-    case "live":
-      node = renderLive(task);
-      break;
-    case "activity":
-      // the in-flight live view — always visible, never folded into an accordion.
-      return renderActivity(task);
-    case "pending":
-      return renderPending(task);
-    default:
-      node = taskRow(task, "step");
-  }
-  // a COMPLETED task tucks its turn's tool calls into a click-to-expand accordion:
-  // the historical record stays one click away without cluttering the decision trail.
-  const acc = toolAccordion(task);
-  if (acc) (node.querySelector(".hg-task__body") || node).append(acc);
-  return node;
-}
-
-// an in-flight tool-activity node — the live work stream the decision trail
-// otherwise hides. Faint + compact so it never competes with a decision; the
-// most recent (task.now) is the live edge and gets a pulsing "● now". tool +
-// target (file basename / short command) come pre-cleaned from the backend.
-function renderActivity(task) {
-  const now = !!task.now;
-  const left = el(
-    "div",
-    { class: "hg-task__gutter-left" },
-    el(
-      "span",
-      {
-        class:
-          "hg-node hg-node--activity" + (now ? " hg-node--activity-now hg-pulse" : ""),
-        attrs: { "aria-hidden": "true" },
-      },
-      toolGlyph(task.tool)
-    )
-  );
-  const line = el("div", { class: "hg-activity__line" });
-  if (now) line.append(el("span", { class: "hg-activity__now" }, "● now"));
-  line.append(el("span", { class: "hg-activity__tool", text: task.tool || "tool" }));
-  if (task.summary) {
-    line.append(el("span", { class: "hg-activity__target", text: task.summary }));
-  }
-  const time = el(
-    "div",
-    { class: "hg-task__meta" },
-    el("span", { class: "hg-task__time", text: clock(task.at) })
-  );
-  return el(
-    "div",
-    { class: "hg-task hg-task--activity" + (now ? " hg-task--activity-now" : "") },
-    left,
-    el("div", { class: "hg-task__body" }, line),
-    time
-  );
-}
-
-// the quiet metadata gutter: integrity glyph + timestamp.
-// The glyph carries its meaning ONCE for AT via role="img" + aria-label. We do
-// NOT also anchor an ae-tooltip to it: ae-tooltip wires aria-describedby onto
-// the anchor, which would make a screen reader announce the integrity word
-// twice (name + description). Sighted hover gets a native `title` tooltip
-// instead — visible, quiet, no double-announce (m4/H4). aria-hidden="false" is
-// dropped (it's the default and some AT mishandle an explicit false).
-function metaGutter(task) {
-  const intg = integrityOf(task.integrity);
-  const glyph = el("span", {
-    class: "hg-integrity " + intg.cls,
+// The quiet integrity glyph in an entry's gutter. Surfaced only when it carries
+// signal (reconstructed/volunteered/human-confirmed); a routine "passive" record
+// shows none, keeping the trail calm. The glyph names its meaning ONCE for AT via
+// role="img" + aria-label; sighted hover gets a native title (no double-announce).
+function entryIntegrity(integrity) {
+  if (!integrity || integrity === "passive") return null;
+  const intg = integrityOf(integrity);
+  return el("span", {
+    class: "hg-entry__intg hg-integrity " + intg.cls,
     title: "integrity: " + intg.label,
     attrs: { role: "img", "aria-label": "integrity: " + intg.label },
     text: intg.glyph,
   });
-  return el(
-    "div",
-    { class: "hg-task__meta" },
-    glyph,
-    el("span", { class: "hg-task__time", text: clock(task.at) })
-  );
 }
 
-// generic decision/step/milestone row
-function taskRow(task, kind) {
+// the left gutter: the timestamp on top, then a single marks row carrying the type
+// glyph + the quiet integrity glyph side-by-side (NOT stacked). `warn` tints the
+// time amber (a reversal's time reads with the stitch).
+function entryGutter(task, glyph, glyphCls, { warn = false } = {}) {
   return el(
     "div",
-    { class: `hg-task hg-task--${kind}` },
+    { class: "hg-entry__gutter" },
+    el("span", { class: "hg-entry__time" + (warn ? " hg-entry__time--warn" : ""), text: clock(task.at) }),
     el(
       "div",
-      { class: "hg-task__gutter-left" },
-      el("span", { class: `hg-node hg-node--${kind}`, attrs: { "aria-hidden": "true" } })
-    ),
-    el("div", { class: "hg-task__body" }, el("div", { class: "hg-task__summary", text: task.summary || "" })),
-    metaGutter(task)
+      { class: "hg-entry__marks" },
+      el("span", {
+        class: "hg-entry__glyph hg-entry__glyph--" + glyphCls,
+        title: glyphCls,
+        attrs: { "aria-hidden": "true" },
+        text: glyph,
+      }),
+      entryIntegrity(task.integrity)
+    )
   );
 }
 
-// the reversal "stitch" — struck superseded line, supersedes label +
-// reversibility, then the surviving successor (= task.summary). The one node
-// that keeps full detail.
-function renderReversal(task) {
-  const rev = task.reversal || {};
-  const body = el("div", { class: "hg-task__body" });
-
-  if (rev.supersededSummary) {
-    body.append(el("div", { class: "hg-reversal__superseded", text: rev.supersededSummary }));
-  }
-  const rel = el("div", { class: "hg-reversal__rel" }, el("span", { class: "hg-reversal__label" }, "supersedes"));
-  if (rev.reversibility) {
-    rel.append(el("span", { class: "hg-reversal__reversibility", text: "reversible: " + rev.reversibility }));
-  }
-  body.append(rel);
-  body.append(el("div", { class: "hg-reversal__successor", text: task.summary || "" }));
-
-  return el(
-    "div",
-    { class: "hg-task hg-task--reversal" },
-    el(
-      "div",
-      { class: "hg-task__gutter-left" },
-      el("span", { class: "hg-node hg-node--reversal", attrs: { "aria-hidden": "true" } }, "↺")
-    ),
-    body,
-    metaGutter(task)
-  );
-}
-
-// the live tip — pulsing pin + green wash + "● now · <fresh>".
-function renderLive(task) {
+// the body: a bold title + an optional reasoning line (the decision's rationale,
+// "" for steps/pending) + the completed-turn tool accordion when present.
+function entryBody(task, { titleCls = "" } = {}) {
   const body = el(
     "div",
-    { class: "hg-task__body" },
-    el("div", { class: "hg-task__summary", text: task.summary || "" }),
-    el("div", { class: "hg-task__nowtag" }, "● now" + (clock(task.at) ? " · " + clock(task.at) : ""))
+    { class: "hg-entry__body" },
+    el("div", { class: "hg-entry__title" + (titleCls ? " " + titleCls : ""), text: task.summary || "" })
   );
+  if (task.detail) {
+    body.append(el("div", { class: "hg-entry__detail", text: task.detail }));
+  }
+  const acc = toolAccordion(task);
+  if (acc) body.append(acc);
+  return body;
+}
+
+// a generic typed entry (decision ◆ / step · / milestone ○).
+function entryTyped(task, cls, glyph) {
   return el(
     "div",
-    { class: "hg-task hg-task--live" },
-    el(
-      "div",
-      { class: "hg-task__gutter-left" },
-      el("span", { class: "hg-node hg-node--live hg-pulse", attrs: { "aria-hidden": "true" } })
-    ),
+    { class: "hg-entry hg-entry--" + cls },
+    entryGutter(task, glyph, cls),
+    entryBody(task)
+  );
+}
+
+// the reversal "stitch": an amber ↺, a "reversed · overturns HH:MM · reversible:X"
+// tag, then the surviving successor (= task.summary) + its rationale. The struck
+// superseded line is preserved as the title's hover tooltip.
+function entryReversal(task) {
+  const rev = task.reversal || {};
+  const body = el("div", { class: "hg-entry__body" });
+
+  const tag = el(
+    "div",
+    { class: "hg-entry__revtag" },
+    el("span", { class: "hg-entry__revtag-label", text: "reversed" })
+  );
+  const metaParts = [];
+  const overturns = clock(rev.supersededAt);
+  if (overturns) metaParts.push("overturns " + overturns);
+  if (rev.reversibility) metaParts.push("reversible: " + rev.reversibility);
+  if (metaParts.length) {
+    tag.append(el("span", { class: "hg-entry__revtag-meta", text: metaParts.join(" · ") }));
+  }
+  body.append(tag);
+
+  body.append(
+    el("div", {
+      class: "hg-entry__title hg-entry__title--rev",
+      text: task.summary || "",
+      title: rev.supersededSummary ? "overturns: " + rev.supersededSummary : null,
+    })
+  );
+  if (task.detail) body.append(el("div", { class: "hg-entry__detail", text: task.detail }));
+  const acc = toolAccordion(task);
+  if (acc) body.append(acc);
+
+  return el(
+    "div",
+    { class: "hg-entry hg-entry--reversal" },
+    entryGutter(task, "↺", "reversal", { warn: true }),
     body
   );
 }
 
-// pending task — dashed ghost ring, "next" marker on the first one is handled
-// by the caller order; here we render a simple ghosted row.
-function renderPending(task) {
+// the highlighted NOW card — the live edge. A 'live' bloom carries the checkpoint
+// summary (+ its rationale); an 'activity' tip carries "tool · target". Pulsing
+// green NOW label + dot.
+function entryNow(task) {
+  let title;
+  if (task.kind === "activity") {
+    const tool = task.tool || "tool";
+    title = task.summary ? `${tool} · ${task.summary}` : tool;
+  } else {
+    title = task.summary || "";
+  }
+  const gutter = el(
+    "div",
+    { class: "hg-entry__gutter" },
+    el("span", { class: "hg-entry__nowlabel", text: "NOW" }),
+    el("span", { class: "hg-entry__nowdot hg-pulse", attrs: { "aria-hidden": "true" } })
+  );
+  const body = el(
+    "div",
+    { class: "hg-entry__body" },
+    el("div", { class: "hg-entry__title hg-entry__title--now", text: title })
+  );
+  if (task.detail) body.append(el("div", { class: "hg-entry__detail", text: task.detail }));
+  return el("div", { class: "hg-entry hg-entry--now" }, gutter, body);
+}
+
+// an earlier in-flight tool node (not the live edge) — faint telemetry threading
+// the trail: a small tool glyph + a muted "tool · target" line.
+function entryActivity(task) {
+  const tool = task.tool || "tool";
+  const gutter = el(
+    "div",
+    { class: "hg-entry__gutter" },
+    el("span", { class: "hg-entry__time", text: clock(task.at) }),
+    el("span", {
+      class: "hg-entry__glyph hg-entry__glyph--activity",
+      attrs: { "aria-hidden": "true" },
+      text: toolGlyph(tool),
+    })
+  );
+  const line = el(
+    "div",
+    { class: "hg-entry__activity" },
+    el("span", { class: "hg-entry__activity-tool", text: tool })
+  );
+  if (task.summary) line.append(el("span", { class: "hg-entry__activity-target", text: task.summary }));
+  return el("div", { class: "hg-entry hg-entry--activity" }, gutter, el("div", { class: "hg-entry__body" }, line));
+}
+
+// the ghosted next item — the latest next_action, dashed ○ + "next" label.
+function entryPending(task) {
+  const gutter = el(
+    "div",
+    { class: "hg-entry__gutter" },
+    el("span", { class: "hg-entry__nextlabel", text: "next" }),
+    el("span", { class: "hg-entry__glyph hg-entry__glyph--pending", attrs: { "aria-hidden": "true" }, text: "○" })
+  );
   return el(
     "div",
-    { class: "hg-task hg-task--pending" },
-    el(
-      "div",
-      { class: "hg-task__gutter-left" },
-      el("span", { class: "hg-node hg-node--pending", attrs: { "aria-hidden": "true" } })
-    ),
-    el("div", { class: "hg-task__body" }, el("div", { class: "hg-task__summary", text: task.summary || "" })),
-    el("span", { class: "hg-task__next" }, "next")
+    { class: "hg-entry hg-entry--next" },
+    gutter,
+    entryBody(task, { titleCls: "hg-entry__title--next" })
   );
+}
+
+// route a wire task to its entry builder.
+function renderEntry(task) {
+  switch (task.kind) {
+    case "supersedes":
+      return entryReversal(task);
+    case "live":
+      return entryNow(task);
+    case "activity":
+      return task.now ? entryNow(task) : entryActivity(task);
+    case "pending":
+      return entryPending(task);
+    case "decision":
+      return entryTyped(task, "decision", "◆");
+    case "milestone":
+      return entryTyped(task, "milestone", "○");
+    case "step":
+      return entryTyped(task, "step", "·");
+    default:
+      return entryTyped(task, "step", "·");
+  }
 }
 
 // ---- focus assembly ------------------------------------------------------
 
-/**
- * Render the focus column. Splits into a pinned head (seam + epic band) and a
- * scrolling rail. Per UX §10.2 BOTH the epic band (tier 1) and the active-story
- * header (tier 2) must stay in view as the trail grows. We pin the epic band in
- * .hg-focus__pinned, and the active-story header pins via position:sticky;top:0
- * INSIDE the scroll area (see .hg-story__head in markers.css) — so the trail
- * scrolls under the current story title while the title itself never leaves
- * view, and the "one continuous rail" geometry stays intact (the header is
- * still threaded in rail order, not lifted out of it).
- *
- * mountEl is rebuilt each render:
- *   .hg-focus__pinned  — epic band (+ seam)
- *   .hg-focus__scroll  — ae-scroll-area hosting the rail (done stories →
- *                        sticky active-story head + trail → ghost stories)
- */
 // The scrollable element inside an <ae-scroll-area> is its part="viewport"
 // (in shadow DOM). Returns null if the shadow root isn't ready yet (skip).
 function scrollViewportOf(scrollEl) {
@@ -838,7 +697,7 @@ function scrollViewportOf(scrollEl) {
 let cancelScroll = null;
 
 /**
- * Drive the focus trail's scroll position and HOLD it across the async layout
+ * Drive the transcript's scroll position and HOLD it across the async layout
  * window. `intent` is either "bottom" (pin to the newest tip and keep re-pinning
  * as geometry settles) or a number (restore that scrollTop — the reader's prior
  * position when they'd scrolled up).
@@ -847,9 +706,8 @@ let cancelScroll = null;
  * renders the shadow viewport a microtask AFTER we append it, so on a fresh
  * render it isn't queryable on the first call — we poll a few frames for it,
  * then install a ResizeObserver that re-applies the intent on every geometry
- * change (the rail grows as nodes + the sticky active-story head settle) until a
- * bounded window closes or the reader grabs the scroll. This is what stops the
- * trail landing a few nodes short of the live tip.
+ * change (the trail grows as nodes settle) until a bounded window closes or the
+ * reader grabs the scroll. This is what stops the trail landing short of the tip.
  */
 function applyScroll(scroll, rail, intent) {
   if (cancelScroll) cancelScroll();
@@ -898,11 +756,11 @@ function applyScroll(scroll, rail, intent) {
         if (!done) set();
       });
       ro.observe(vp); // viewport clientHeight (pinned band upgrading)
-      ro.observe(rail); // content/scrollHeight (late node + sticky-head layout)
+      ro.observe(rail); // content/scrollHeight (late node layout)
       vp.addEventListener("wheel", onUser, { passive: true });
       vp.addEventListener("touchmove", onUser, { passive: true });
       vp.addEventListener("pointerdown", onUser);
-      // bounded settle window — long enough for the rail to finish laying out,
+      // bounded settle window — long enough for the trail to finish laying out,
       // short enough to release control quickly.
       timer = setTimeout(stop, 1400);
       set();
@@ -923,9 +781,24 @@ function applyScroll(scroll, rail, intent) {
   arm();
 }
 
+/**
+ * Render the focus column: a pinned ORIENTATION HEADER + a scrolling TRANSCRIPT
+ * TRAIL. The header (epic + story + now line + roadmap bar) never leaves view; the
+ * transcript of typed entries scrolls beneath it.
+ *
+ * mountEl is rebuilt each render:
+ *   .hg-focus__pinned  — orientation header
+ *   .hg-focus__scroll  — ae-scroll-area hosting the transcript
+ *
+ * opts: { changed, fresh } drive the auto-scroll policy:
+ *   • fresh (terminal switch) / first render → land at the newest tip to orient
+ *   • changed + reader parked at bottom        → follow to the newest tip
+ *   • changed + reader scrolled up             → keep their position
+ *   • unchanged (idle)                          → caller skips the rebuild entirely
+ */
 export function renderFocus(mountEl, focus, opts = {}) {
-  // Capture the prior scroll position BEFORE rebuilding so the auto-scroll
-  // policy can honor it (see app.js → paint). opts: { changed, fresh }.
+  // Capture the prior scroll position BEFORE rebuilding so the auto-scroll policy
+  // can honor it.
   const prevVp = scrollViewportOf(mountEl.querySelector(".hg-focus__scroll"));
   let wasAtBottom = true; // first render / no prior scroller → land at the tip
   let prevTop = 0;
@@ -933,9 +806,8 @@ export function renderFocus(mountEl, focus, opts = {}) {
     prevTop = prevVp.scrollTop;
     wasAtBottom = prevVp.scrollHeight - prevVp.scrollTop - prevVp.clientHeight <= 10;
   }
-  // A prior settle loop targets the about-to-be-detached scroll element — stop
-  // it before we rebuild so it can't pin (or restore) the new pane out from
-  // under this render.
+  // A prior settle loop targets the about-to-be-detached scroll element — stop it
+  // before we rebuild so it can't pin (or restore) the new pane out from under us.
   if (cancelScroll) cancelScroll();
 
   clear(mountEl);
@@ -958,45 +830,22 @@ export function renderFocus(mountEl, focus, opts = {}) {
     return;
   }
 
+  // pinned orientation header.
   const pinned = el("div", { class: "hg-focus__pinned" });
-
-  // parked-epic crumb (typed seam), restored above the band.
-  const seam = renderSeam(focus.parkedEpicSeam);
-  if (seam) pinned.append(seam);
-
-  // epic band (tier 1) — present only when the work rolls up to an epic.
-  if (focus.epic) {
-    pinned.append(renderEpicBand(focus.epic, focus.epic.integrity));
-  } else {
-    // NO-EPIC degrade (UX §10.6): open at the story tier. A faint eyebrow
-    // states the absence rather than fabricating an initiative.
-    pinned.append(
-      el(
-        "div",
-        { class: "hg-epic" },
-        el("div", { class: "hg-seam", style: "margin-bottom:0" },
-          el("span", { class: "hg-seam__label" }, "standalone story · no epic")
-        )
-      )
-    );
-  }
+  pinned.append(renderOrient(focus));
   mountEl.append(pinned);
 
-  // scrolling rail — ae-scroll-area for design-system scrollbars + edge fades.
+  // scrolling transcript — ae-scroll-area for design-system scrollbars + edge fades.
   const scroll = el("ae-scroll-area", {
     class: "hg-focus__scroll",
     attrs: { shadow: true, "max-height": "100%" },
   });
-  const railRegion = el("div", { class: "hg-rail-region" });
-  const rail = el("div", { class: "hg-rail" });
+  const region = el("div", { class: "hg-transcript-region" });
 
-  const stories = Array.isArray(focus.stories) ? focus.stories : [];
-  const active = focus.activeStory;
-  const activeId = active && active.id;
-
-  // EMPTY state — epic with no stories yet, or a story with no active chunk.
-  if (stories.length === 0 && !active) {
-    railRegion.append(
+  const tasks = focus.activeStory && Array.isArray(focus.activeStory.tasks) ? focus.activeStory.tasks : [];
+  if (tasks.length === 0) {
+    // live-but-empty — calm, not broken (UX §10.6).
+    region.append(
       el(
         "div",
         { class: "hg-empty" },
@@ -1004,45 +853,25 @@ export function renderFocus(mountEl, focus, opts = {}) {
           "ae-empty-state",
           { attrs: { compact: true } },
           el("span", { attrs: { slot: "icon" }, class: "hg-empty__glyph" }, "○"),
-          el("span", { attrs: { slot: "title" } }, "Roadmap not scoped yet"),
-          "No stories enumerated — the scoping conversation hasn't happened."
+          el("span", { attrs: { slot: "title" } }, "No decisions yet"),
+          "The agent just picked this up — its first decision will land here."
         )
       )
     );
-    scroll.append(railRegion);
+    scroll.append(region);
     mountEl.append(scroll);
     return;
   }
 
-  // Thread the rail in roadmap order. The active story blooms open inline
-  // exactly where it sits in the order (matched by id when possible).
-  let activePlaced = false;
-  for (const story of stories) {
-    if (active && story.id === activeId) {
-      rail.append(renderActiveStory(active, story.state || "active"));
-      activePlaced = true;
-    } else {
-      rail.append(renderStoryRow(story));
-    }
-  }
-  // If the active story isn't represented in stories[] (e.g. single-story
-  // no-epic shape), render it on its own.
-  if (active && !activePlaced) {
-    rail.append(renderActiveStory(active, "active"));
-  }
-
-  railRegion.append(rail);
-  scroll.append(railRegion);
+  const transcript = el("div", { class: "hg-transcript" });
+  for (const t of tasks) transcript.append(renderEntry(t));
+  region.append(transcript);
+  scroll.append(region);
   mountEl.append(scroll);
 
-  // Auto-scroll policy (UX §4 "auto-scroll to newest", bounded by user intent):
-  //   • terminal switch / first render (fresh)       → land at the bottom (the tip)
-  //   • new content AND user parked within 10px       → follow to the bottom
-  //   • idle (no change) OR user scrolled >10px up     → keep their position
+  // Auto-scroll policy (UX §4 "auto-scroll to newest", bounded by user intent).
   const follow = opts.fresh || (opts.changed && wasAtBottom);
-  // follow → pin to the newest tip; otherwise hold the reader's prior position.
-  // Both are held across the async layout window by applyScroll's settle loop.
-  applyScroll(scroll, rail, follow ? "bottom" : prevTop);
+  applyScroll(scroll, transcript, follow ? "bottom" : prevTop);
 }
 
 // ==========================================================================
@@ -1050,7 +879,7 @@ export function renderFocus(mountEl, focus, opts = {}) {
 // ==========================================================================
 export function titlebarMeta(state) {
   const terms = Array.isArray(state.terminals) ? state.terminals : [];
-  const needs = terms.filter((t) => t.status === "needs-you").length;
+  const needs = terms.filter((t) => isNeedsYou(t)).length;
   let time = "";
   if (state.generatedAt) {
     const d = new Date(state.generatedAt);

@@ -1,11 +1,11 @@
 /* ==========================================================================
    Histograph — app.css
-   Layout glue for the histograph shell: portrait frame, sticky titlebar,
-   triage mosaic grid, focus column with pinned epic band + active-story
-   header, footer legend. Painted ENTIRELY from --ae-* tokens so a theme
-   swap recolors the whole surface for free. Zero hardcoded hex.
-   Bespoke marker recipes (rail, node shapes, pulse, reversal stitch) live
-   in markers.css.
+   Layout glue for the "Transcript + terminals" shell: portrait frame, sticky
+   titlebar, the fleet-switcher (terminals) section, the focus column with a
+   pinned orientation header + scrolling transcript, footer legend. Painted
+   ENTIRELY from --ae-* tokens so a theme swap recolors the whole surface for
+   free. Zero hardcoded hex. Bespoke marker recipes (status dots, segmented bar,
+   entry glyphs, NOW card colors, reversal stitch) live in markers.css.
    ========================================================================== */
 
 *,
@@ -87,13 +87,15 @@ body {
 }
 
 /* --------------------------------------------------------------------------
-   Titlebar — bespoke (per the plan). Sticky chrome at the top of the lane.
+   Titlebar — bespoke. Just the wordmark + settings gear; the pin/min/close +
+   drag controls are injected by the Tauri window as a fixed overlay, and the
+   needs/running counts + clock now ride the fleet-switcher header below.
    -------------------------------------------------------------------------- */
 .hg-titlebar {
   flex: 0 0 auto;
-  /* min- not fixed height: at 125/150% zoom the rem-scaled brand/meta must be
-     able to grow the bar instead of clipping. The injected window-control overlay
-     measures the bar height on wire, so it tracks this automatically. */
+  /* min- not fixed height: at 125/150% zoom the rem-scaled brand must be able to
+     grow the bar instead of clipping. The injected window-control overlay measures
+     the bar height on wire, so it tracks this automatically. */
   min-height: 44px;
   display: flex;
   align-items: center;
@@ -121,38 +123,13 @@ body {
   font-weight: var(--ae-font-weight-bold);
 }
 
-.hg-titlebar__meta {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--ae-space-2);
-  font-family: var(--hg-mono);
-  font-size: var(--ae-font-size-xs);
-  color: var(--ae-color-fg-subtle);
-}
-
-.hg-titlebar__sep {
-  color: var(--ae-color-border-strong);
-}
-
-.hg-titlebar__needs {
-  color: var(--ae-color-danger);
-  font-weight: var(--ae-font-weight-semibold);
-}
-
-.hg-titlebar__time {
-  color: var(--ae-color-fg-muted);
-}
-
 /* Settings trigger in the titlebar (opens the theme picker modal) */
 .hg-settings-btn {
   font-size: var(--ae-font-size-md);
   line-height: 1;
 }
 
-/* Settings modal — theme picker (brand + scheme), both ae-select dropdowns.
-   A labelled select per axis, stacked. The dropdowns keep the picker compact
-   (no horizontal scroll) and their listboxes ride the browser top layer via
-   the Popover API, so they open ABOVE the modal. */
+/* Settings modal — theme picker (brand + scheme + zoom), each an ae-select. */
 .hg-settings {
   display: flex;
   flex-direction: column;
@@ -165,7 +142,6 @@ body {
   gap: var(--ae-space-2);
 }
 
-/* uppercase micro-eyebrow over each control, matching the section labels */
 .hg-settings__label {
   font-family: var(--hg-mono);
   font-size: var(--ae-font-size-xs);
@@ -174,84 +150,99 @@ body {
   color: var(--ae-color-fg-subtle);
 }
 
-/* fill the modal width; the select's own 12rem min-width is the floor */
 .hg-settings__control ae-select {
   width: 100%;
 }
 
 /* --------------------------------------------------------------------------
-   Triage region — the status mosaic.
+   Connection / fetch trouble — calm, not alarming. A thin inline strip under
+   the titlebar rather than a blocking error.
+   -------------------------------------------------------------------------- */
+.hg-conn {
+  flex: 0 0 auto;
+  display: none;
+  align-items: center;
+  gap: var(--ae-space-2);
+  padding: var(--ae-space-2) var(--ae-space-5);
+  font-family: var(--hg-mono);
+  font-size: var(--ae-font-size-xs);
+  color: var(--ae-color-warning-emphasis);
+  background: var(--ae-color-warning-subtle);
+  border-bottom: var(--ae-border-width-1) solid var(--ae-color-border-subtle);
+}
+.hg-conn[data-visible="true"] {
+  display: flex;
+}
+.hg-conn__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--ae-radius-full);
+  background: var(--ae-color-warning);
+}
+
+/* --------------------------------------------------------------------------
+   FLEET SWITCHER — the terminals section (#mosaic lives inside .hg-triage).
+   A "terminals · N need you · M running" + clock header over a needs-you-first,
+   height-capped scroll of one-line lanes. The cap keeps a high lane count from
+   ever swallowing the transcript below.
    -------------------------------------------------------------------------- */
 .hg-triage {
   flex: 0 0 auto;
-  padding: var(--ae-space-4) var(--ae-space-5) var(--ae-space-5);
+  padding: var(--ae-space-3) var(--ae-space-4) var(--ae-space-4);
   border-bottom: var(--ae-border-width-1) solid var(--ae-color-border-subtle);
   background: var(--ae-color-bg-subtle);
 }
 
-.hg-section-label {
-  font-family: var(--hg-mono);
-  font-size: var(--ae-font-size-xs);
-  letter-spacing: var(--hg-tracking-eyebrow);
-  text-transform: uppercase;
-  color: var(--ae-color-fg-subtle);
-  margin: 0 0 var(--ae-space-3);
-}
-
-/* --------------------------------------------------------------------------
-   Triage — the process table. A compact, needs-you-first list of lanes in a
-   height-capped scroll body, so it can never eat the window the way the old
-   2×2 ae-card mosaic did (it wrapped to ~290px). Columns are locked so the eye
-   scans straight down status + age. Token-driven: the dots, provider tints, and
-   freshness tones are the same --ae-* classes the cards used.
-   -------------------------------------------------------------------------- */
-.hg-triage-table {
-  display: flex;
-  flex-direction: column;
-}
-
-/* column-hint header — a presentational scannability cue (aria-hidden). */
-.hg-triage__head {
+.hg-terms__head {
   display: flex;
   align-items: center;
   gap: var(--ae-space-2);
-  padding: 0 var(--ae-space-2) var(--ae-space-1);
+  padding: var(--ae-space-1) var(--ae-space-2) var(--ae-space-2);
   font-family: var(--hg-mono);
-  font-size: 0.5rem;
+  font-size: var(--ae-font-size-xs);
+}
+.hg-terms__label {
   letter-spacing: var(--hg-tracking-eyebrow);
   text-transform: uppercase;
   color: var(--ae-color-fg-subtle);
 }
-/* the focus-column header must not inherit a row's bold fg styling. */
-.hg-triage__head .hg-trow__focus {
-  color: inherit;
-  font-weight: inherit;
+.hg-terms__stat {
+  color: var(--ae-color-fg-muted);
+}
+.hg-terms__stat--attn {
+  color: var(--ae-color-danger);
+}
+.hg-terms__stat--run {
+  color: var(--ae-color-success);
+}
+.hg-terms__time {
+  margin-left: auto;
+  color: var(--ae-color-fg-subtle);
+  font-feature-settings: var(--ae-font-feature-settings-numeric);
 }
 
-/* height-capped, scrollable body — at most 120px, then it scrolls. This cap is
-   what keeps a high lane count from ever swallowing the trail below. */
-.hg-triage__scroll {
-  max-height: 120px;
+/* height-capped, scrollable lane list — at most 180px, then it scrolls. */
+.hg-terms__scroll {
+  max-height: 180px;
   overflow-y: auto;
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: var(--ae-space-px);
 }
-
-.hg-triage__divider {
+.hg-terms__divider {
   height: var(--ae-border-width-1);
   background: var(--ae-color-border-subtle);
   margin: var(--ae-space-1) var(--ae-space-2);
 }
 
-/* one lane row — clickable, keyboard-operable, columns aligned to the header. */
+/* one fleet lane — clickable, keyboard-operable. */
 .hg-trow {
   display: flex;
   align-items: center;
-  gap: var(--ae-space-2);
-  padding: var(--ae-space-1) var(--ae-space-2);
-  border-radius: var(--ae-radius-sm);
+  gap: var(--ae-space-3);
+  padding: var(--ae-space-2) var(--ae-space-2);
+  border-radius: var(--ae-radius-md);
   cursor: pointer;
   min-width: 0;
   transition: background var(--ae-duration-fast) var(--ae-easing-ease-out);
@@ -263,85 +254,78 @@ body {
   outline: var(--ae-focus-ring-width) var(--ae-focus-ring-style) var(--ae-color-focus-ring);
   outline-offset: calc(-1 * var(--ae-focus-ring-width));
 }
-/* the focused lane — accent inset bar + a raised surface so it reads selected. */
+/* the focused lane — a full-fill highlight (no edge bar), per the mockup. A faint
+   accent wash (the VIEWING hue) over bg so it reads selected on the bg-subtle
+   section in EVERY theme — bg-elevated collapses to bg in light schemes, so we
+   can't lean on it the way the old inset-bar selection did. */
 .hg-trow--selected {
-  background: var(--ae-color-bg-elevated);
-  box-shadow: inset 2px 0 0 var(--ae-color-accent);
+  background: color-mix(in oklch, var(--ae-color-accent) 10%, var(--ae-color-bg));
 }
 
-/* columns (header + rows share these basis widths so they line up). */
+/* columns: dot · provider · term·project (shrinks) · task (flexes) · pill · age. */
 .hg-trow__dot {
-  flex: 0 0 14px;
+  flex: 0 0 12px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.hg-trow__term {
-  flex: 0 0 84px;
-  display: flex;
-  align-items: center;
-  gap: var(--ae-space-2);
-  min-width: 0;
-}
-.hg-trow__id {
+.hg-trow__name {
+  flex: 0 1 auto;
+  max-width: 42%;
   font-family: var(--hg-mono);
   font-size: var(--ae-font-size-xs);
+  color: var(--ae-color-fg);
+  font-weight: var(--ae-font-weight-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hg-trow__task {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--ae-font-size-sm);
   color: var(--ae-color-fg-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.hg-trow__focus {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-size: var(--ae-font-size-sm);
-  font-weight: var(--ae-font-weight-semibold);
-  color: var(--ae-color-fg);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.hg-trow__status {
-  flex: 0 0 64px;
-  text-align: right;
-  font-family: var(--hg-mono);
-  font-size: var(--ae-font-size-xs);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.hg-trow__status--danger {
-  color: var(--ae-color-danger);
-  font-weight: var(--ae-font-weight-bold);
-}
-.hg-trow__status--success { color: var(--ae-color-success); }
-.hg-trow__status--muted { color: var(--ae-color-fg-subtle); }
 .hg-trow__age {
-  flex: 0 0 88px;
-  max-width: 100px;
+  flex: 0 0 auto;
+  min-width: 26px;
   text-align: right;
   white-space: nowrap;
   font-family: var(--hg-mono);
   font-size: var(--ae-font-size-xs);
+  font-feature-settings: var(--ae-font-feature-settings-numeric);
 }
 
-/* close-out (×) — a row-level action sibling of the lane button. The row keeps
-   the full set of columns; the × rides alongside in a fixed-width slot, and the
-   header carries a matching spacer so columns stay aligned. Width + the wrap gap
-   are the two values the header/row alignment math depends on. */
+/* selected lane reads its name a notch brighter. */
+.hg-trow--selected .hg-trow__name {
+  color: var(--ae-color-fg);
+  font-weight: var(--ae-font-weight-semibold);
+}
+
+/* quiet (stale / parked / done) lanes read dimmer. */
+.hg-trow--quiet {
+  opacity: 0.78;
+}
+.hg-trow--quiet .hg-trow__name {
+  color: var(--ae-color-fg-muted);
+  font-weight: var(--ae-font-weight-normal);
+}
+
+/* close-out (×) — a row-level action SIBLING of the lane button (never nested:
+   nested interactives break assistive tech). Revealed on hover/focus. */
 .hg-trow-wrap {
   display: flex;
   align-items: stretch;
-  gap: var(--ae-space-2);
+  gap: var(--ae-space-1);
 }
 .hg-trow-wrap .hg-trow {
   flex: 1 1 auto;
 }
-.hg-trow__close,
-.hg-trow__close-spacer {
-  flex: 0 0 20px;
-}
 .hg-trow__close {
+  flex: 0 0 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -359,8 +343,6 @@ body {
               color var(--ae-duration-fast) var(--ae-easing-ease-out),
               background var(--ae-duration-fast) var(--ae-easing-ease-out);
 }
-/* reveal the × only when the lane is hovered or holds focus — keeps the board
-   calm at rest, surfaces the affordance exactly when the eye is on the lane. */
 .hg-trow-wrap:hover .hg-trow__close,
 .hg-trow-wrap:focus-within .hg-trow__close {
   opacity: 1;
@@ -375,14 +357,7 @@ body {
   outline-offset: calc(-1 * var(--ae-focus-ring-width));
 }
 
-/* quiet (stale / parked / done) lanes read dimmer. */
-.hg-trow--quiet .hg-trow__focus,
-.hg-trow--quiet .hg-trow__id {
-  color: var(--ae-color-fg-muted);
-  font-weight: var(--ae-font-weight-normal);
-}
-
-/* thin, theme-toned scrollbar for the capped body. */
+/* thin, theme-toned scrollbar for capped bodies. */
 .hg-scroll {
   scrollbar-width: thin;
   scrollbar-color: var(--ae-color-border-strong) transparent;
@@ -396,8 +371,8 @@ body {
 .hg-scroll::-webkit-scrollbar-thumb:hover { background: var(--ae-color-fg-subtle); }
 
 /* --------------------------------------------------------------------------
-   Focus region — the hero. Pinned epic band + active-story header, scrolling
-   rail beneath, footer legend pinned at the bottom.
+   FOCUS region — the hero. Pinned orientation header + scrolling transcript,
+   footer legend pinned at the bottom.
    -------------------------------------------------------------------------- */
 .hg-focus {
   flex: 1 1 auto;
@@ -408,112 +383,211 @@ body {
   overflow: hidden;
 }
 
-/* Pinned top: epic band + active-story header never leave view (UX §10.2). */
+/* Pinned orientation header — never leaves view. */
 .hg-focus__pinned {
   flex: 0 0 auto;
-  padding: var(--ae-space-6) var(--ae-space-6) 0;
+  padding: var(--ae-space-5) var(--ae-space-6) var(--ae-space-4);
   background: var(--ae-color-bg);
+  border-bottom: var(--ae-border-width-1) solid var(--ae-color-border-subtle);
   z-index: var(--ae-z-sticky);
 }
 
 .hg-focus__scroll {
   flex: 1 1 auto;
   min-height: 0;
-}
-
-/* ae-scroll-area host fills the focus column */
-.hg-focus__scroll {
   display: block;
 }
 
-/* The trail's scroll position is managed explicitly (pin-to-newest / restore),
-   so disable the browser's scroll-anchoring — otherwise a late reflow above the
-   viewport nudges scrollTop on its own and drifts us off the live tip. */
+/* The transcript's scroll position is managed explicitly (pin-to-newest /
+   restore), so disable the browser's scroll-anchoring — otherwise a late reflow
+   above the viewport nudges scrollTop on its own and drifts us off the tip. */
 .hg-focus__scroll::part(viewport) {
   overflow-anchor: none;
 }
 
-.hg-rail-region {
-  position: relative;
-  padding: var(--ae-space-5) var(--ae-space-6) var(--ae-space-6);
-}
-
-/* --------------------------------------------------------------------------
-   Epic band (tier 1) — ae-page-header drives eyebrow + title; the progress
-   read-out and segmented roadmap bar are bespoke token recipes (markers.css).
-   The band is boxless: the page-header's own hairline is suppressed so the
-   roadmap bar reads as the only rule.
-   -------------------------------------------------------------------------- */
-.hg-epic {
+/* ----- orientation header (the "where am I" block) ----- */
+.hg-orient {
   display: block;
 }
-
-.hg-epic ae-page-header {
-  --ae-page-header-rule-width: 0;
-  --ae-page-header-eyebrow-color: var(--ae-color-fg-muted);
-  --ae-page-header-heading-font-size: var(--ae-font-size-3xl);
-  display: block;
-}
-
-.hg-epic__eyebrow-mark {
-  color: var(--ae-color-info);
-  font-weight: var(--ae-font-weight-bold);
-}
-
-/* Progress read-out rides the page-header trailing (default → .actions) slot.
-   In our usage the header carries no badge and no back link, so .status is
-   hidden and .actions is the SOLE right-column element; the header's
-   align-items:flex-end then baseline-aligns "N / M stories" to the title's
-   baseline, exactly as the mockup shows. We must NOT pull it to flex-start
-   (that detaches it from the baseline). The richer tinted markup — success-
-   tinted count + the faint reconstructed glyph — is why this rides the slot
-   rather than the plain `badge` string attribute. (L1) */
-.hg-epic__progress {
+.hg-orient__label {
   font-family: var(--hg-mono);
+  font-size: var(--ae-font-size-xs);
+  letter-spacing: var(--hg-tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--ae-color-fg-subtle);
+  margin-bottom: var(--ae-space-2);
+}
+.hg-orient__label--standalone {
+  color: var(--ae-color-fg-subtle);
+  margin-bottom: var(--ae-space-3);
+}
+.hg-orient__epic {
+  display: flex;
+  align-items: center;
+  gap: var(--ae-space-2);
+  margin-bottom: var(--ae-space-2);
+}
+.hg-orient__epic-title {
+  min-width: 0;
   font-size: var(--ae-font-size-sm);
+  color: var(--ae-color-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hg-orient__epic-count {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-family: var(--hg-mono);
+  font-size: var(--ae-font-size-xs);
   color: var(--ae-color-fg-muted);
   white-space: nowrap;
 }
-/* keep the actions row right-aligned and baseline-snug even though it sits in
-   a flex-end column. */
-.hg-epic ae-page-header::part(actions) {
-  margin-top: 0;
-  align-items: flex-end;
+.hg-orient__story {
+  font-size: var(--ae-font-size-2xl);
+  font-weight: var(--ae-font-weight-bold);
+  letter-spacing: var(--ae-letter-spacing-tight);
+  color: var(--ae-color-fg);
+  line-height: var(--ae-line-height-tight);
+  /* a degraded 160-char summary can be long — clamp to 2 lines. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.hg-orient__now {
+  display: flex;
+  align-items: center;
+  gap: var(--ae-space-2);
+  margin-top: var(--ae-space-3);
+}
+.hg-orient__now-text {
+  min-width: 0;
+  font-size: var(--ae-font-size-sm);
+  color: var(--ae-color-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hg-orient__now-label {
+  color: var(--ae-color-fg-subtle);
+}
+.hg-orient__now--working .hg-orient__now-text {
+  color: var(--ae-color-fg);
+}
+.hg-orient__bar {
+  display: flex;
+  gap: var(--ae-space-1);
+  margin-top: var(--ae-space-4);
 }
 
-.hg-epic__progress-count {
-  color: var(--ae-color-success);
-  font-weight: var(--ae-font-weight-bold);
-  font-size: var(--ae-font-size-lg);
+/* ----- the transcript trail ----- */
+.hg-transcript-region {
+  padding: var(--ae-space-3) var(--ae-space-6) var(--ae-space-6);
+}
+.hg-transcript {
+  display: flex;
+  flex-direction: column;
+}
+
+.hg-entry {
+  display: flex;
+  gap: var(--ae-space-3);
+  padding: var(--ae-space-4) 0;
+  border-bottom: var(--ae-border-width-1) solid var(--ae-color-border-subtle);
+}
+.hg-entry:last-child {
+  border-bottom: 0;
+}
+
+.hg-entry__gutter {
+  flex: 0 0 46px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--ae-space-2);
+  padding-top: 1px;
+}
+.hg-entry__time {
+  font-family: var(--hg-mono);
+  font-size: var(--ae-font-size-xs);
+  font-feature-settings: var(--ae-font-feature-settings-numeric);
+  color: var(--ae-color-fg-subtle);
+}
+.hg-entry__time--warn {
+  color: var(--ae-color-warning);
+}
+/* the type glyph + integrity glyph share one row beneath the time (not stacked). */
+.hg-entry__marks {
+  display: flex;
+  align-items: center;
+  gap: var(--ae-space-1);
+}
+
+.hg-entry__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-left: var(--ae-space-4);
+}
+.hg-entry__title {
+  font-size: var(--ae-font-size-sm);
+  font-weight: var(--ae-font-weight-semibold);
+  color: var(--ae-color-fg);
+  line-height: var(--ae-line-height-snug);
+}
+.hg-entry__detail {
+  font-size: var(--ae-font-size-sm);
+  color: var(--ae-color-fg-muted);
+  line-height: var(--ae-line-height-normal);
+  margin-top: var(--ae-space-1);
+}
+
+/* the NOW card — the highlighted live edge. A faint success wash that fades from
+   the right edge to transparent on the left (a directional highlight, not a solid
+   block); guaranteed distinct from bg in every theme (bg-elevated collapses to bg
+   in light schemes); the green NOW label + pulsing dot complete it. */
+.hg-entry--now {
+  border-bottom: 0;
+  background: linear-gradient(
+    to left,
+    color-mix(in oklch, var(--ae-color-success) 10%, var(--ae-color-bg)),
+    transparent
+  );
+  border-radius: var(--ae-radius-lg);
+  margin: var(--ae-space-2) 0;
+  padding: var(--ae-space-3) var(--ae-space-4) var(--ae-space-3) 0;
+}
+
+/* an in-flight activity line is tighter than a full entry (telemetry rhythm). */
+.hg-entry--activity {
+  padding: var(--ae-space-2) 0;
+  border-bottom: 0;
+  align-items: center;
 }
 
 /* --------------------------------------------------------------------------
    Parked-epic crumb (UX §4.1) — one muted line carrying the typed epic seam,
-   restored above the band.
+   restored above the orientation header.
    -------------------------------------------------------------------------- */
 .hg-seam {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--ae-space-2);
-  margin-bottom: var(--ae-space-4);
+  margin-bottom: var(--ae-space-3);
   font-family: var(--hg-mono);
   font-size: var(--ae-font-size-xs);
   color: var(--ae-color-fg-subtle);
 }
-
 .hg-seam__arrow {
   color: var(--ae-color-fg-subtle);
 }
-
 .hg-seam__label {
   color: var(--ae-color-fg-muted);
 }
-
 .hg-seam__sep {
   color: var(--ae-color-border-strong);
 }
-
 .hg-seam__outcome--passed {
   color: var(--ae-color-success);
 }
@@ -523,7 +597,6 @@ body {
 .hg-seam__outcome--handed-off {
   color: var(--ae-color-info);
 }
-
 .hg-seam__kind {
   color: var(--ae-color-warning);
 }
@@ -541,27 +614,21 @@ body {
   gap: var(--ae-space-4);
   flex-wrap: wrap;
   font-family: var(--hg-mono);
-  /* lift off the sub-xs 0.625rem (below the catalog's smallest type token, and
-     under fg-subtle it sat outside the system's verified-contrast set) up to the
-     xs floor + fg-muted, so the legend clears small-text contrast. (L2) */
   font-size: var(--ae-font-size-xs);
   color: var(--ae-color-fg-muted);
 }
-
 .hg-legend__item {
   display: inline-flex;
   align-items: center;
   gap: var(--ae-space-1);
 }
-
 .hg-legend__integrity {
   margin-left: auto;
   color: var(--ae-color-fg-muted);
 }
 
 /* --------------------------------------------------------------------------
-   Empty / cold / no-epic states — ae-empty-state centered in the relevant
-   region.
+   Empty / cold states — ae-empty-state centered in the relevant region.
    -------------------------------------------------------------------------- */
 .hg-empty {
   display: flex;
@@ -570,57 +637,28 @@ body {
   height: 100%;
   padding: var(--ae-space-8);
 }
-
 .hg-empty ae-empty-state {
   --ae-empty-state-color: var(--ae-color-fg-muted);
 }
-
 .hg-empty__glyph {
   color: var(--ae-color-fg-subtle);
   font-size: var(--ae-font-size-3xl);
   line-height: 1;
 }
-
-/* A calm "nothing needs you" reads as success, not as broken (UX §10.6). */
 .hg-empty__glyph--calm {
   color: var(--ae-color-success);
 }
 
-/* Connection / fetch trouble — calm, not alarming. A thin inline strip under
-   the titlebar rather than a blocking error. */
-.hg-conn {
-  flex: 0 0 auto;
-  display: none;
-  align-items: center;
-  gap: var(--ae-space-2);
-  padding: var(--ae-space-2) var(--ae-space-5);
-  font-family: var(--hg-mono);
-  font-size: var(--ae-font-size-xs);
-  color: var(--ae-color-warning-emphasis);
-  background: var(--ae-color-warning-subtle);
-  border-bottom: var(--ae-border-width-1) solid var(--ae-color-border-subtle);
-}
-
-.hg-conn[data-visible="true"] {
-  display: flex;
-}
-
-.hg-conn__dot {
-  width: 7px;
-  height: 7px;
-  border-radius: var(--ae-radius-full);
-  background: var(--ae-color-warning);
-}
-
-/* Reduced-motion: our bespoke keyframes carry hardcoded durations (1.6s/1.9s/
-   2.2s) that the token duration-collapse does NOT reach, so this guard is the
-   only stop — and it must target the REAL animated class names. The blinking
-   needs-you dot is .hg-statusdot--needs-you (not .hg-blink) and the pulsing
-   roadmap segment is .hg-roadmap__seg--active (not .hg-seg-active); the prior
-   selectors matched nothing, leaving both animating under reduced-motion
-   (WCAG 2.2.2). (M1) */
+/* --------------------------------------------------------------------------
+   Reduced-motion: our bespoke keyframes carry hardcoded durations the token
+   duration-collapse does NOT reach, so this guard is the only stop — and it
+   must target the REAL animated class names: the pulsing NOW dot (.hg-pulse),
+   the working orientation dot, the blinking needs-you dot, the active roadmap
+   segment (WCAG 2.2.2).
+   -------------------------------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   .hg-pulse,
+  .hg-orient__now--working .hg-orient__now-dot,
   .hg-statusdot--needs-you,
   .hg-roadmap__seg--active {
     animation: none !important;
