@@ -76,28 +76,29 @@ const ok = (name, cond) => {
   } else console.log("  ✓ " + name);
 };
 
-// resolveZoom — only the 3 supported factors survive; everything else → 100%.
-ok("resolveZoom passes supported factors", Z.resolveZoom("1") === 1 && Z.resolveZoom("1.25") === 1.25 && Z.resolveZoom("1.5") === 1.5);
-ok("resolveZoom accepts numeric input", Z.resolveZoom(1.5) === 1.5);
+// resolveZoom — only the 4 supported factors survive; everything else → 100%.
+ok("resolveZoom passes supported factors", Z.resolveZoom("1") === 1 && Z.resolveZoom("1.1") === 1.1 && Z.resolveZoom("1.25") === 1.25 && Z.resolveZoom("1.5") === 1.5);
+ok("resolveZoom accepts numeric input", Z.resolveZoom(1.5) === 1.5 && Z.resolveZoom(1.1) === 1.1);
 ok("resolveZoom clamps out-of-range to default", Z.resolveZoom("2") === 1 && Z.resolveZoom("0.9") === 1 && Z.resolveZoom("200%") === 1);
 ok("resolveZoom clamps junk/empty to default", Z.resolveZoom("banana") === 1 && Z.resolveZoom(null) === 1 && Z.resolveZoom(undefined) === 1);
 
 // zoomFontSize — rem base 16px × factor.
-ok("zoomFontSize maps 100/125/150 → 16/20/24px", Z.zoomFontSize(1) === "16px" && Z.zoomFontSize(1.25) === "20px" && Z.zoomFontSize(1.5) === "24px");
+ok("zoomFontSize maps 100/110/125/150 → 16/17.6/20/24px", Z.zoomFontSize(1) === "16px" && Z.zoomFontSize(1.1) === "17.6px" && Z.zoomFontSize(1.25) === "20px" && Z.zoomFontSize(1.5) === "24px");
 ok("zoomFontSize clamps invalid → 16px", Z.zoomFontSize("nope") === "16px");
 
 // applyZoom — writes px for a real zoom, UNSETS at 100% (respect UA/user base).
 const root = new El("html");
+ok("applyZoom(1.1) sets root font-size 17.6px", Z.applyZoom(1.1, root) === 1.1 && root.style.fontSize === "17.6px");
 ok("applyZoom(1.25) sets root font-size 20px", Z.applyZoom(1.25, root) === 1.25 && root.style.fontSize === "20px");
 ok("applyZoom(1.5) sets root font-size 24px", Z.applyZoom(1.5, root) === 1.5 && root.style.fontSize === "24px");
 ok("applyZoom(1) unsets root font-size", Z.applyZoom(1, root) === 1 && (root.style.fontSize === "" || root.style.fontSize == null));
 ok("applyZoom(corrupt) falls back to default + unsets", Z.applyZoom("xxx", root) === 1 && root.style.fontSize === "");
 
-// initZoom — populates the select with the 3 levels and selects the current.
+// initZoom — populates the select with the 4 levels and selects the current.
 const sel = new El("ae-select");
 const ctl = Z.initZoom({ zoomSelect: sel });
-ok("select populated with 3 ae-option levels", sel.children.length === 3 && sel.children.every((c) => c.tagName === "AE-OPTION"));
-ok("options carry the right value+label", sel.children.map((c) => c.getAttribute("value")).join(",") === "1,1.25,1.5" && sel.children.map((c) => c.textContent).join(",") === "100%,125%,150%");
+ok("select populated with 4 ae-option levels", sel.children.length === 4 && sel.children.every((c) => c.tagName === "AE-OPTION"));
+ok("options carry the right value+label", sel.children.map((c) => c.getAttribute("value")).join(",") === "1,1.1,1.25,1.5" && sel.children.map((c) => c.textContent).join(",") === "100%,110%,125%,150%");
 ok("default current is 100%", ctl.current === 1 && sel.getAttribute("value") === "1");
 
 // ae-change drives apply + persist.

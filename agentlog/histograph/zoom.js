@@ -1,6 +1,6 @@
 // ==========================================================================
 // Histograph — zoom.js
-// Board zoom: 100% / 125% / 150%. The whole UI is painted from rem-based
+// Board zoom: 100% / 110% / 125% / 150%. The whole UI is painted from rem-based
 // Aegis v2 tokens (--ae-space-*, --ae-font-size-* are all in rem), so scaling
 // the ROOT <html> font-size scales every spacing/type value uniformly — a true
 // content zoom with no per-element work.
@@ -21,13 +21,14 @@ const STORAGE_KEY = "histograph.zoom";
 // since that's what ae-select round-trips); label is what the user sees.
 export const ZOOM_LEVELS = [
   { value: "1", label: "100%" },
+  { value: "1.1", label: "110%" },
   { value: "1.25", label: "125%" },
   { value: "1.5", label: "150%" },
 ];
 
 const DEFAULT_ZOOM = 1;
 // The user-agent default <html> font-size the rem scale is authored against.
-// 100% == 16px so 1rem stays 16px; 125% == 20px; 150% == 24px.
+// 100% == 16px so 1rem stays 16px; 110% == 17.6px; 125% == 20px; 150% == 24px.
 const BASE_PX = 16;
 
 const ALLOWED = ZOOM_LEVELS.map((z) => parseFloat(z.value));
