@@ -1,0 +1,5 @@
+# Every change to this repo is owned by @mattnb. Combined with the branch-protection
+# rule on `main` (require a pull request + code-owner review), this makes @mattnb a
+# REQUIRED reviewer on any PR — so no outside contribution can land on main without
+# his approval. (@mattnb retains direct-push as an admin; the rule has admin bypass.)
+* @mattnb

@@ -1,10 +1,15 @@
 # agent-histograph
 
 A **low-chrome desktop command center for your AI coding agents.** It captures
-what your Claude Code (and optionally Codex) sessions are doing and renders a
+what your **Claude Code, Codex, and Gemini** sessions are doing and renders a
 live, pinnable board — terminals, the work each is on, the decision trail — in a
 **frameless, always-on-top window** you keep beside your terminals. No browser
 tabs, no URL bar, nothing to wander off into.
+
+All three providers land on one board: Claude Code and Codex via lifecycle hooks,
+and Gemini (Antigravity CLI) via a transcript watcher the board auto-starts (it has
+no hook surface of its own). See [How it works](#how-it-works) and
+[Gemini capture](#gemini-capture).
 
 This is a focused extraction of the histograph surface from a larger internal
 control-plane project — just the command-center view and the capture that feeds
@@ -213,8 +218,11 @@ Run the view tests: `python -m unittest discover -s agentlog -p 'test_*.py'`.
 
 ## Notes
 
-- Keep this repo **private** — the captured ledger contains your session content.
-  `~/.agent-histograph` lives in your home dir and is never part of the repo (and is
-  gitignored if it ever appears here).
+- **The sensitive thing is your ledger, not this repo.** The captured ledger
+  (`~/.agent-histograph`, or wherever `AGENTLOG_DIR` points) holds your session
+  content — keep *that* to yourself. It lives in your home directory, is never part
+  of the repo, and is gitignored if it ever shows up here; the repo itself ships only
+  code + vendored assets, no captured data. The board serves on `127.0.0.1` only and
+  sets a strict CSP, so the ledger is never exposed off-machine.
 - The vendored Aegis v2 assets (`agentlog/histograph/static/aegis/`) are checked
   in so the board is self-contained — you do not need the Aegis source to run it.
