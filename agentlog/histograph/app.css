@@ -308,8 +308,9 @@ body {
   gap: var(--ae-space-3);
 }
 .hg-trow__name {
-  flex: 0 1 auto;
-  max-width: 60%;
+  flex: 0 0 auto;
+  min-width: min(4ch, 100%);
+  max-width: min(60%, 16rem);
   font-family: var(--hg-mono);
   font-size: var(--ae-font-size-xs);
   color: var(--ae-color-fg);
@@ -319,9 +320,9 @@ body {
   text-overflow: ellipsis;
 }
 .hg-trow__task {
-  /* shrink ~100x faster than the name: the task ellipsizes first and the project name
-     keeps its width, only giving back space if the task has already collapsed to nothing. */
-  flex: 1 100 auto;
+  /* The task summary is secondary to the lane identity, so it owns the flexible
+     truncation budget. Keep even tiny project names (e.g. "ui") readable. */
+  flex: 1 1 auto;
   min-width: 0;
   font-size: var(--ae-font-size-sm);
   color: var(--ae-color-fg-muted);

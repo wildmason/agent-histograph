@@ -49,6 +49,8 @@ let lastFocusSig = null;
 let lastFocusTerminal = null;
 let stateRequestSeq = 0;
 let latestPaintedStateSeq = 0;
+let focusMutationSeq = 0;
+let pendingFocus = null;
 let annotationMutationSeq = 0;
 const pendingAnnotations = new Map();
 
@@ -119,6 +121,7 @@ function focusSig(focus) {
 }
 
 function paint(state) {
+  state = stateWithPendingFocus(state);
   state = stateWithPendingAnnotations(state);
   lastState = state;
 
@@ -157,6 +160,26 @@ function paint(state) {
   }
   lastFocusSig = sig;
   lastFocusTerminal = state.focus ? state.focus.terminalId : null;
+}
+
+function stateWithPendingFocus(state) {
+  if (!pendingFocus || !state || !Array.isArray(state.terminals)) {
+    return state;
+  }
+  const terminalId = pendingFocus.terminalId;
+  let sawTarget = false;
+  const terminals = state.terminals.map((t) => {
+    const focused = t.id === terminalId;
+    if (focused) sawTarget = true;
+    return t.focused === focused ? t : { ...t, focused };
+  });
+  if (!sawTarget) return state;
+  let focus = state.focus;
+  if ((!focus || focus.terminalId !== terminalId) &&
+      lastState && lastState.focus && lastState.focus.terminalId === terminalId) {
+    focus = lastState.focus;
+  }
+  return { ...state, terminals, focus };
 }
 
 function stateWithPendingAnnotations(state) {
@@ -264,6 +287,8 @@ document.addEventListener("visibilitychange", () => {
 
 async function requestFocus(terminalId) {
   if (!terminalId) return;
+  const mutationSeq = ++focusMutationSeq;
+  pendingFocus = { terminalId, seq: mutationSeq };
   // optimistic: flip focus locally for instant feedback, then confirm.
   if (lastState && Array.isArray(lastState.terminals)) {
     const optimistic = {
@@ -280,8 +305,15 @@ async function requestFocus(terminalId) {
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     // re-fetch authoritative state (the focus pane + epic band change).
-    await fetchState();
+    await fetchState({ allowOverlap: true });
+    if (pendingFocus && pendingFocus.seq === mutationSeq) {
+      pendingFocus = null;
+    }
   } catch {
+    if (pendingFocus && pendingFocus.seq === mutationSeq) {
+      pendingFocus = null;
+    }
+    await fetchState({ allowOverlap: true });
     // focus POST failed — the next poll will reconcile; surface the quiet strip.
     showConnTrouble(true);
   }
