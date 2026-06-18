@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -130,6 +131,110 @@ class TestGeminiWatcher(unittest.TestCase):
         line = json.dumps({"type": "USER_INPUT", "source": "USER_EXPLICIT"})
         self.assertFalse(G._mark_seen(state, "transcript.jsonl", line))
         self.assertTrue(G._mark_seen(state, "transcript.jsonl", line))
+
+
+# --------------------------------------------------------------------------- #
+# V7 — single-instance lock hardening. The 2026-06-17 incident dumped 140k+
+# duplicate Gemini records because a second watcher replayed the same transcripts.
+# The PID-only lock was defeatable by PID reuse (a recycled PID makes a dead owner
+# look alive). The hardened lock pairs the PID with a heartbeat (the lock file's
+# mtime, refreshed each loop): a lock that hasn't been refreshed within
+# STALE_LOCK_SECS is reclaimed even if its PID is "alive", and a genuinely live +
+# fresh lock blocks a second instance.
+# --------------------------------------------------------------------------- #
+class TestWatcherLock(unittest.TestCase):
+    def setUp(self):
+        self.td = tempfile.TemporaryDirectory()
+        self.tmp = self.td.name
+        self._old_lock = G.LOCK_FILE
+        self._old_state_dir = A.STATE_DIR
+        self._old_hb = G._last_heartbeat
+        A.STATE_DIR = os.path.join(self.tmp, "state")
+        G.LOCK_FILE = os.path.join(self.tmp, "gemini_watcher.lock")
+        G._last_heartbeat = 0.0
+        A._ensure_dirs()
+
+    def tearDown(self):
+        # release any lock we hold so a leaked fd can't keep the temp file open
+        try:
+            if os.path.exists(G.LOCK_FILE):
+                os.remove(G.LOCK_FILE)
+        except Exception:
+            pass
+        G.LOCK_FILE = self._old_lock
+        A.STATE_DIR = self._old_state_dir
+        G._last_heartbeat = self._old_hb
+        self.td.cleanup()
+
+    def _owner(self):
+        with open(G.LOCK_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    def test_acquire_writes_owner_with_our_pid(self):
+        fd = G.acquire_lock()
+        self.assertIsNotNone(fd)
+        try:
+            self.assertEqual(self._owner()["pid"], os.getpid())
+        finally:
+            G.release_lock(fd)
+        self.assertFalse(os.path.exists(G.LOCK_FILE))  # released cleanly
+
+    def test_second_instance_blocked_while_lock_is_live_and_fresh(self):
+        fd = G.acquire_lock()                       # first instance holds it (our pid, fresh)
+        try:
+            self.assertIsNone(G.acquire_lock(),     # second instance must back off
+                              "a live, freshly-heartbeat lock must block a second watcher")
+        finally:
+            G.release_lock(fd)
+
+    def test_stale_heartbeat_is_reclaimed_even_if_pid_alive(self):
+        # THE PID-reuse defense: a lock owned by a LIVE pid (our own) but whose
+        # heartbeat (mtime) is older than STALE_LOCK_SECS must be reclaimed — liveness
+        # is the heartbeat, not mere PID existence.
+        with open(G.LOCK_FILE, "w", encoding="utf-8") as f:
+            json.dump({"pid": os.getpid(), "started": A.now_iso()}, f)
+        stale = time.time() - (G.STALE_LOCK_SECS + 30)
+        os.utime(G.LOCK_FILE, (stale, stale))
+        fd = G.acquire_lock()
+        self.assertIsNotNone(fd, "a stale-heartbeat lock must be reclaimed")
+        try:
+            self.assertEqual(self._owner()["pid"], os.getpid())
+        finally:
+            G.release_lock(fd)
+
+    def test_dead_pid_lock_is_reclaimed(self):
+        # a lock from a crashed watcher (pid no longer exists) is reclaimed regardless
+        # of heartbeat freshness.
+        dead = 2 ** 31 - 1            # a pid that is essentially never live
+        with open(G.LOCK_FILE, "w", encoding="utf-8") as f:
+            json.dump({"pid": dead, "started": A.now_iso()}, f)
+        fd = G.acquire_lock()
+        self.assertIsNotNone(fd)
+        try:
+            self.assertEqual(self._owner()["pid"], os.getpid())
+        finally:
+            G.release_lock(fd)
+
+    def test_heartbeat_refreshes_mtime(self):
+        fd = G.acquire_lock()
+        try:
+            old = time.time() - (G.STALE_LOCK_SECS + 30)
+            os.utime(G.LOCK_FILE, (old, old))
+            G._last_heartbeat = 0.0           # clear throttle so the touch fires
+            G._heartbeat()
+            self.assertGreater(os.stat(G.LOCK_FILE).st_mtime, old + 1,
+                               "heartbeat must bump the lock mtime forward")
+        finally:
+            G.release_lock(fd)
+
+    def test_lock_path_is_machine_global_not_per_ledger_dir(self):
+        # the default lock path must NOT live under AGENTLOG_DIR — the watcher's input
+        # (~/.gemini) is machine-global, so one watcher per machine is the invariant.
+        # (We can only assert the default resolver, since setUp overrides LOCK_FILE.)
+        default_lock = G._default_lock_path()
+        self.assertNotIn(os.path.normcase(os.path.abspath(A.AGENTLOG_DIR)),
+                         os.path.normcase(os.path.abspath(default_lock)),
+                         "lock must be independent of the ledger dir")
 
 
 if __name__ == "__main__":

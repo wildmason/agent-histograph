@@ -28,8 +28,11 @@ Fail-open: a derivation exception while building /api/state is caught and degrad
 a cold envelope rather than a 500, so a single bad session can never take the board down.
 """
 import os
+import glob
 import json
 import time
+import hashlib
+import threading
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, unquote
@@ -83,13 +86,80 @@ def _content_type(path):
 
 
 # --------------------------------------------------------------------------- #
-# state assembly (re-read every request — stateless, like the CLI)
+# parsed-Ledger cache (V1): the read+parse+sort+index of the JSONL is the single
+# most expensive thing on the poll path and is DETERMINISTIC over the ledger files —
+# it changes only when a producer appends a record. We cache the parsed Ledger keyed
+# on the active dir + a cheap stat fingerprint of its files, and rebuild only when
+# that fingerprint changes. Derivation (build_state) still runs every poll against
+# the CURRENT clock, so freshness / working-now / the live pulse stay correct — only
+# the redundant re-parse is skipped. On a large/duplicate-laden ledger this turns a
+# multi-second per-poll parse into a one-time cost.
+# --------------------------------------------------------------------------- #
+_LEDGER_CACHE = {}            # dir -> (fingerprint, Ledger)
+_LEDGER_CACHE_LOCK = threading.Lock()
+
+
+def _ledger_fingerprint(d):
+    """A cheap change-signal for a ledger dir: (basename, mtime_ns, size) for every
+    checkpoints*/activity*.jsonl file, sorted. Stat-only — no file is read. Returns
+    None if the dir can't be statted, which forces a fresh parse (fail-open: never
+    serve a stale cache because we couldn't fingerprint)."""
+    try:
+        sig = []
+        for pat in ("checkpoints*.jsonl", "activity*.jsonl"):
+            for p in sorted(glob.glob(os.path.join(d, pat))):
+                try:
+                    st = os.stat(p)
+                    sig.append((os.path.basename(p), st.st_mtime_ns, st.st_size))
+                except OSError:
+                    sig.append((os.path.basename(p), -1, -1))
+        return tuple(sig)
+    except Exception:
+        return None
+
+
+def _cached_ledger(d):
+    """The parsed Ledger for dir `d`, reused while its file fingerprint is unchanged.
+    A fingerprint of None (unstattable) bypasses the cache with a fresh parse. The
+    Ledger's per-session memos (story-id/last-work/etc.) are write-once-idempotent, so
+    sharing one cached Ledger across concurrent poll threads is safe under the GIL."""
+    fp = _ledger_fingerprint(d)
+    if fp is None:
+        return R.Ledger.from_dir(d)
+    with _LEDGER_CACHE_LOCK:
+        entry = _LEDGER_CACHE.get(d)
+        if entry is not None and entry[0] == fp:
+            return entry[1]
+    led = R.Ledger.from_dir(d)
+    with _LEDGER_CACHE_LOCK:
+        _LEDGER_CACHE[d] = (fp, led)
+    return led
+
+
+def _state_etag(payload):
+    """A strong validator over the payload with `generatedAt` removed. generatedAt
+    ticks every poll, so it must be excluded or 304 could never fire; every other
+    field (terminals, freshness labels, focus, the live tip) changes only on real
+    activity or a minute/45s freshness bucket crossing — so consecutive idle polls
+    hash identically and 304, while ANY meaningful change (including a freshness tick)
+    flips the validator and ships the new body. None if it can't be computed."""
+    try:
+        clone = {k: v for k, v in payload.items() if k != "generatedAt"}
+        raw = json.dumps(clone, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        return '"%s"' % hashlib.sha1(raw).hexdigest()
+    except Exception:
+        return None
+
+
+# --------------------------------------------------------------------------- #
+# state assembly (re-derived every request against the current clock; the parsed
+# ledger is cached — see _cached_ledger)
 # --------------------------------------------------------------------------- #
 def _state_payload(now_epoch=None):
     """Build the /api/state dict. Fail-open: any unexpected error degrades to a cold
     envelope (terminals:[] + focus:null) rather than raising a 500."""
     try:
-        led = R.Ledger.from_dir(A_dir())
+        led = _cached_ledger(A_dir())
         epics = E.list_epics(E.load(), led, now_epoch=now_epoch)
         focus_tid = E.load_focus()
         dismissed = E.load_dismissed()
@@ -122,7 +192,7 @@ def _state_payload(now_epoch=None):
 
 def _epics_payload(now_epoch=None):
     try:
-        led = R.Ledger.from_dir(A_dir())
+        led = _cached_ledger(A_dir())
         return {"epics": E.list_epics(E.load(), led, now_epoch=now_epoch)}
     except Exception:
         R.A.log("serve /api/epics degraded to empty: %s"
@@ -169,10 +239,20 @@ def A_dir():
 # --------------------------------------------------------------------------- #
 class HistographHandler(BaseHTTPRequestHandler):
     server_version = "agentlog-histograph/0.1"
+    # HTTP/1.1 → persistent connections. The board polls every 1.5–4s from a single
+    # client, so keep-alive lets every poll reuse one warm TCP connection instead of
+    # paying a connect/teardown per request. Framing is safe: every body-bearing
+    # response sets Content-Length, and the 304 fast path is bodyless by status — so
+    # the client always knows where each response ends. An idle connection is reclaimed
+    # by `timeout` below (4s idle cadence < 15s), so a stopped client never strands a
+    # thread.
+    protocol_version = "HTTP/1.1"
     # socket read timeout: BaseHTTPRequestHandler.setup() applies this to the
     # connection, so a client that declares a Content-Length but stalls mid-body
     # can't park a worker thread indefinitely (ThreadingHTTPServer spawns one thread
     # per connection — an unbounded stall would otherwise exhaust threads/sockets).
+    # With keep-alive it ALSO bounds how long an idle persistent connection holds its
+    # worker thread before being closed.
     timeout = 15
 
     # silence the default per-request stderr logging (the CLI prints its own banner)
@@ -217,6 +297,33 @@ class HistographHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self._send_security_headers()
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(body)
+
+    def _send_state(self):
+        """GET /api/state with a conditional-request fast path. Build the payload,
+        compute its generatedAt-independent ETag, and if the client's If-None-Match
+        matches, return a bodyless 304 so it can skip a full parse + re-render. The
+        client manages the validator in-memory (no browser HTTP cache involved), so
+        no-store is kept — a 304 here always means 'identical board, don't repaint'."""
+        payload = _state_payload()
+        etag = _state_etag(payload)
+        if etag and self.headers.get("If-None-Match") == etag:
+            self.send_response(304)
+            self.send_header("ETag", etag)
+            self.send_header("Cache-Control", "no-store")
+            self._send_security_headers()
+            self.end_headers()
+            return
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        if etag:
+            self.send_header("ETag", etag)
         self._send_security_headers()
         self.end_headers()
         if self.command != "HEAD":
@@ -278,7 +385,7 @@ class HistographHandler(BaseHTTPRequestHandler):
         path = unquote(parsed.path)
 
         if path == "/api/state":
-            return self._send_json(_state_payload())
+            return self._send_state()
         if path == "/api/epics":
             return self._send_json(_epics_payload())
         if path == "/api/ledger":

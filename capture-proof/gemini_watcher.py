@@ -22,10 +22,34 @@ HOME = os.path.expanduser("~")
 BRAIN_DIR = os.path.join(HOME, ".gemini", "antigravity-cli", "brain")
 DEV_ROOT = os.path.join(HOME, "Documents", "development")
 STATE_FILE = os.path.join(A.STATE_DIR, "gemini_watcher_state.json")
-LOCK_FILE = os.path.join(A.STATE_DIR, "gemini_watcher.lock")
 CHECKPOINTS = os.path.join(A.AGENTLOG_DIR, "checkpoints.gemini.jsonl")
 ACTIVITY = os.path.join(A.AGENTLOG_DIR, "activity.gemini.jsonl")
 SEEN_HASH_LIMIT = 20000
+
+# Lock heartbeat: the watch loop touches the lock file's mtime at most every
+# HEARTBEAT_SECS; a lock not refreshed within STALE_LOCK_SECS is treated as dead and
+# reclaimed even if its recorded PID still appears alive (a recycled PID must not be
+# able to masquerade as a live watcher — that is the PID-reuse hole that let the
+# duplicate-watcher incident through). STALE is many× HEARTBEAT so a merely-slow loop
+# never trips it.
+HEARTBEAT_SECS = 10
+STALE_LOCK_SECS = 60
+_last_heartbeat = 0.0
+
+
+def _default_lock_path():
+    """The single-instance lock lives at a FIXED, machine-global, ledger-INDEPENDENT
+    path — NOT under AGENTLOG_DIR. The watcher's input is the global ~/.gemini
+    transcript stream, so the invariant is one watcher per machine regardless of which
+    ledger dir it mirrors into; a per-AGENTLOG_DIR lock would let two watchers (default
+    dir + an override) both replay the same source. Honors HISTOGRAPH_CONFIG_DIR (the
+    same ledger-independent config dir the board uses) so tests and a relocated home
+    both work."""
+    cfg = os.environ.get("HISTOGRAPH_CONFIG_DIR") or os.path.join(HOME, ".histograph")
+    return os.path.join(cfg, "gemini_watcher.lock")
+
+
+LOCK_FILE = _default_lock_path()
 
 
 def load_state():
@@ -80,11 +104,27 @@ def _pid_alive(pid):
         return False
 
 
+def _lock_is_stale():
+    """True if the existing lock's heartbeat (its mtime, refreshed each loop) is older
+    than STALE_LOCK_SECS — i.e. its owner has crashed, hung, or the recorded PID has
+    been recycled by an unrelated process. A missing lock counts as stale (gone)."""
+    try:
+        age = time.time() - os.stat(LOCK_FILE).st_mtime
+    except OSError:
+        return True
+    return age > STALE_LOCK_SECS
+
+
 def acquire_lock():
     """Single-instance guard. Duplicate watchers replay the same transcripts and
-    multiply the ledger, so a second live watcher exits. Stale lock files are
-    reclaimed."""
-    A._ensure_dirs()
+    multiply the ledger (the 2026-06-17 incident), so a second LIVE watcher exits. A
+    lock is reclaimed when its PID is dead OR its heartbeat is stale — the heartbeat
+    check is what makes a recycled PID unable to keep a dead owner's lock alive."""
+    d = os.path.dirname(LOCK_FILE) or "."
+    try:
+        os.makedirs(d, exist_ok=True)
+    except Exception:
+        pass
     while True:
         try:
             fd = os.open(LOCK_FILE, os.O_CREAT | os.O_EXCL | os.O_RDWR)
@@ -95,7 +135,10 @@ def acquire_lock():
             except Exception:
                 owner = {}
             pid = owner.get("pid")
-            if _pid_alive(pid):
+            # A genuinely live owner = PID alive AND a fresh heartbeat. Either being
+            # false (dead PID, or a stale/recycled one not refreshing the lock) means
+            # the lock is reclaimable.
+            if _pid_alive(pid) and not _lock_is_stale():
                 A.log("gemini_watcher already running as pid %s; exiting" % pid)
                 return None
             try:
@@ -106,8 +149,26 @@ def acquire_lock():
                 A.log("gemini_watcher lock reclaim failed: %r" % e)
                 return None
             continue
-        os.write(fd, json.dumps({"pid": os.getpid(), "started": A.now_iso()}).encode("utf-8"))
+        os.write(fd, json.dumps({"pid": os.getpid(), "started": A.now_iso(),
+                                 "dir": A.AGENTLOG_DIR}).encode("utf-8"))
+        global _last_heartbeat
+        _last_heartbeat = time.time()   # the create stamps a fresh mtime
         return fd
+
+
+def _heartbeat():
+    """Refresh the lock's heartbeat (its mtime) so a peer's _lock_is_stale() sees this
+    watcher as alive. Throttled to once per HEARTBEAT_SECS — the loop runs every 1.5s,
+    so this is a cheap touch, not a per-iteration write."""
+    global _last_heartbeat
+    now = time.time()
+    if now - _last_heartbeat < HEARTBEAT_SECS:
+        return
+    _last_heartbeat = now
+    try:
+        os.utime(LOCK_FILE, None)
+    except OSError:
+        pass
 
 
 def release_lock(fd):
@@ -468,6 +529,7 @@ def watch_transcripts():
         if changed:
             save_state(state)
 
+        _heartbeat()   # keep the single-instance lock fresh so peers see us as alive
         time.sleep(1.5)
 
 

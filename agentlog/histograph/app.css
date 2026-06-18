@@ -265,6 +265,14 @@ body {
   cursor: pointer;
   min-width: 0;
   transition: background var(--ae-duration-fast) var(--ae-easing-ease-out);
+  /* Skip layout + paint for fleet rows scrolled out of the 180px lane list — the
+     browser renders only the visible handful and reserves ~34px per skipped row
+     (the `auto` keyword remembers a row's real height once measured). Safe here:
+     this list is plain manual-scroll with no auto-follow policy (unlike the
+     transcript), and a row's content stays inside its box so paint-containment
+     never clips the status-dot halo. Scales as the fleet grows. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 34px;
 }
 .hg-trow:hover {
   background: var(--ae-color-hover-overlay);
@@ -614,6 +622,13 @@ body {
   gap: var(--ae-space-3);
   padding: var(--ae-space-4) 0;
   border-bottom: var(--ae-border-width-1) solid var(--ae-color-border-subtle);
+  /* Layout containment: a change inside one entry (the keyed reconcile of the live
+     tip, an edited detail line) reflows ONLY that entry, never the whole transcript
+     spine. Deliberately NOT `content-visibility:auto` and NOT `contain: paint` here:
+     the transcript lives in an <ae-scroll-area> whose scrollHeight drives the
+     auto-scroll-to-bottom follow (render.js applyScroll), and size estimation /
+     paint-clipping would both perturb that and risk clipping the pulse ring. */
+  contain: layout;
 }
 .hg-entry:last-child {
   border-bottom: 0;
@@ -938,10 +953,25 @@ body {
    segment (WCAG 2.2.2).
    -------------------------------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
-  .hg-pulse,
-  .hg-orient__now--working .hg-orient__now-dot,
+  /* the live-edge pulse now rides a ::after ring — hide it outright so reduced-motion
+     shows a calm solid dot (animation:none would leave a static 45% disc over it). */
+  .hg-pulse::after,
+  .hg-orient__now--working .hg-orient__now-dot::after {
+    display: none !important;
+  }
   .hg-statusdot--needs-you,
   .hg-roadmap__seg--active {
     animation: none !important;
   }
+}
+
+/* Pause every board animation while a BROWSER tab is backgrounded (app.js toggles
+   .hg-anim-paused on <html> only when document.hidden AND not the desktop app — the
+   pinned desktop companion stays live when merely covered). Belt-and-suspenders over
+   the browser's own hidden-tab throttling: no GPU layer churn for an unseen board. */
+html.hg-anim-paused .hg-pulse::after,
+html.hg-anim-paused .hg-orient__now--working .hg-orient__now-dot::after,
+html.hg-anim-paused .hg-statusdot--needs-you,
+html.hg-anim-paused .hg-roadmap__seg--active {
+  animation-play-state: paused !important;
 }

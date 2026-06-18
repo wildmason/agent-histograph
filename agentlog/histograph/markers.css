@@ -24,13 +24,20 @@
    ✳ ❯ ✦ glyph + label are the primary discriminators (H2).
    ========================================================================== */
 
-@keyframes hgPulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 color-mix(in oklch, var(--ae-color-success) 50%, transparent);
+/* The live-edge pulse. Animates a pseudo-element ring with transform + opacity ONLY
+   — both are compositor-thread properties, so the ring expands on its own GPU layer
+   with zero per-frame layout or paint. (The old recipe animated box-shadow spread,
+   which repaints the dot every frame for the whole life of any working lane — the
+   board's single most frequent wasted paint.) Consumers add a ::after that uses this. */
+@keyframes hgRing {
+  0% {
+    transform: scale(1);
+    opacity: 0.5;
   }
-  70% {
-    box-shadow: 0 0 0 6px color-mix(in oklch, var(--ae-color-success) 0%, transparent);
+  70%,
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
   }
 }
 
@@ -210,7 +217,18 @@
 .hg-orient__now--working .hg-orient__now-dot {
   background: var(--ae-color-success);
   box-shadow: 0 0 0 3px color-mix(in oklch, var(--ae-color-success) 16%, transparent);
-  animation: hgPulse 1.9s var(--ae-easing-ease-out) infinite;
+  position: relative;
+}
+/* compositor-only expanding ring (see hgRing) — replaces the per-frame box-shadow pulse. */
+.hg-orient__now--working .hg-orient__now-dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--ae-radius-full);
+  background: color-mix(in oklch, var(--ae-color-success) 45%, transparent);
+  animation: hgRing 1.9s var(--ae-easing-ease-out) infinite;
+  will-change: transform, opacity;
+  pointer-events: none;
 }
 
 /* ==========================================================================
@@ -361,9 +379,18 @@
   border-radius: var(--ae-radius-full);
   background: var(--ae-color-success);
   margin-top: var(--ae-space-1);
+  position: relative; /* anchor the live-edge pulse ring */
 }
-.hg-entry__nowdot.hg-pulse {
-  animation: hgPulse 1.9s var(--ae-easing-ease-out) infinite;
+/* compositor-only expanding ring (see hgRing) — replaces the per-frame box-shadow pulse. */
+.hg-entry__nowdot.hg-pulse::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--ae-radius-full);
+  background: color-mix(in oklch, var(--ae-color-success) 45%, transparent);
+  animation: hgRing 1.9s var(--ae-easing-ease-out) infinite;
+  will-change: transform, opacity;
+  pointer-events: none;
 }
 .hg-entry__title--now {
   font-weight: var(--ae-font-weight-bold);

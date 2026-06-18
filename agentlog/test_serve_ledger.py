@@ -81,6 +81,48 @@ class _Base(unittest.TestCase):
         shutil.rmtree(self.cfg, ignore_errors=True)
 
 
+class TestDirStatsQuickScan(_Base):
+    """V12 — dir_stats (no ledger passed) must derive sessions + lastActivity from a
+    cheap streaming scan, byte-for-byte equal to what a full Ledger would report, so
+    the candidate picker stays fast and bounded regardless of ledger size. The full
+    Ledger is the independent oracle."""
+    def test_quickscan_matches_full_ledger_incl_per_host_union(self):
+        d = os.path.join(self.home, "ledq")
+        _seed(d, ["a", "b", "c"])
+        # a per-host sibling with a NEWER record + a distinct session (union path).
+        with open(os.path.join(d, "activity.codex.jsonl"), "w", encoding="utf-8") as f:
+            f.write(json.dumps(_act("d", "2026-06-18T09:00:00-03:00")) + "\n")
+        led = R.Ledger.from_dir(d)                      # oracle
+        ts = 0.0
+        for a in led.activity:
+            ts = max(ts, R.parse_ts(a.get("ts")))
+        for c in led.checkpoints:
+            ts = max(ts, R.parse_ts(c.get("captured_at")))
+        st = L.dir_stats(d)                             # quick-scan path (no ledger arg)
+        self.assertEqual(st["sessions"], len(led.session_ids()))
+        self.assertEqual(st["sessions"], 4)             # a,b,c,d distinct
+        self.assertTrue(st["hasData"])
+        self.assertEqual(st["lastActivity"], L._iso(ts))
+        self.assertEqual(st["lastActivity"], "2026-06-18T12:00:00Z")  # 09:00-03:00 == 12:00Z
+
+    def test_quickscan_passed_ledger_is_still_honored(self):
+        # describe_active reuses the already-parsed Ledger; that path must be unchanged.
+        led = R.Ledger.from_dir(self.full_dir)
+        st = L.dir_stats(self.full_dir, ledger=led)
+        self.assertEqual(st["sessions"], 3)
+
+    def test_quickscan_empty_and_missing_dirs(self):
+        empty = os.path.join(self.home, "empty")
+        os.makedirs(empty)
+        st = L.dir_stats(empty)
+        self.assertEqual(st["sessions"], 0)
+        self.assertIsNone(st["lastActivity"])
+        self.assertFalse(st["hasData"])
+        missing = L.dir_stats(os.path.join(self.home, "nope"))
+        self.assertFalse(missing["exists"])
+        self.assertEqual(missing["sessions"], 0)
+
+
 class TestResolution(_Base):
     def test_no_override_resolves_to_configured_default(self):
         self.assertEqual(os.path.abspath(L.resolved_dir()), os.path.abspath(self.default_dir))

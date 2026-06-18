@@ -197,23 +197,59 @@ def _has_ledger_files(d):
         return False
 
 
+def _dir_quickstats(d):
+    """(sessions, last_iso) for a ledger dir via a single STREAMING pass — distinct
+    session_ids + newest timestamp — without building a sorted+indexed Ledger or
+    retaining the records. This keeps the candidate picker cheap and bounded no matter
+    how large a candidate dir is (it only needs counts, not the parsed structure — the
+    earlier 3.9s /api/ledger was a full parse per candidate over the 158MB residue).
+    Mirrors what dir_stats derived from a Ledger: session_ids union both streams;
+    activity stamps live in `ts`, checkpoints in `captured_at`. Fail-open to (0, None)."""
+    sids = set()
+    max_ts = 0.0
+    for pat, ts_key in (("checkpoints*.jsonl", "captured_at"), ("activity*.jsonl", "ts")):
+        for path in glob.glob(os.path.join(d, pat)):
+            try:
+                with open(path, "r", encoding="utf-8", errors="replace") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            rec = json.loads(line)
+                        except Exception:
+                            continue
+                        sid = rec.get("session_id")
+                        if sid:
+                            sids.add(sid)
+                        t = R.parse_ts(rec.get(ts_key))
+                        if t > max_ts:
+                            max_ts = t
+            except OSError:
+                continue
+    return len(sids), (_iso(max_ts) if max_ts else None)
+
+
 def dir_stats(d, ledger=None):
     """Describe a ledger dir for the picker / diagnostic: {dir, exists, sessions,
     lastActivity (UTC-Z|None), hasData}. `ledger`, if given, is reused (the hot
-    /api/state path already has the active Ledger loaded) to avoid a re-read.
-    Fail-open: a read error degrades to zero counts, never raises."""
+    /api/state path already has the active Ledger loaded) to avoid a re-read; otherwise
+    a lightweight streaming quick-scan (no full Ledger build) is used so multi-dir
+    candidate discovery stays cheap. Fail-open: a read error degrades to zero counts."""
     exists = bool(d) and os.path.isdir(d)
     sessions, last = 0, None
     if exists:
         try:
-            led = ledger if ledger is not None else R.Ledger.from_dir(d)
-            sessions = len(led.session_ids())
-            ts = 0.0
-            for a in led.activity:
-                ts = max(ts, R.parse_ts(a.get("ts")))
-            for c in led.checkpoints:
-                ts = max(ts, R.parse_ts(c.get("captured_at")))
-            last = _iso(ts) if ts else None
+            if ledger is not None:
+                sessions = len(ledger.session_ids())
+                ts = 0.0
+                for a in ledger.activity:
+                    ts = max(ts, R.parse_ts(a.get("ts")))
+                for c in ledger.checkpoints:
+                    ts = max(ts, R.parse_ts(c.get("captured_at")))
+                last = _iso(ts) if ts else None
+            else:
+                sessions, last = _dir_quickstats(d)
         except Exception:
             sessions, last = 0, None
     return {"dir": d, "exists": exists, "sessions": sessions,

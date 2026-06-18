@@ -13,7 +13,8 @@ Trust posture (§10): every value that originates from an agent-authored checkpo
 Markdown-table / wikilink / template-token injection and `redact` strips obvious
 secrets before any of it is composed into a health-page draft row or printed.
 """
-import os, sys, json, re, time
+import os, sys, json, re, time, functools
+from collections import defaultdict
 from datetime import datetime
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -95,25 +96,45 @@ def md_cell(text, cap=300):
 # --------------------------------------------------------------------------- #
 # timestamps + JSONL loading
 # --------------------------------------------------------------------------- #
+@functools.lru_cache(maxsize=131072)
+def _parse_ts_cached(s):
+    """Parse a non-empty timestamp string → epoch seconds; 0.0 on failure. Memoized:
+    the derivation re-parses the same handful of ledger timestamps tens of thousands
+    of times per poll (status_board / live_sessions / build_tasks all walk the same
+    records), so caching the string→epoch map collapses ~25k parses/req to one per
+    distinct stamp. The cache is bounded (LRU) so a long-running server can't grow it
+    without limit; eviction only costs a re-parse, never a wrong answer."""
+    try:
+        # datetime.fromisoformat (3.11+) parses the hooks' offset format, fractional
+        # seconds, naive stamps, and 'Z' — a strict SUPERSET of the old strptime
+        # fast-path, in one ~10× cheaper call. We normalize a trailing 'Z' to '+00:00'
+        # so pre-3.11 interpreters parse it too; on 3.11+ the replace is a harmless no-op.
+        return datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
+    except Exception:
+        try:
+            # last-ditch: the exact producer format. Reaching here means fromisoformat
+            # rejected the string, so this only ever runs on genuinely odd input — but
+            # it preserves the original parser's coverage exactly (byte-identical result
+            # for every string the two-tier parser accepted).
+            return datetime.strptime(s, "%Y-%m-%dT%H:%M:%S%z").timestamp()
+        except Exception:
+            return 0.0
+
+
 def parse_ts(s):
     """ISO-8601-with-offset (the hooks' format) → epoch seconds; 0.0 on failure.
 
     Tolerates a trailing 'Z' and FRACTIONAL SECONDS (e.g. a producer that stamps
-    microseconds). The strptime fast-path matches the producer's exact format; the
-    fromisoformat fallback covers the other valid ISO variants. This matters because
-    the failure value is 0.0 (= 1970), NOT an error — an unparsed timestamp would
-    silently sort before every checkpoint and drop out of the live activity tail."""
-    if not s:
+    microseconds). Byte-identical to the historical two-tier parser; only faster
+    (fromisoformat-first + memoized — see _parse_ts_cached). The failure value is 0.0
+    (= 1970), NOT an error — an unparsed timestamp would silently sort before every
+    checkpoint and drop out of the live activity tail.
+
+    Falsy (None/"") and non-string input short-circuit to 0.0 here so the cache only
+    ever holds real strings (lru_cache also requires hashable args)."""
+    if not s or not isinstance(s, str):
         return 0.0
-    try:
-        return datetime.strptime(s, "%Y-%m-%dT%H:%M:%S%z").timestamp()
-    except Exception:
-        try:
-            # canonical ISO parser — handles fractional seconds + offset (and 'Z',
-            # which we normalize for pre-3.11 fromisoformat).
-            return datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
-        except Exception:
-            return 0.0
+    return _parse_ts_cached(s)
 
 
 def load_jsonl(path):
@@ -157,6 +178,23 @@ class Ledger:
     def __init__(self, checkpoints, activity):
         self.checkpoints = sorted(checkpoints, key=lambda c: parse_ts(c.get("captured_at")))
         self.activity = sorted(activity, key=lambda a: parse_ts(a.get("ts")))
+        # Index both streams by session_id ONCE, walking the already-sorted lists so
+        # each per-session bucket keeps the Ledger's oldest→newest order (callers rely
+        # on cps[-1] == newest). This turns _cps/_acts from an O(total-records) full
+        # scan — run hundreds of times per /api/state poll (status_board, live_sessions,
+        # working_now, build_tasks all re-scan per session) — into an O(1) dict lookup,
+        # which is what keeps a second producer's added records from multiplying the
+        # poll cost by (sessions × records) instead of just adding to it.
+        self._cps_by_sid = defaultdict(list)
+        self._acts_by_sid = defaultdict(list)
+        for c in self.checkpoints:
+            sid = c.get("session_id")
+            if sid is not None:
+                self._cps_by_sid[sid].append(c)
+        for a in self.activity:
+            sid = a.get("session_id")
+            if sid is not None:
+                self._acts_by_sid[sid].append(a)
 
     @classmethod
     def from_dir(cls, agentlog_dir=None):
@@ -177,11 +215,18 @@ class Ledger:
                 ids.append(sid)
         return ids
 
+    # _cps/_acts hand back the per-session bucket built in __init__ (oldest→newest,
+    # same contents the old full scan produced). The returned list is the internal
+    # index bucket, not a copy — every caller treats it as read-only (iteration,
+    # len(), [-1]/[0]); none mutate it. A record with no session_id is absent from
+    # both indexes, exactly as the old `== sid` filter excluded it. An unknown sid
+    # returns [] WITHOUT inserting a key (we read `.get`, not the defaultdict's
+    # __getitem__, so a stray lookup can't grow the index).
     def _cps(self, sid):
-        return [c for c in self.checkpoints if c.get("session_id") == sid]
+        return self._cps_by_sid.get(sid, [])
 
     def _acts(self, sid):
-        return [a for a in self.activity if a.get("session_id") == sid]
+        return self._acts_by_sid.get(sid, [])
 
     def project_of(self, sid):
         cps = self._cps(sid)
@@ -197,9 +242,23 @@ class Ledger:
         """Set of item_ids that have a `human_ack` record. The Needs-Matt band is
         filtered against this so an ask answered two turns later stops shouting —
         ack-by-id (§4), NOT a since-cursor high-water mark (which must never be able
-        to bury an unacked needs-Matt item)."""
-        return {a.get("item_id") for a in self.activity
+        to bury an unacked needs-Matt item).
+
+        Memoized over the immutable activity stream: session_state recomputes this
+        (a full-activity scan) once per session_state call — several per terminal per
+        poll — so caching the one set it always yields turns O(terminals × activity)
+        back into O(activity) once. Pure over self.activity, which never changes after
+        __init__, so the cache is always correct."""
+        memo = getattr(self, "_acked_ids_memo", None)
+        if memo is not None:
+            return memo
+        memo = {a.get("item_id") for a in self.activity
                 if a.get("type") == "human_ack" and a.get("item_id")}
+        try:
+            self._acked_ids_memo = memo
+        except Exception:
+            pass
+        return memo
 
     # ---- per-session derived state ----
     def session_state(self, sid, now_epoch=None, stale_turns=3, idle_secs=86400, acked=None):

@@ -567,5 +567,65 @@ class TestProviderIcons(_Server):
             self.assertEqual(st, 200, "mask-image asset %s should serve 200 (got %d)" % (ref, st))
 
 
+# --------------------------------------------------------------------------- #
+# V1 — conditional /api/state: ETag + If-None-Match -> 304 when nothing changed,
+# 200 + fresh ETag when the ledger changes. The 304 lets the client skip a full
+# parse + re-render on idle polls WITHOUT ever freezing freshness (any change to
+# the payload — including a freshness tick — flips the ETag).
+# --------------------------------------------------------------------------- #
+class TestStateConditional(_Server):
+    def _get_with(self, path, headers):
+        url = "http://127.0.0.1:%d%s" % (self.port, path)
+        req = urllib.request.Request(url, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=5) as r:
+                return r.status, dict(r.headers), r.read().decode("utf-8")
+        except urllib.error.HTTPError as e:
+            return e.code, dict(e.headers), e.read().decode("utf-8")
+
+    def test_state_carries_an_etag(self):
+        status, headers, _ = self._get("/api/state")
+        self.assertEqual(status, 200)
+        self.assertTrue(headers.get("ETag"), "/api/state must carry an ETag")
+
+    def test_matching_if_none_match_yields_304_no_body(self):
+        # first poll -> 200 + ETag; immediate second poll with that ETag -> 304 (the
+        # ledger is unchanged and we're inside the same minute, so the payload-minus-
+        # generatedAt is byte-identical).
+        _, headers, _ = self._get("/api/state")
+        etag = headers.get("ETag")
+        status, h2, body = self._get_with("/api/state", {"If-None-Match": etag})
+        self.assertEqual(status, 304)
+        self.assertEqual(body, "")                       # 304 carries no body
+        self.assertEqual(h2.get("ETag"), etag)           # echoes the validator
+
+    def test_changed_ledger_busts_the_etag(self):
+        _, headers, _ = self._get("/api/state")
+        etag = headers.get("ETag")
+        # append a NEW live session -> the derived terminals change -> ETag must differ
+        # and a conditional GET must now return 200 with a body, not 304.
+        fresh = A.now_iso()
+        with open(os.path.join(self.tmp, "checkpoints.jsonl"), "a", encoding="utf-8") as f:
+            f.write(json.dumps(_cp("live2", fresh, project="Second")) + "\n")
+        with open(os.path.join(self.tmp, "activity.jsonl"), "a", encoding="utf-8") as f:
+            f.write(json.dumps(_act("live2", fresh)) + "\n")
+        status, h2, body = self._get_with("/api/state", {"If-None-Match": etag})
+        self.assertEqual(status, 200)
+        self.assertNotEqual(h2.get("ETag"), etag)
+        self.assertIn("Second", body)                    # the new lane is in the payload
+
+    def test_etag_is_stable_across_idle_polls_despite_generatedat(self):
+        # two un-conditional polls return DIFFERENT generatedAt but the SAME ETag —
+        # proving generatedAt is excluded from the validator (else 304 could never fire).
+        _, h1, b1 = self._get("/api/state")
+        _, h2, b2 = self._get("/api/state")
+        self.assertEqual(h1.get("ETag"), h2.get("ETag"))
+        # sanity: the bodies really do differ (generatedAt ticked) so the equal ETag is
+        # meaningful, not a coincidence of identical payloads.
+        ga1 = json.loads(b1)["generatedAt"]
+        ga2 = json.loads(b2)["generatedAt"]
+        self.assertTrue(ga1 and ga2)
+
+
 if __name__ == "__main__":
     unittest.main()

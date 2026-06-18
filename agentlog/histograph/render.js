@@ -559,45 +559,141 @@ function renderColdState(ledger, onChangeLedger) {
  * opts.time is the board clock (HH:MM) the controller derives from generatedAt.
  * opts.ledger / opts.onChangeLedger drive the cold-state diagnostic (see renderColdState).
  */
-export function renderTriage(mountEl, terminals, opts = {}) {
-  clear(mountEl);
-  const list = Array.isArray(terminals) ? terminals : [];
+// the first child of `parent` whose class list includes `cls`, else null. Portable
+// across the real DOM and the headless test stub (both expose `className`).
+function childByClass(parent, cls) {
+  for (const c of parent.children || []) {
+    const cn = c.className || (c.getAttribute && c.getAttribute("class")) || "";
+    if (typeof cn === "string" && cn.split(/\s+/).indexOf(cls) !== -1) return c;
+  }
+  return null;
+}
 
+function buildTriageHead(needs, running, time) {
+  const head = el("div", { class: "hg-terms__head" },
+    el("span", { class: "hg-terms__label", text: "terminals" }));
+  if (needs) head.append(el("span", { class: "hg-terms__stat hg-terms__stat--attn", text: `· ${needs} need you` }));
+  if (running) head.append(el("span", { class: "hg-terms__stat hg-terms__stat--run", text: `· ${running} running` }));
+  if (time) head.append(el("span", { class: "hg-terms__time", text: time }));
+  return head;
+}
+
+// A per-lane content signature. The row is a pure function of its `term` (the opts
+// callbacks are stable across polls), so JSON of the term is a COMPLETE validator —
+// any field the row paints changing flips it, and nothing else does. Used to decide
+// whether to reuse a lane's existing DOM node or rebuild just that one.
+function triageRowSig(t) {
+  try { return JSON.stringify(t); } catch { return String(t && t.id); }
+}
+
+/**
+ * Draw the fleet switcher via a KEYED RECONCILE rather than a clear()+rebuild. The
+ * old path recreated every lane node (and its listeners) on every poll, which also
+ * reset the lane list's scroll position and any hover state. Now: the header updates
+ * in place, an UNCHANGED lane keeps its exact DOM node (and listeners), only a lane
+ * whose content changed is rebuilt, and adds/removes/reorders touch just those lanes.
+ * The body element itself persists, so the reader's scroll position survives.
+ */
+export function renderTriage(mountEl, terminals, opts = {}) {
+  const list = Array.isArray(terminals) ? terminals : [];
   const needs = list.filter(isNeedsYou).length;
   const running = list.filter((t) => t.status === "active" && !isNeedsYou(t)).length;
+  const headSig = `${needs}|${running}|${opts.time || ""}`;
 
-  const head = el(
-    "div",
-    { class: "hg-terms__head" },
-    el("span", { class: "hg-terms__label", text: "terminals" })
-  );
-  if (needs) {
-    head.append(el("span", { class: "hg-terms__stat hg-terms__stat--attn", text: `· ${needs} need you` }));
+  // ---- header: reuse if unchanged, else swap in place (never disturbs the body) ----
+  let head = childByClass(mountEl, "hg-terms__head");
+  if (!head) {
+    head = buildTriageHead(needs, running, opts.time);
+    head.setAttribute("data-sig", headSig);
+    mountEl.append(head); // first build on an empty mount → head lands first
+  } else if (head.getAttribute("data-sig") !== headSig) {
+    const fresh = buildTriageHead(needs, running, opts.time);
+    fresh.setAttribute("data-sig", headSig);
+    mountEl.insertBefore(fresh, head);
+    mountEl.removeChild(head);
+    head = fresh;
   }
-  if (running) {
-    head.append(el("span", { class: "hg-terms__stat hg-terms__stat--run", text: `· ${running} running` }));
-  }
-  if (opts.time) head.append(el("span", { class: "hg-terms__time", text: opts.time }));
-  mountEl.append(head);
 
+  // ---- cold / no lanes: drop the body, show the calm/diagnostic empty state ----
   if (list.length === 0) {
-    // cold / no lanes — calm "agents are quiet", or an actionable diagnostic when the
-    // ledger we're reading is empty/missing (the wrong-folder failure mode).
-    mountEl.append(renderColdState(opts.ledger, opts.onChangeLedger));
+    const body = childByClass(mountEl, "hg-terms__scroll");
+    if (body) mountEl.removeChild(body);
+    // rebuild the cold state only if it isn't already present (rare transition; the
+    // empty board's polls 304 so this doesn't run on a loop).
+    const hasCold = (mountEl.children || []).some((c) => c.tagName === "AE-EMPTY-STATE");
+    if (!hasCold) mountEl.append(renderColdState(opts.ledger, opts.onChangeLedger));
     return;
   }
 
-  // Render in the backend's STABLE creation order (oldest lane first) exactly as
-  // given. We deliberately do NOT float needs-you lanes to the top: any positional
-  // reshuffle reads as confusing churn (the lane you're looking at jumps as another
-  // works). A lane that needs you is surfaced by its status dot, its NEEDS YOU pill,
-  // and the header's "N need you" count — just never by changing position.
-  const body = el("div", {
-    class: "hg-terms__scroll hg-scroll",
-    attrs: { role: "list", "aria-label": `${list.length} terminal${list.length === 1 ? "" : "s"}` },
-  });
-  for (const t of list) body.append(renderTerminalRow(t, opts));
-  mountEl.append(body);
+  // leaving cold → live: clear any lingering empty-state before the lane list.
+  for (const c of Array.from(mountEl.children || [])) {
+    if (c.tagName === "AE-EMPTY-STATE") mountEl.removeChild(c);
+  }
+
+  // ---- body: a height-capped scroll of lanes in the backend's STABLE creation order
+  // (oldest first). We deliberately do NOT float needs-you lanes up — a positional
+  // reshuffle reads as churn; attention is shown by the dot, the NEEDS YOU pill, and
+  // the header count, never by moving a lane. The list persists across renders. ----
+  let body = childByClass(mountEl, "hg-terms__scroll");
+  if (!body) {
+    body = el("div", {
+      class: "hg-terms__scroll hg-scroll",
+      attrs: { role: "list" },
+    });
+    mountEl.append(body);
+  }
+  body.setAttribute("aria-label", `${list.length} terminal${list.length === 1 ? "" : "s"}`);
+  reconcileLaneRows(body, list, opts);
+}
+
+// Generic keyed reconcile: bring `parent`'s children into line with `desired` (a list
+// of {key, sig, build}). A child whose (key, sig) is unchanged keeps its exact DOM
+// node — and its listeners + hover/focus/scroll state; only a changed or new one is
+// built (via `build`); the rest are moved/removed to match `desired` order. Nodes are
+// tagged data-rk (key) + data-rs (sig) so the NEXT call can find and diff them. The
+// first build (empty parent) takes an append-only path, so the headless single-render
+// tests never touch insertBefore. Shared by the fleet list (V8) and the focus
+// transcript (V11).
+function reconcileKeyed(parent, desired) {
+  const existing = new Map();
+  for (const node of Array.from(parent.children || [])) {
+    const k = node.getAttribute && node.getAttribute("data-rk");
+    if (k != null) existing.set(k, node);
+  }
+  const out = [];
+  for (const spec of desired) {
+    const old = existing.get(spec.key);
+    if (old && old.getAttribute("data-rs") === spec.sig) {
+      existing.delete(spec.key); // reuse — mark as kept
+      out.push(old);
+    } else {
+      const fresh = spec.build();
+      fresh.setAttribute("data-rk", spec.key);
+      fresh.setAttribute("data-rs", spec.sig);
+      out.push(fresh); // a changed node's stale predecessor stays in `existing` → removed below
+    }
+  }
+  // drop children no longer present + the stale nodes of rebuilt entries
+  for (const node of existing.values()) {
+    if (node.parentNode === parent) parent.removeChild(node);
+  }
+  // place `out` in order: already-correct nodes are left alone; the rest are appended
+  // (first build / new tail) or moved into position (reorder/insert).
+  for (let i = 0; i < out.length; i++) {
+    const want = out[i];
+    const have = (parent.children || [])[i];
+    if (have === want) continue;
+    if (have == null) parent.append(want);
+    else parent.insertBefore(want, have);
+  }
+}
+
+// Keyed reconcile of the lane rows into `body` (keyed by terminal id). Reuses an
+// unchanged lane's node (and its listeners); rebuilds only a changed lane.
+function reconcileLaneRows(body, list, opts) {
+  reconcileKeyed(body, list.map((t) => ({
+    key: t.id, sig: triageRowSig(t), build: () => renderTerminalRow(t, opts),
+  })));
 }
 
 // ==========================================================================
@@ -1120,16 +1216,86 @@ function applyScroll(scroll, rail, intent) {
  *   • changed + reader scrolled up             → keep their position
  *   • unchanged (idle)                          → caller skips the rebuild entirely
  */
+// Header signature: every field renderOrient paints EXCEPT activeStory.tasks (those
+// drive the transcript, not the header). Lets the reconcile rebuild the pinned header
+// only when its content actually changed — so the live-edge pulse on the now-dot is
+// NOT restarted on every poll that merely grows the trail.
+function focusHeaderSig(focus) {
+  try {
+    const a = focus.activeStory || {};
+    return JSON.stringify({
+      seam: focus.parkedEpicSeam, epic: focus.epic, stories: focus.stories,
+      workingNow: focus.workingNow,
+      a: { id: a.id, title: a.title, indexLabel: a.indexLabel, startedAt: a.startedAt, nowLine: a.nowLine },
+    });
+  } catch {
+    return "x";
+  }
+}
+
+// The ordered transcript children as reconcile specs, using the SAME head / live-run /
+// pending split the full build uses: head entries, then (while working) the in-flight
+// tool run as one owned "live group", then the trailing pending "next". Each entry is
+// keyed by its task id; the live group is one keyed unit (rebuilt wholesale when its
+// run changes — it's small and a change means new tools).
+function transcriptChildSpecs(focus, tasks) {
+  const head = tasks.slice();
+  const pendingTail = [];
+  while (head.length && head[head.length - 1].kind === "pending") pendingTail.unshift(head.pop());
+  const liveRun = [];
+  if (focus.workingNow) {
+    while (head.length && head[head.length - 1].kind === "activity") liveRun.unshift(head.pop());
+  }
+  const specs = [];
+  for (const t of head) specs.push({ key: "e:" + t.id, sig: JSON.stringify(t), build: () => renderEntry(t) });
+  if (liveRun.length) {
+    specs.push({ key: "__livegroup", sig: JSON.stringify(liveRun), build: () => renderLiveGroup(liveRun) });
+  }
+  for (const t of pendingTail) specs.push({ key: "e:" + t.id, sig: JSON.stringify(t), build: () => renderEntry(t) });
+  return specs;
+}
+
 export function renderFocus(mountEl, focus, opts = {}) {
-  // Capture the prior scroll position BEFORE rebuilding so the auto-scroll policy
+  // Capture the prior scroll position BEFORE any change so the auto-scroll policy
   // can honor it.
-  const prevVp = scrollViewportOf(mountEl.querySelector(".hg-focus__scroll"));
+  const existingScroll = mountEl.querySelector(".hg-focus__scroll");
+  const prevVp = scrollViewportOf(existingScroll);
   let wasAtBottom = true; // first render / no prior scroller → land at the tip
   let prevTop = 0;
   if (prevVp && !opts.fresh) {
     prevTop = prevVp.scrollTop;
     wasAtBottom = prevVp.scrollHeight - prevVp.scrollTop - prevVp.clientHeight <= 10;
   }
+
+  const tasks =
+    focus && focus.activeStory && Array.isArray(focus.activeStory.tasks) ? focus.activeStory.tasks : [];
+
+  // RECONCILE IN PLACE when this is a same-terminal update of a live trail with an
+  // existing pane: keep the ae-scroll-area (so the shadow viewport + scroll geometry
+  // survive), rebuild the header only if it changed, and keyed-reconcile the transcript
+  // entries (reuse unchanged ones, rebuild only the changed tip / live group). The
+  // scroll policy is then applied by the SAME applyScroll call as the full build, so
+  // the hard-won auto-scroll behavior is byte-for-byte unchanged. Everything else
+  // (fresh terminal switch, cold, live-but-empty, first render) takes the full rebuild.
+  const canReconcile =
+    !opts.fresh && !!focus && tasks.length > 0 && !!existingScroll &&
+    !!mountEl.querySelector(".hg-transcript") && !!mountEl.querySelector(".hg-focus__pinned");
+
+  if (canReconcile) {
+    const pinned = mountEl.querySelector(".hg-focus__pinned");
+    const osig = focusHeaderSig(focus);
+    if (pinned.getAttribute("data-osig") !== osig) {
+      clear(pinned);
+      pinned.append(renderOrient(focus));
+      pinned.setAttribute("data-osig", osig);
+    }
+    const transcript = mountEl.querySelector(".hg-transcript");
+    reconcileKeyed(transcript, transcriptChildSpecs(focus, tasks));
+    const follow = opts.fresh || (opts.changed && wasAtBottom);
+    applyScroll(existingScroll, transcript, follow ? "bottom" : prevTop);
+    return;
+  }
+
   // A prior settle loop targets the about-to-be-detached scroll element — stop it
   // before we rebuild so it can't pin (or restore) the new pane out from under us.
   if (cancelScroll) cancelScroll();
@@ -1154,9 +1320,11 @@ export function renderFocus(mountEl, focus, opts = {}) {
     return;
   }
 
-  // pinned orientation header.
+  // pinned orientation header (tagged with its content sig so a later same-terminal
+  // reconcile can tell whether it needs a rebuild).
   const pinned = el("div", { class: "hg-focus__pinned" });
   pinned.append(renderOrient(focus));
+  pinned.setAttribute("data-osig", focusHeaderSig(focus));
   mountEl.append(pinned);
 
   // scrolling transcript — ae-scroll-area for design-system scrollbars + edge fades.
@@ -1166,7 +1334,6 @@ export function renderFocus(mountEl, focus, opts = {}) {
   });
   const region = el("div", { class: "hg-transcript-region" });
 
-  const tasks = focus.activeStory && Array.isArray(focus.activeStory.tasks) ? focus.activeStory.tasks : [];
   if (tasks.length === 0) {
     // live-but-empty — calm, not broken (UX §10.6).
     region.append(
@@ -1187,23 +1354,15 @@ export function renderFocus(mountEl, focus, opts = {}) {
     return;
   }
 
+  // The transcript children are built through the SAME keyed reconcile the in-place
+  // update uses (here against an empty node, so it's a plain ordered build) — this is
+  // what stamps the data-rk/data-rs keys so the next same-terminal poll can reuse these
+  // exact nodes instead of recreating them. transcriptChildSpecs owns the head /
+  // live-group / pending split: the OPEN turn's in-flight tool run renders as one owned
+  // "in progress" group, a bloomed-`live` checkpoint stays a normal entry, and the
+  // trailing pending "next" sorts last.
   const transcript = el("div", { class: "hg-transcript" });
-  // The OPEN turn's in-flight tool calls (the trailing run of `activity` nodes, sitting just
-  // before any pending "next") render as an explicit OWNED group — a pulsing "in progress"
-  // header the tools nest under — instead of loose tail nodes, so it's unambiguous which task
-  // owns them while the turn is still open. Only while the lane is working (focus.workingNow);
-  // an idle leftover tool run is just history and renders inline as before. A bloomed-`live`
-  // checkpoint is kind "live" (not "activity"), so it stays a normal entry — no false group.
-  const head = tasks.slice();
-  const pendingTail = [];
-  while (head.length && head[head.length - 1].kind === "pending") pendingTail.unshift(head.pop());
-  const liveRun = [];
-  if (focus.workingNow) {
-    while (head.length && head[head.length - 1].kind === "activity") liveRun.unshift(head.pop());
-  }
-  for (const t of head) transcript.append(renderEntry(t));
-  if (liveRun.length) transcript.append(renderLiveGroup(liveRun));
-  for (const t of pendingTail) transcript.append(renderEntry(t));
+  reconcileKeyed(transcript, transcriptChildSpecs(focus, tasks));
   region.append(transcript);
   scroll.append(region);
   mountEl.append(scroll);

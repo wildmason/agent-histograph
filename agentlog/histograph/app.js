@@ -41,6 +41,11 @@ const els = {
 
 // last good state, so a transient fetch failure doesn't blank the screen.
 let lastState = null;
+// the ETag of the last /api/state body we painted. Sent back as If-None-Match so the
+// server can answer 304 (identical board) and we skip the parse + full re-render. The
+// server excludes generatedAt from the validator, so a 304 only ever means "nothing
+// meaningful changed" — freshness ticks flip the ETag and come back as a 200.
+let lastEtag = null;
 let pollTimer = null;
 let polling = false;
 let inFlight = false;
@@ -211,7 +216,17 @@ async function fetchState({ allowOverlap = false } = {}) {
   const seq = ++stateRequestSeq;
   if (!allowOverlap) inFlight = true;
   try {
-    const res = await fetch(STATE_URL, { headers: { accept: "application/json" } });
+    const headers = { accept: "application/json" };
+    if (lastEtag) headers["if-none-match"] = lastEtag;
+    const res = await fetch(STATE_URL, { headers });
+    // 304 Not Modified: the board is byte-identical to what we last painted (only the
+    // excluded generatedAt could have changed). Skip the JSON parse AND the full
+    // re-render — this is the dominant idle-poll saving. (304 is NOT res.ok, so it
+    // must be handled before the throw below.)
+    if (res.status === 304) {
+      showConnTrouble(false);
+      return true;
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const state = await res.json();
     // Mutation-triggered refreshes may intentionally overlap an older poll. If the
@@ -219,6 +234,9 @@ async function fetchState({ allowOverlap = false } = {}) {
     // mutation response.
     if (seq < latestPaintedStateSeq) return true;
     latestPaintedStateSeq = seq;
+    // adopt this body's validator only when we actually paint it, so lastEtag always
+    // matches the on-screen board (a discarded stale overlap must not set it).
+    lastEtag = res.headers.get("ETag") || lastEtag;
     showConnTrouble(false);
     paint(state);
     return true;
@@ -275,10 +293,15 @@ function stopPolling() {
 // Desktop host is detected via the injected global (withGlobalTauri).
 const IS_DESKTOP = typeof window !== "undefined" && !!window.__TAURI__;
 document.addEventListener("visibilitychange", () => {
+  const root = document.documentElement;
   if (!document.hidden) {
+    if (root) root.classList.remove("hg-anim-paused"); // resume the live-edge pulse
     startPolling(); // visible (or back in view): ensure polling + immediate fetch
   } else if (!IS_DESKTOP) {
-    stopPolling(); // browser tab hidden: pause to save work
+    // browser tab hidden: pause polling AND the GPU pulse animations (no point
+    // compositing a ring nobody can see). The desktop companion skips this.
+    if (root) root.classList.add("hg-anim-paused");
+    stopPolling();
   }
   // desktop + hidden (covered/minimized): keep polling — it's a pinned companion
 });
@@ -343,18 +366,14 @@ async function requestAnnotate(terminalId, annotationText) {
       body: JSON.stringify({ terminalId, annotation }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const saved = await res.json().catch(() => null);
-    if (saved && typeof saved.annotation === "string") {
-      pendingAnnotations.set(terminalId, {
-        text: saved.annotation.replace(/\s+/g, " ").trim(),
-        seq: mutationSeq,
-      });
-    }
-    await fetchState({ allowOverlap: true });
+    await res.json().catch(() => null); // drain the body; the value rides /api/state
+    // The POST has persisted, so /api/state now carries the authoritative annotation.
+    // Drop the optimistic overlay BEFORE the refetch so a SINGLE refetch paints the
+    // backend's value directly — the old code fetched twice (once with the overlay,
+    // once after clearing it), doubling the work for no extra confirmation.
     if ((pendingAnnotations.get(terminalId) || {}).seq === mutationSeq) {
       pendingAnnotations.delete(terminalId);
     }
-    // Confirm what the backend actually rehydrates without the optimistic overlay.
     await fetchState({ allowOverlap: true });
   } catch {
     if ((pendingAnnotations.get(terminalId) || {}).seq === mutationSeq) {

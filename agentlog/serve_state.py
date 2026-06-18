@@ -201,19 +201,56 @@ def status_line(sess_state):
 # --------------------------------------------------------------------------- #
 # story identity + state
 # --------------------------------------------------------------------------- #
+def _ledger_cache(ledger, name):
+    """A per-Ledger memo dict, created lazily on the Ledger instance. Scoped to the
+    Ledger's life, so it is valid exactly as long as the parsed data is: a new poll
+    that re-parses gets fresh caches, and the V1 Ledger cache (reused while the ledger
+    FILES are unchanged) correctly reuses these too — story ids and branches can't
+    drift without a ledger change. Returns None if `ledger` can't hold attributes."""
+    try:
+        c = getattr(ledger, name, None)
+        if c is None:
+            c = {}
+            setattr(ledger, name, c)
+        return c
+    except Exception:
+        return None
+
+
+def _branch_for(ledger, cwd):
+    """R.A.git_branch(cwd) memoized for the life of this Ledger. Branch resolution
+    reads .git/HEAD (a handful of filesystem stats, walking up to 6 levels) and
+    story_id_for is evaluated once per terminal AND once per session inside the story
+    index — so without a cache the same cwd is resolved dozens of times per poll. ''
+    for a falsy cwd, exactly as the inline `if cwd else ''` did."""
+    if not cwd:
+        return ""
+    cache = _ledger_cache(ledger, "_branch_memo")
+    if cache is None:
+        return R.A.git_branch(cwd)
+    if cwd not in cache:
+        cache[cwd] = R.A.git_branch(cwd)
+    return cache[cwd]
+
+
 def story_id_for(ledger, sid):
     """Stable slug for the story a session is working — the link target an epic
     references. Derived from (project, branch, cwd-leaf) so the same workstream
-    keeps the same id across sessions/restarts. Deterministic."""
+    keeps the same id across sessions/restarts. Deterministic; memoized per Ledger
+    (the value cannot change for a fixed parse, and it is recomputed per terminal +
+    once per session in the story index, so caching collapses that to one per sid)."""
     if sid is None:
         return None
+    memo = _ledger_cache(ledger, "_story_id_memo")
+    if memo is not None and sid in memo:
+        return memo[sid]
     try:
         project = ledger.project_of(sid) or "?"
         cps = ledger._cps(sid)
         acts = ledger._acts(sid)
         src = (cps[-1] if cps else None) or (acts[-1] if acts else {}) or {}
         cwd = src.get("cwd") or ""
-        branch = R.A.git_branch(cwd) if cwd else ""
+        branch = _branch_for(ledger, cwd)
         leaf = os.path.basename(cwd.rstrip("\\/")) if cwd else ""
     except Exception:
         project, branch, leaf = (sid or "?"), "", ""
@@ -221,22 +258,44 @@ def story_id_for(ledger, sid):
     slug = "".join(c.lower() if c.isalnum() else "-" for c in raw).strip("-")
     while "--" in slug:
         slug = slug.replace("--", "-")
-    return "st-" + (slug or "x")
+    story_id = "st-" + (slug or "x")
+    if memo is not None:
+        memo[sid] = story_id
+    return story_id
+
+
+def _story_sids_index(ledger):
+    """story_id -> [sids] for every session, built ONCE per Ledger and cached. This
+    replaces the O(sessions) rescan inside _sessions_for_story — which was itself
+    called per-story per-epic from roadmap_progress/story_state, making the old cost
+    O(stories × sessions) branch resolutions per poll. Buckets keep session_ids()
+    order (the order _sessions_for_story produced). A sid whose story_id_for raises is
+    skipped, mirroring the old per-sid try/except."""
+    idx = getattr(ledger, "_story_sids_memo", None)
+    if idx is not None:
+        return idx
+    idx = {}
+    for sid in ledger.session_ids():
+        try:
+            st = story_id_for(ledger, sid)
+        except Exception:
+            continue
+        if st:
+            idx.setdefault(st, []).append(sid)
+    try:
+        ledger._story_sids_memo = idx
+    except Exception:
+        pass
+    return idx
 
 
 def _sessions_for_story(ledger, story_id):
-    """All live session ids whose story_id_for == story_id (a workstream can span
-    several sessions that share project|branch|cwd-leaf). Empty when none map."""
+    """All session ids whose story_id_for == story_id (a workstream can span several
+    sessions that share project|branch|cwd-leaf). Empty when none map. Returns a fresh
+    list (a copy of the cached index bucket) so a caller can't mutate the index."""
     if not story_id:
         return []
-    out = []
-    for sid in ledger.session_ids():
-        try:
-            if story_id_for(ledger, sid) == story_id:
-                out.append(sid)
-        except Exception:
-            continue
-    return out
+    return list(_story_sids_index(ledger).get(story_id, []))
 
 
 def _session_for_story(ledger, story_id):
@@ -928,7 +987,20 @@ def session_has_substance(ledger, sid):
     boundaries + an invalid 'no work progressed' checkpoint — e.g. a scheduled task
     that 529'd from C:\\WINDOWS\\system32 before doing anything — has no substance and
     must not render as a lane (or become the focus). Fail-open to True: a read error
-    must never silently hide a real lane."""
+    must never silently hide a real lane.
+
+    Memoized per Ledger (pure over the session's records, now-independent): live_sessions
+    evaluates it for every session each poll."""
+    memo = _ledger_cache(ledger, "_substance_memo")
+    if memo is not None and sid in memo:
+        return memo[sid]
+    result = _session_has_substance_uncached(ledger, sid)
+    if memo is not None:
+        memo[sid] = result
+    return result
+
+
+def _session_has_substance_uncached(ledger, sid):
     try:
         cps = ledger._cps(sid)
     except Exception:
@@ -947,7 +1019,14 @@ def last_work_ts(ledger, sid):
     """Newest timestamp of REAL work for a session — tool_use, stop_boundary, any
     non-meta activity, or a checkpoint. Excludes lifecycle/meta records (session_end,
     capture_*, suspected_gap) so closing a session (which writes a session_end at
-    ≈now) can't masquerade as fresh activity. Fail-open to 0.0."""
+    ≈now) can't masquerade as fresh activity. Fail-open to 0.0.
+
+    Memoized per Ledger (now-independent, pure over the session's records): it is
+    recomputed ~3× per session per poll (live_sessions, session_ended_at, and the
+    freshness override in _build_terminal)."""
+    memo = _ledger_cache(ledger, "_last_work_memo")
+    if memo is not None and sid in memo:
+        return memo[sid]
     ts = 0.0
     try:
         for a in ledger._acts(sid):
@@ -961,6 +1040,8 @@ def last_work_ts(ledger, sid):
                 ts = max(ts, R.parse_ts(c.get("captured_at")))
     except Exception:
         pass
+    if memo is not None:
+        memo[sid] = ts
     return ts
 
 
@@ -971,7 +1052,12 @@ def first_work_ts(ledger, sid):
     the terminals list a fixed creation order instead of reshuffling on every action.
     Skips falsy/unparseable timestamps so one bad record can't pin the key to epoch-0.
     Fail-open to 0.0 (only when a session truly has no parseable work — never for a live
-    lane, which by definition has a positive last_work_ts)."""
+    lane, which by definition has a positive last_work_ts).
+
+    Memoized per Ledger (now-independent): live_sessions sorts on it every poll."""
+    memo = _ledger_cache(ledger, "_first_work_memo")
+    if memo is not None and sid in memo:
+        return memo[sid]
     ts = None
     try:
         for a in ledger._acts(sid):
@@ -989,7 +1075,10 @@ def first_work_ts(ledger, sid):
                     ts = t
     except Exception:
         pass
-    return ts if ts is not None else 0.0
+    result = ts if ts is not None else 0.0
+    if memo is not None:
+        memo[sid] = result
+    return result
 
 
 def session_ended_at(ledger, sid):
