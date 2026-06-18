@@ -35,6 +35,9 @@ SEEN_HASH_LIMIT = 20000
 HEARTBEAT_SECS = 10
 STALE_LOCK_SECS = 60
 _last_heartbeat = 0.0
+# The lock fd held by an in-process (start_in_thread) watcher, so a clean shutdown
+# (atexit) and the tests can release it. None when no in-process watcher is running.
+_lock_fd = None
 
 
 def _default_lock_path():
@@ -484,6 +487,41 @@ def process_line(session_id, line, state=None):
             "captured_at": ts,
             "_valid": True,
         })
+
+
+def start_in_thread():
+    """Auto-start the watcher in a background DAEMON thread, single-instance. Returns
+    the Thread if it started, or None if another live watcher already holds the lock —
+    so the board's `serve` process can call this unconditionally on startup and a
+    SECOND board won't double-capture (the duplicate-watcher class of bug). This is the
+    auto-launch path Gemini lacked: Claude rides lifecycle hooks and Codex a
+    SessionStart-spawned watcher, but Antigravity has no hook surface, so the board's
+    long-lived serve process owns the tail. The thread is a daemon (dies with the host
+    process); a clean shutdown releases the lock via atexit, a hard kill is recovered by
+    the heartbeat-stale reclaim. Fail-open: any error returns None rather than raising
+    into the board's startup path."""
+    try:
+        fd = acquire_lock()
+    except Exception as e:
+        A.log("gemini_watcher start_in_thread acquire error: %r" % e)
+        return None
+    if fd is None:
+        return None  # another live watcher owns the lock — don't double-capture
+    import atexit
+    import threading
+    global _lock_fd
+    _lock_fd = fd
+    atexit.register(release_lock, fd)
+
+    def _run():
+        try:
+            watch_transcripts()
+        except Exception as e:
+            A.log("gemini_watcher thread crashed: %r" % e)
+
+    t = threading.Thread(target=_run, name="gemini-watcher", daemon=True)
+    t.start()
+    return t
 
 
 def watch_transcripts():

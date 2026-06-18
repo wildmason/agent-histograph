@@ -25,11 +25,19 @@ it. The research/gate/audit apparatus is intentionally left out.
 
 Three layers, one data source:
 
-1. **Capture** — Claude Code lifecycle hooks (`capture-proof/`) append your
-   session activity + decision checkpoints to `~/.agent-histograph/*.jsonl`.
+1. **Capture** — each agent appends its activity + decision checkpoints to
+   `~/.agent-histograph/*.jsonl` (one per-host file per provider, unioned at read):
+   - **Claude Code** — lifecycle hooks (`capture-proof/`), fired by Claude Code.
+   - **Codex** — lifecycle hooks plus a SessionStart-spawned process watcher.
+   - **Gemini (Antigravity CLI)** — has no hook surface, so a standalone tailer
+     (`capture-proof/gemini_watcher.py`) reads `~/.gemini/antigravity-cli/brain/*/
+     .system_generated/logs/transcript.jsonl` and mirrors it. The board's `serve`
+     process **auto-starts this watcher** (single-instance), so Gemini lanes appear
+     with no extra step — see *Gemini capture* below.
 2. **Serve** — a tiny Python stdlib HTTP server (`agentlog/agentlog.py serve`)
    re-reads that ledger on every request and derives the board state. All logic
-   lives here; it is the single source of truth.
+   lives here; it is the single source of truth. It also auto-starts the Gemini
+   watcher in a daemon thread (disable with `--no-gemini-watch`).
 3. **View** — the desktop app (`agentlog/desktop/`) is a frameless Tauri 2
    window. It does **not** bundle a frontend: on launch it spawns
    `agentlog.py serve --port 0 --no-browser` as a managed child, parses the
@@ -147,6 +155,29 @@ blank.
 
 A built/installed app can't see this source tree, so set `AGENTLOG_HOME` (and
 ensure Python is on PATH, or set `AGENTLOG_PYTHON`) on the machine you install on.
+
+### Gemini capture
+
+Gemini (the Antigravity CLI) has no lifecycle-hook surface, so capture rides a
+standalone tailer, `capture-proof/gemini_watcher.py`, that reads Gemini's transcripts
+under `~/.gemini/antigravity-cli/brain/*/.system_generated/logs/transcript.jsonl` and
+writes `activity.gemini.jsonl` / `checkpoints.gemini.jsonl` into your `AGENTLOG_DIR`.
+
+You normally don't start it yourself: **`agentlog serve` auto-starts it** in a
+single-instance daemon thread on launch (so it runs whenever the board is up, and the
+desktop app gets it for free). The single-instance lock is machine-global with a
+heartbeat — running two boards never produces two watchers (the duplicate-replay bug
+that once bloated the ledger), and a crashed/killed watcher is reclaimed automatically.
+
+- Opt out: `agentlog serve --no-gemini-watch`.
+- Run it standalone (e.g. you view the board in a browser without `serve`, or want it
+  decoupled from the board's lifetime): `python capture-proof/gemini_watcher.py` and
+  leave it running. The same lock means this and the serve-managed thread can't both
+  capture at once.
+
+Maintenance: if a ledger ever accumulates duplicate residue,
+`python agentlog/compact_ledger.py <dir>` reports a lossless de-dup (add `--apply` to
+rewrite in place after backing the files up).
 
 ## What's included / not
 

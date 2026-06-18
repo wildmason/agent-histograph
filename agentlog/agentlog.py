@@ -41,7 +41,21 @@ def _fmt_ts(epoch):
 def cmd_serve(args):
     """Start the histograph: a local HTTP server that renders the live workstream
     board. Reuses the read surface verbatim (every request re-reads
-    ~/.agent-histograph/*.jsonl); ALL derivation lives in serve_state, so this is just I/O."""
+    ~/.agent-histograph/*.jsonl); ALL derivation lives in serve_state, so this is just I/O.
+
+    Also auto-starts the Gemini transcript watcher in a single-instance daemon thread
+    (unless --no-gemini-watch): Claude rides Claude Code's lifecycle hooks and Codex a
+    SessionStart-spawned watcher, but Antigravity (Gemini CLI) has no hook surface, so
+    the board's long-lived serve process is what tails ~/.gemini and mirrors that
+    activity onto the board. The hardened single-instance lock means a second board
+    won't double-capture; it's fail-open so a watcher hiccup never blocks the board."""
+    if not args.no_gemini_watch:
+        try:
+            import gemini_watcher as GW  # capture-proof/ is on sys.path via the serve_* imports
+            if GW.start_in_thread() is not None:
+                print("agentlog histograph: Gemini transcript watcher started")
+        except Exception:
+            pass  # best-effort capture must never block the board's serve startup
     return SH.run_server(port=args.port, host=args.host,
                          open_browser=not args.no_browser)
 
@@ -116,6 +130,9 @@ def build_parser():
     s.add_argument("--port", type=int, default=8080, help="port to bind (default 8080; 0 = ephemeral)")
     s.add_argument("--host", default="127.0.0.1", help="host/interface to bind (default 127.0.0.1)")
     s.add_argument("--no-browser", action="store_true", help="don't auto-open the browser")
+    s.add_argument("--no-gemini-watch", action="store_true",
+                   help="don't auto-start the Gemini transcript watcher (it tails "
+                        "~/.gemini and mirrors Antigravity activity onto the board)")
     s.set_defaults(func=cmd_serve)
 
     s = sub.add_parser("epic", help="manage epics (story groupings that give the histograph a roadmap)")

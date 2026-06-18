@@ -237,5 +237,64 @@ class TestWatcherLock(unittest.TestCase):
                          "lock must be independent of the ledger dir")
 
 
+# --------------------------------------------------------------------------- #
+# start_in_thread — the in-process daemon-thread launch the board's `serve`
+# process uses to auto-start Gemini capture (the missing auto-launch path). It
+# must be single-instance (the hardened lock gates it: a second board's serve
+# can't double-capture) and fail-open (a startup error must never crash the board).
+# --------------------------------------------------------------------------- #
+class TestStartInThread(unittest.TestCase):
+    def setUp(self):
+        self.td = tempfile.TemporaryDirectory()
+        self.tmp = self.td.name
+        self._old_lock = G.LOCK_FILE
+        self._old_state_dir = A.STATE_DIR
+        self._old_hb = G._last_heartbeat
+        self._old_watch = G.watch_transcripts
+        A.STATE_DIR = os.path.join(self.tmp, "state")
+        G.LOCK_FILE = os.path.join(self.tmp, "gemini_watcher.lock")
+        G._last_heartbeat = 0.0
+        # don't run the real infinite tail loop in a test — stub it to return at once
+        # so the started daemon thread exits immediately (the lock stays held until the
+        # registered release, exactly as in the live process).
+        G.watch_transcripts = lambda: None
+        A._ensure_dirs()
+
+    def tearDown(self):
+        G.watch_transcripts = self._old_watch
+        # release the in-process lock fd start_in_thread held open (Windows can't
+        # delete an open file, so this must precede the temp-dir cleanup).
+        if G._lock_fd is not None:
+            G.release_lock(G._lock_fd)
+            G._lock_fd = None
+        try:
+            if os.path.exists(G.LOCK_FILE):
+                os.remove(G.LOCK_FILE)
+        except Exception:
+            pass
+        G.LOCK_FILE = self._old_lock
+        A.STATE_DIR = self._old_state_dir
+        G._last_heartbeat = self._old_hb
+        self.td.cleanup()
+
+    def test_starts_one_thread_and_blocks_a_second(self):
+        t1 = G.start_in_thread()
+        self.assertIsNotNone(t1, "first start must launch the watcher thread")
+        self.assertTrue(os.path.exists(G.LOCK_FILE))   # it took the lock
+        t1.join(timeout=2)                              # the stubbed loop returns at once
+        # a SECOND start (the lock is still held by this process) must NOT start a
+        # duplicate — this is what makes auto-start-from-serve safe for two boards.
+        t2 = G.start_in_thread()
+        self.assertIsNone(t2, "a second start must back off while the lock is held")
+
+    def test_fail_open_when_acquire_raises(self):
+        saved = G.acquire_lock
+        G.acquire_lock = lambda: (_ for _ in ()).throw(RuntimeError("boom"))
+        try:
+            self.assertIsNone(G.start_in_thread(), "a startup error must degrade to None, not raise")
+        finally:
+            G.acquire_lock = saved
+
+
 if __name__ == "__main__":
     unittest.main()
