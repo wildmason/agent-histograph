@@ -14,11 +14,16 @@ Installed-but-un-armed they only passively log activity; installing this cannot
 disrupt your normal sessions. `AGENTLOG_DISABLE=1` no-ops everything.
 
 Usage:
-  python install_hooks.py                  # merge into ~/.claude/settings.json
+  python install_hooks.py                  # Claude Code -> ~/.claude/settings.json
+  python install_hooks.py --codex          # Codex       -> ~/.codex/hooks.json
   python install_hooks.py --project        # merge into ./.claude/settings.json (this repo/cwd)
   python install_hooks.py --settings PATH  # merge into an explicit settings.json
   python install_hooks.py --print          # show what would be written, change nothing
-  python install_hooks.py --uninstall      # remove the agent-histograph hooks
+  python install_hooks.py --uninstall      # remove the hooks (add --codex to target Codex)
+
+Run it for whichever agents you use — Claude and/or `--codex`; Gemini needs nothing
+(the board's `agentlog serve` auto-starts its watcher). Paths are resolved from this
+checkout, so no machine-specific editing is ever required.
 
 After installing, ARM capture for the sessions you want on the board:
   PowerShell (persistent):  setx AGENTLOG_CAPTURE_ACTIVE 1   (then open a new terminal)
@@ -45,14 +50,28 @@ HOOK_SPEC = [
     ("PostToolUse", "posttooluse.py", _POSTTOOL_MATCHER, 5),
 ]
 
-# every script we own, so reinstall/uninstall can recognize a prior group of ours
-# regardless of which interpreter path it was written with.
-OUR_SCRIPTS = {script for (_e, script, _m, _t) in HOOK_SPEC}
+# The Codex producer hook spec (-> ~/.codex/hooks.json). Same idempotent merge, but
+# Codex hooks carry a `commandWindows` twin of `command` and key SessionStart/PreCompact
+# on matchers. So one `install_hooks.py --codex` configures Codex with repo-resolved
+# paths too — no hand-edited `codex-hooks.json`.
+CODEX_HOOK_SPEC = [
+    ("SessionStart", "codex_session_start.py", "startup|resume|clear|compact", 10),
+    ("PreToolUse", "codex_pretooluse.py", None, 5),
+    ("PostToolUse", "codex_posttooluse.py", None, 5),
+    ("Stop", "codex_stop_capture.py", None, 15),
+    ("PreCompact", "codex_precompact_marker.py", "manual|auto", 10),
+]
+
+# every script we own (both producers), so reinstall/uninstall can recognize a prior
+# group of ours regardless of which interpreter path it was written with.
+OUR_SCRIPTS = {script for (_e, script, _m, _t) in HOOK_SPEC + CODEX_HOOK_SPEC}
 
 
 def _command(script):
-    """Quoted `"<this python>" "<abs script>"` with forward slashes (Claude Code
-    accepts forward slashes on Windows; quoting tolerates spaces in either path)."""
+    """Quoted `"<this python>" "<abs script>"` with forward slashes (Claude Code and
+    Codex both accept forward slashes on Windows; quoting tolerates spaces in either
+    path). Resolved from THIS file's dir + the running interpreter, so a fresh clone on
+    any machine gets correct absolute paths with no hard-coded user path."""
     py = sys.executable.replace("\\", "/")
     path = os.path.join(HERE, script).replace("\\", "/")
     return '"%s" "%s"' % (py, path)
@@ -68,8 +87,12 @@ def _is_ours(group):
     return False
 
 
-def _build_group(script, matcher, timeout):
-    group = {"hooks": [{"type": "command", "command": _command(script), "timeout": timeout}]}
+def _build_group(script, matcher, timeout, with_windows=False):
+    cmd = _command(script)
+    hook = {"type": "command", "command": cmd, "timeout": timeout}
+    if with_windows:
+        hook["commandWindows"] = cmd   # Codex's hook shape carries an explicit Windows twin
+    group = {"hooks": [hook]}
     if matcher is not None:
         group["matcher"] = matcher
     return group
@@ -90,18 +113,19 @@ def _save(settings_path, data):
         f.write("\n")
 
 
-def _merge(settings, uninstall=False):
+def _merge(settings, spec=HOOK_SPEC, uninstall=False, with_windows=False):
     """Return (settings, added, removed). Idempotent: strips any prior groups of
     ours first (so a reinstall repoints paths cleanly), preserving every other hook,
-    then re-adds unless uninstalling."""
+    then re-adds unless uninstalling. `spec` selects the producer (Claude / Codex);
+    `with_windows` emits Codex's `commandWindows` twin."""
     hooks = settings.setdefault("hooks", {})
     added = removed = 0
-    for event, script, matcher, timeout in HOOK_SPEC:
+    for event, script, matcher, timeout in spec:
         groups = hooks.get(event, [])
         kept = [g for g in groups if not _is_ours(g)]
         removed += len(groups) - len(kept)
         if not uninstall:
-            kept.append(_build_group(script, matcher, timeout))
+            kept.append(_build_group(script, matcher, timeout, with_windows=with_windows))
             added += 1
         if kept:
             hooks[event] = kept
@@ -116,12 +140,17 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="Install/remove the agent-histograph capture hooks.")
     ap.add_argument("--settings", default=None, help="explicit settings.json path")
     ap.add_argument("--project", action="store_true", help="use ./.claude/settings.json instead of the global one")
+    ap.add_argument("--codex", action="store_true",
+                    help="configure the Codex producer (~/.codex/hooks.json) instead of Claude Code")
     ap.add_argument("--uninstall", action="store_true", help="remove the agent-histograph hooks")
     ap.add_argument("--print", dest="dry", action="store_true", help="print the result, write nothing")
     args = ap.parse_args(argv)
 
+    spec = CODEX_HOOK_SPEC if args.codex else HOOK_SPEC
     if args.settings:
         settings_path = os.path.abspath(args.settings)
+    elif args.codex:
+        settings_path = os.path.join(os.path.expanduser("~"), ".codex", "hooks.json")
     elif args.project:
         settings_path = os.path.abspath(os.path.join(".claude", "settings.json"))
     else:
@@ -133,7 +162,8 @@ def main(argv=None):
         print("ERROR reading %s: %s" % (settings_path, e), file=sys.stderr)
         return 1
 
-    settings, added, removed = _merge(settings, uninstall=args.uninstall)
+    settings, added, removed = _merge(settings, spec=spec, uninstall=args.uninstall,
+                                      with_windows=args.codex)
 
     if args.dry:
         print("# would write %s" % settings_path)
@@ -145,14 +175,17 @@ def main(argv=None):
         print("Removed %d agent-histograph hook group(s) from %s" % (removed, settings_path))
         return 0
 
+    agent = "Codex" if args.codex else "Claude Code"
     verb = "Updated" if removed else "Installed"
-    print("%s %d agent-histograph capture hook(s) in %s" % (verb, added, settings_path))
+    print("%s %d agent-histograph %s capture hook(s) in %s" % (verb, added, agent, settings_path))
     print("  scripts: %s" % HERE)
     print("  python:  %s" % sys.executable)
     print("")
-    print("Next: ARM capture, then start/restart Claude Code:")
+    print("Next: ARM capture, then start/restart %s:" % agent)
     print("  PowerShell (persistent):  setx AGENTLOG_CAPTURE_ACTIVE 1   (open a new terminal after)")
     print("  bash (one session):       export AGENTLOG_CAPTURE_ACTIVE=1")
+    if args.codex:
+        print("  Codex also requires approving hooks once with `/hooks` in the TUI.")
     print("Un-armed, the hooks only passively log; AGENTLOG_DISABLE=1 no-ops everything.")
     return 0
 

@@ -9,7 +9,11 @@
 # Idempotent — re-run after any `git pull` / rebuild of aegis-v2.
 set -euo pipefail
 
-AEGIS="${AEGIS_V2_DIR:-/c/Users/Matt/Documents/development/@wildmason/aegis-v2}"
+# Point AEGIS_V2_DIR at your local aegis-v2 checkout. The default assumes it sits
+# beside this repo (../aegis-v2). NOTE: the vendored assets are already committed under
+# histograph/static/aegis/, so adopters do NOT need this script or the Aegis source —
+# it's a maintenance step for re-vendoring after an aegis-v2 change.
+AEGIS="${AEGIS_V2_DIR:-../../aegis-v2}"
 DST="$(cd "$(dirname "$0")" && pwd)/histograph/static/aegis"
 
 [ -f "$AEGIS/src/index.ts" ] || { echo "ERROR: aegis-v2 not found at $AEGIS (set AEGIS_V2_DIR)"; exit 1; }

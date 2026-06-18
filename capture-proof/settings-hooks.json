@@ -1,12 +1,12 @@
 {
-  "_comment": "Merge the 'hooks' block into your Claude Code settings.json (~/.claude/settings.json for global, or .claude/settings.json in a test project). Stop ignores its matcher; PreCompact with no matcher fires for both manual and auto; SessionEnd fires on clear/logout/exit (cannot block); PostToolUse fires on state-changing tools (Edit|Write|MultiEdit|NotebookEdit|Bash|PowerShell) AND observation tools (Read|Grep|Glob|Task|Agent|WebFetch|WebSearch) so the histograph live-activity stream moves during exploration, not just edits — but only MUTATING tools contribute `paths` (a Read/search records a live-stream-only `target`, never a 'touched path', so the §6.3/§6.4 audit signals stay edit-scoped). The hooks only CAPTURE when AGENTLOG_CAPTURE_ACTIVE=1 is set in that session's environment — installed but un-armed they only passively log, so installing this cannot disrupt your normal sessions. AGENTLOG_DISABLE=1 no-ops everything.",
+  "_comment": "PREFERRED: run `python capture-proof/install_hooks.py` — it merges these five Claude Code hooks into your settings.json with the correct absolute paths resolved from your checkout (no editing). This file is a manual-merge REFERENCE: replace /ABSOLUTE/PATH/TO/agent-histograph with your clone's path. Stop ignores its matcher; PreCompact with no matcher fires for both manual and auto; SessionEnd fires on clear/logout/exit (cannot block); PostToolUse fires on state-changing tools (Edit|Write|MultiEdit|NotebookEdit|Bash) AND observation tools (Read|Grep|Glob|Task|Agent|WebFetch|WebSearch) so the histograph live-activity stream moves during exploration, not just edits — but only MUTATING tools contribute `paths` (a Read/search records a live-stream-only `target`, never a 'touched path', so the audit signals stay edit-scoped). The hooks only CAPTURE when AGENTLOG_CAPTURE_ACTIVE=1 is set in that session's environment — installed but un-armed they only passively log, so installing this cannot disrupt your normal sessions. AGENTLOG_DISABLE=1 no-ops everything.",
   "hooks": {
     "SessionStart": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/Matt/Documents/development/@wildmason/control-plane/capture-proof/session_start.py",
+            "command": "python /ABSOLUTE/PATH/TO/agent-histograph/capture-proof/session_start.py",
             "timeout": 10
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/Matt/Documents/development/@wildmason/control-plane/capture-proof/stop_capture.py",
+            "command": "python /ABSOLUTE/PATH/TO/agent-histograph/capture-proof/stop_capture.py",
             "timeout": 15
           }
         ]
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/Matt/Documents/development/@wildmason/control-plane/capture-proof/precompact_marker.py",
+            "command": "python /ABSOLUTE/PATH/TO/agent-histograph/capture-proof/precompact_marker.py",
             "timeout": 10
           }
         ]
@@ -39,7 +39,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/Matt/Documents/development/@wildmason/control-plane/capture-proof/session_end.py",
+            "command": "python /ABSOLUTE/PATH/TO/agent-histograph/capture-proof/session_end.py",
             "timeout": 10
           }
         ]
@@ -51,7 +51,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/Matt/Documents/development/@wildmason/control-plane/capture-proof/posttooluse.py",
+            "command": "python /ABSOLUTE/PATH/TO/agent-histograph/capture-proof/posttooluse.py",
             "timeout": 5
           }
         ]

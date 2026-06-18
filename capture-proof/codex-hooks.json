@@ -6,8 +6,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/Matt/Documents/development/agent-histograph/capture-proof/codex_session_start.py",
-            "commandWindows": "python C:/Users/Matt/Documents/development/agent-histograph/capture-proof/codex_session_start.py",
+            "command": "python /ABSOLUTE/PATH/TO/agent-histograph/capture-proof/codex_session_start.py",
+            "commandWindows": "python /ABSOLUTE/PATH/TO/agent-histograph/capture-proof/codex_session_start.py",
             "timeout": 10
           }
         ]
@@ -18,8 +18,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/Matt/Documents/development/agent-histograph/capture-proof/codex_pretooluse.py",
-            "commandWindows": "python C:/Users/Matt/Documents/development/agent-histograph/capture-proof/codex_pretooluse.py",
+            "command": "python /ABSOLUTE/PATH/TO/agent-histograph/capture-proof/codex_pretooluse.py",
+            "commandWindows": "python /ABSOLUTE/PATH/TO/agent-histograph/capture-proof/codex_pretooluse.py",
             "timeout": 5
           }
         ]
@@ -30,8 +30,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/Matt/Documents/development/agent-histograph/capture-proof/codex_posttooluse.py",
-            "commandWindows": "python C:/Users/Matt/Documents/development/agent-histograph/capture-proof/codex_posttooluse.py",
+            "command": "python /ABSOLUTE/PATH/TO/agent-histograph/capture-proof/codex_posttooluse.py",
+            "commandWindows": "python /ABSOLUTE/PATH/TO/agent-histograph/capture-proof/codex_posttooluse.py",
             "timeout": 5
           }
         ]
@@ -42,8 +42,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/Matt/Documents/development/agent-histograph/capture-proof/codex_stop_capture.py",
-            "commandWindows": "python C:/Users/Matt/Documents/development/agent-histograph/capture-proof/codex_stop_capture.py",
+            "command": "python /ABSOLUTE/PATH/TO/agent-histograph/capture-proof/codex_stop_capture.py",
+            "commandWindows": "python /ABSOLUTE/PATH/TO/agent-histograph/capture-proof/codex_stop_capture.py",
             "timeout": 15
           }
         ]
@@ -55,8 +55,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/Matt/Documents/development/agent-histograph/capture-proof/codex_precompact_marker.py",
-            "commandWindows": "python C:/Users/Matt/Documents/development/agent-histograph/capture-proof/codex_precompact_marker.py",
+            "command": "python /ABSOLUTE/PATH/TO/agent-histograph/capture-proof/codex_precompact_marker.py",
+            "commandWindows": "python /ABSOLUTE/PATH/TO/agent-histograph/capture-proof/codex_precompact_marker.py",
             "timeout": 10
           }
         ]

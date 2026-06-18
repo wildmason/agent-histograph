@@ -36,12 +36,12 @@ globalThis.document = { createElement: (t) => new El(t) };
 // ---- fetch stub ----------------------------------------------------------- //
 let calls = [];
 let infoPayload = {
-  current: "C:\\Users\\Matt\\.agent-histograph",
+  current: "C:\\Users\\dev\\.agent-histograph",
   source: "default",
-  default: "C:\\Users\\Matt\\.agent-histograph",
+  default: "C:\\Users\\dev\\.agent-histograph",
   candidates: [
-    { dir: "C:\\Users\\Matt\\.agentlog", exists: true, sessions: 44, hasData: true, isCurrent: false, isDefault: false },
-    { dir: "C:\\Users\\Matt\\.agent-histograph", exists: true, sessions: 0, hasData: false, isCurrent: true, isDefault: true },
+    { dir: "C:\\Users\\dev\\.agentlog", exists: true, sessions: 44, hasData: true, isCurrent: false, isDefault: false },
+    { dir: "C:\\Users\\dev\\.agent-histograph", exists: true, sessions: 0, hasData: false, isCurrent: true, isDefault: true },
   ],
 };
 let postOk = true;
@@ -81,7 +81,7 @@ function mkEls() {
   const opts = els.select.children;
   const values = opts.map((o) => o.getAttribute("value"));
   ok("refresh fetched /api/ledger", calls.some((c) => c.url === "/api/ledger"));
-  ok("both candidate dirs become options", values.includes("C:\\Users\\Matt\\.agentlog") && values.includes("C:\\Users\\Matt\\.agent-histograph"));
+  ok("both candidate dirs become options", values.includes("C:\\Users\\dev\\.agentlog") && values.includes("C:\\Users\\dev\\.agent-histograph"));
   ok("a Custom path… sentinel option is appended", values.includes("__custom__"));
   ok("no Reset option when source is default", !values.includes("__reset__"));
   ok("candidate label carries the session count", opts.some((o) => /44 sessions/.test(o.textContent)));
@@ -98,11 +98,11 @@ function mkEls() {
   const ctl = initLedger(els, () => applied.push(1));
   await ctl.refresh();
   calls = [];
-  els.select.fire("ae-change", { value: "C:\\Users\\Matt\\.agentlog" });
+  els.select.fire("ae-change", { value: "C:\\Users\\dev\\.agentlog" });
   await tick();
   const post = calls.find((c) => c.url === "/api/ledger-dir");
   ok("selecting a dir POSTs to /api/ledger-dir", !!post && post.opts.method === "POST");
-  ok("POST body is {dir: <selected>}", !!post && JSON.parse(post.opts.body).dir === "C:\\Users\\Matt\\.agentlog");
+  ok("POST body is {dir: <selected>}", !!post && JSON.parse(post.opts.body).dir === "C:\\Users\\dev\\.agentlog");
   ok("onApplied fired so the board re-fetches", applied.length === 1);
 }
 

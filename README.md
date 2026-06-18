@@ -78,13 +78,35 @@ ticking regardless.
 
 ## Quick start
 
+Three steps — **pull → configure → compile** — each a runnable command, no
+machine-specific path editing anywhere (the configurator resolves paths from your
+clone, and the board auto-starts Gemini capture):
+
+```sh
+# 1. pull
+git clone https://github.com/wildmason/agent-histograph && cd agent-histograph
+
+# 2. configure capture for the agents you use (paths auto-resolved from this checkout)
+python capture-proof/install_hooks.py            # Claude Code  -> ~/.claude/settings.json
+python capture-proof/install_hooks.py --codex    # Codex        -> ~/.codex/hooks.json
+#   Gemini needs nothing — the board auto-starts its watcher.
+
+# 3. compile the desktop board (needs Rust + Tauri CLI + Node — see Prerequisites)
+cd agentlog/desktop && cargo tauri build         # installer under src-tauri/target/release/bundle/
+```
+
+That's the whole setup. The rest of this section expands each step.
+
 ### 1. Turn on capture (so the board has data)
 
 ```sh
-python capture-proof/install_hooks.py        # registers hooks in ~/.claude/settings.json
+python capture-proof/install_hooks.py            # Claude Code: hooks -> ~/.claude/settings.json
+python capture-proof/install_hooks.py --codex    # Codex:       hooks -> ~/.codex/hooks.json
 ```
 
-Then **arm** it for the sessions you want on the board, and start/restart Claude Code:
+The installer resolves the hook paths from THIS checkout + your Python interpreter, so
+there's nothing to hand-edit; it merges idempotently and preserves any other hooks you
+have. Then **arm** capture for the sessions you want on the board, and start/restart the agent:
 
 ```sh
 # PowerShell (persistent):   setx AGENTLOG_CAPTURE_ACTIVE 1     # then open a new terminal
@@ -92,8 +114,20 @@ Then **arm** it for the sessions you want on the board, and start/restart Claude
 ```
 
 Un-armed, the hooks only passively log and cannot disrupt a session.
-`AGENTLOG_DISABLE=1` no-ops everything. `python capture-proof/install_hooks.py --uninstall` removes them.
-Codex users: `~/.codex/hooks.json` from `capture-proof/codex-hooks.json` (repoint the paths) adds Codex capture; normal Codex TUI sessions must approve hooks with `/hooks`. Keep that file strict JSON with `hooks` as the only top-level key, because Codex rejects helper fields such as `_comment`. The Codex template includes a passive `PostToolUse` hook for live activity, armed-only declared-intent capture from `intent: <what> -- <why>` assistant lines, an armed-only `PreToolUse` materiality reminder/audit for planned billing/license/auth/migration/API/dependency/data-loss work, and a SessionStart-spawned detached process watcher that records `session_end source=process_exit` when the Codex TUI process exits. Quiet Codex checkpoints are extracted through `codex exec --output-schema capture-proof/checkpoint.schema.json` so prompt-injection audit refusals cannot replace the checkpoint ledger shape; shell/tool payload details remain best-effort compared with the Claude Code producer.
+`AGENTLOG_DISABLE=1` no-ops everything. `--uninstall` removes them (add `--codex` to target Codex).
+
+**Codex specifics.** `install_hooks.py --codex` writes `~/.codex/hooks.json` with the
+correct paths — no editing. Approve the hooks once with `/hooks` in the Codex TUI (a
+one-time trust step Codex requires). The Codex producer adds a passive `PostToolUse`
+hook for live activity, armed-only declared-intent capture from `intent: <what> -- <why>`
+assistant lines, an armed-only `PreToolUse` materiality reminder/audit for planned
+billing/license/auth/migration/API/dependency/data-loss work, and a SessionStart-spawned
+detached process watcher that records `session_end source=process_exit` when the Codex TUI
+exits. Quiet Codex checkpoints are extracted through
+`codex exec --output-schema capture-proof/checkpoint.schema.json` so prompt-injection audit
+refusals can't replace the checkpoint ledger shape; shell/tool payload details remain
+best-effort vs the Claude Code producer. (`capture-proof/codex-hooks.json` is a manual-merge
+fallback if you'd rather wire it by hand — replace the `/ABSOLUTE/PATH/TO/...` placeholders.)
 
 ### 2. See the board
 

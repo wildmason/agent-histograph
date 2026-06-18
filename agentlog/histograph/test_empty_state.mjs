@@ -57,7 +57,7 @@ const { renderTriage } = await import("./render.js");
 let failures = 0;
 const ok = (name, cond) => { if (!cond) { failures++; console.log("  ✗ " + name); } else console.log("  ✓ " + name); };
 
-const DIR = "C:\\Users\\Matt\\.agent-histograph";
+const DIR = "C:\\Users\\dev\\.agent-histograph";
 
 // ---- 1. empty ledger that EXISTS -> actionable diagnostic naming the dir ---- //
 {

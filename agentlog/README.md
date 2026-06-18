@@ -156,7 +156,7 @@ shims (`agentlog.cmd` for Windows, `agentlog` for git-bash) so you can type
 
 ```powershell
 # PowerShell, current session:
-$env:PATH += ";C:\Users\Matt\Documents\development\@wildmason\control-plane\agentlog"
+$env:PATH += ";C:\path\to\agent-histograph\agentlog"
 # …or add that line to your $PROFILE to make `agentlog status` permanent.
 ```
 

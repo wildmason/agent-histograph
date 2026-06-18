@@ -105,7 +105,7 @@ class TestCodexProcessWatcher(unittest.TestCase):
             {"pid": 30, "ppid": 20, "name": "cmd.exe", "command": "cmd /d /c python ..."},
             {"pid": 20, "ppid": 10, "name": "codex.exe", "command": "codex.exe resume 019e"},
             {"pid": 10, "ppid": 0, "name": "node.exe",
-             "command": "node C:/Users/Matt/AppData/Roaming/npm/node_modules/@openai/codex/bin/codex.js"},
+             "command": "node C:/npm/node_modules/@openai/codex/bin/codex.js"},
         ]
         target = C.select_codex_tui_process(chain)
         self.assertEqual(target["pid"], 20)
