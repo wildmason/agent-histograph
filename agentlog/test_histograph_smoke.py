@@ -203,11 +203,14 @@ class TestThemeSwap(_PageServer):
                               "`playwright install chromium`" % exc)
                 return
             page = browser.new_page()
-            page.goto(self.base_url, wait_until="networkidle")
+            # NOT networkidle: the board polls /api/state forever, so the network never
+            # goes idle and goto would time out. domcontentloaded + the explicit
+            # custom-element wait below is the correct readiness gate for this page.
+            page.goto(self.base_url, wait_until="domcontentloaded")
 
             # the aegis bundle must register its elements before we can swap
             page.wait_for_function(
-                "() => !!customElements.get('ae-select')", timeout=8000)
+                "() => !!customElements.get('ae-select')", timeout=10000)
 
             # read a token BEFORE the swap (default boot stamp is crucible/dark)
             before = page.evaluate(
