@@ -1316,6 +1316,30 @@ class TestSessionCloseOut(unittest.TestCase):
         state = self._state(cps, acts, now="2026-06-10T10:11:00-04:00")
         self.assertIn("Mortar", self._projects(state))
 
+    def test_close_out_checkpoint_does_not_resurrect_a_quit_lane(self):
+        # Regression (the <30s resurrection Matt hit): quitting writes a terminal
+        # session_end, and the SessionEnd-triggered close-out extraction then appends a
+        # CHECKPOINT dated a few seconds AFTER the end. A checkpoint is a post-hoc summary
+        # of the ended session, not the agent resuming — it must NOT bring the lane back.
+        cps = [_cp("s1", "2026-06-10T10:00:00-04:00", project="Mortar"),
+               _cp("s1", "2026-06-10T10:05:08-04:00", project="Mortar")]  # close-out summary
+        acts = [_act("tool_use", "s1", "2026-06-10T10:00:00-04:00", tool="Edit"),
+                _act("session_end", "s1", "2026-06-10T10:05:00-04:00",
+                     source="prompt_input_exit")]
+        state = self._state(cps, acts, now="2026-06-10T10:06:00-04:00")
+        self.assertEqual(state["terminals"], [])
+
+    def test_session_ended_at_requires_activity_not_a_checkpoint_to_resume(self):
+        # direct unit: a post-end checkpoint alone leaves the session ENDED; only a real
+        # activity record after the end clears the end marker.
+        _write(self.tmp,
+               [_cp("s1", "2026-06-10T10:00:00-04:00"),
+                _cp("s1", "2026-06-10T10:05:08-04:00")],
+               [_act("tool_use", "s1", "2026-06-10T10:00:00-04:00", tool="Edit"),
+                _act("session_end", "s1", "2026-06-10T10:05:00-04:00", source="process_exit")])
+        led = R.Ledger.from_dir(self.tmp)
+        self.assertEqual(S.session_ended_at(led, "s1"), _t("2026-06-10T10:05:00-04:00"))
+
     # --- freshness reflects WORK, not lifecycle/meta records ---------------- #
     def test_last_work_ts_ignores_meta_records(self):
         _write(self.tmp,
@@ -1880,6 +1904,297 @@ class TestFirstPendingTodo(unittest.TestCase):
         self.assertIsNone(S._first_pending_todo([{"content": "now", "status": "in_progress"}]))
         self.assertIsNone(S._first_pending_todo([]))
         self.assertIsNone(S._first_pending_todo(None))
+
+
+# --------------------------------------------------------------------------- #
+# Attention state (#3) — needs-you delegation + stuck/loop detection
+# --------------------------------------------------------------------------- #
+class TestAttentionState(unittest.TestCase):
+    """derive_attention_state: needsYou delegates to the read surface's blocking-ask
+    (idle + ack aware); stuck is a NET-NEW loop detector over the tool_use signature
+    stream. Pins the window/threshold, the FULL-args hash (no basename false-positive),
+    the meta exclusion, and the needs-you > stuck precedence."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def _tu(self, sid, ts, **extra):
+        return _act("tool_use", sid, ts, **extra)
+
+    def test_stuck_true_positive_repeated_signature(self):
+        # The SAME (Edit, foo.py) signature fires 3x within the window, interleaved
+        # with distinct calls -> stuck, count >= 3. A wrong window/threshold yields False.
+        cps = [_cp("s1", "2026-06-10T10:00:00-04:00")]
+        acts = [
+            self._tu("s1", "2026-06-10T10:00:01-04:00", tool="Edit", paths=["foo.py"]),
+            self._tu("s1", "2026-06-10T10:00:02-04:00", tool="Read", target="bar.py"),
+            self._tu("s1", "2026-06-10T10:00:03-04:00", tool="Edit", paths=["foo.py"]),
+            self._tu("s1", "2026-06-10T10:00:04-04:00", tool="Grep", target="baz"),
+            self._tu("s1", "2026-06-10T10:00:05-04:00", tool="Edit", paths=["foo.py"]),
+            self._tu("s1", "2026-06-10T10:00:06-04:00", tool="Bash", command="ls -la"),
+        ]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        att = S.derive_attention_state(led, "s1", now_epoch=_t("2026-06-10T10:00:10-04:00"))
+        self.assertTrue(att["stuck"])
+        self.assertEqual(att["kind"], "stuck")
+        self.assertGreaterEqual(att["stuckCount"], 3)
+        self.assertIsNotNone(att["stuckSignature"])
+
+    def test_stuck_near_miss_varied_args_no_false_positive(self):
+        # Same TOOL, different path each time -> NOT a loop (the hash includes the args,
+        # not just the tool name). Proves the no-false-positive guard.
+        cps = [_cp("s1", "2026-06-10T10:00:00-04:00")]
+        acts = [self._tu("s1", "2026-06-10T10:00:0%d-04:00" % i, tool="Edit",
+                         paths=["file%d.py" % i]) for i in range(1, 7)]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        att = S.derive_attention_state(led, "s1", now_epoch=_t("2026-06-10T10:00:10-04:00"))
+        self.assertFalse(att["stuck"])
+        self.assertEqual(att["stuckCount"], 0)
+        self.assertIsNone(att["stuckSignature"])
+        self.assertIn(att["kind"], (None, "needs-you"))
+
+    def test_stuck_basename_collision_is_not_a_loop(self):
+        # Same basename in DIFFERENT directories must NOT collide into a loop — this is
+        # exactly why the signature uses the full path, not _activity_label's basename.
+        cps = [_cp("s1", "2026-06-10T10:00:00-04:00")]
+        acts = [self._tu("s1", "2026-06-10T10:00:0%d-04:00" % i, tool="Edit",
+                         paths=["pkg%d/mod.py" % i]) for i in range(1, 6)]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        att = S.derive_attention_state(led, "s1", now_epoch=_t("2026-06-10T10:00:10-04:00"))
+        self.assertFalse(att["stuck"])
+
+    def test_needsyou_delegates_to_blocking_ask_and_respects_ack(self):
+        # Open blocking ask, idle -> needsYou True, kind 'needs-you'.
+        cps = [_cp("s1", "2026-06-10T10:00:00-04:00", cid="chk_q",
+                   asks=[{"question": "deploy to prod?", "blocking": True}])]
+        acts = [_act("stop_boundary", "s1", "2026-06-10T10:00:00-04:00")]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        att = S.derive_attention_state(led, "s1", now_epoch=_t("2026-06-10T10:05:00-04:00"))
+        self.assertTrue(att["needsYou"])
+        self.assertEqual(att["kind"], "needs-you")
+
+        # second ledger: the ask is human-acked -> needsYou clears (delegation respects
+        # the §4 ack-by-id lifecycle; removing the delegation breaks this).
+        tmp2 = tempfile.mkdtemp()
+        cps2 = [_cp("s1", "2026-06-10T10:00:00-04:00", cid="chk_q",
+                    asks=[{"question": "deploy to prod?", "blocking": True}])]
+        acts2 = [_act("stop_boundary", "s1", "2026-06-10T10:00:00-04:00"),
+                 _act("human_ack", "s1", "2026-06-10T10:05:00-04:00", item_id="chk_q")]
+        _write(tmp2, cps2, acts2)
+        led2 = R.Ledger.from_dir(tmp2)
+        att2 = S.derive_attention_state(led2, "s1", now_epoch=_t("2026-06-10T10:06:00-04:00"))
+        self.assertFalse(att2["needsYou"])
+        self.assertIsNone(att2["kind"])
+
+    def test_stuck_excludes_meta_activity(self):
+        # 20 meta records, then a 3x loop each preceded by a meta record. Meta must
+        # neither count toward the loop nor shift the window (the check looks ONLY at
+        # tool_use). A meta-counting bug would push the loop out of an 8-record raw
+        # window and miss it.
+        cps = [_cp("s1", "2026-06-10T09:00:00-04:00")]
+        acts = []
+        for i in range(20):
+            acts.append(_act("capture_result", "s1", "2026-06-10T09:%02d:00-04:00" % i,
+                             trigger="stop", outcome="written"))
+        for i in range(3):
+            acts.append(_act("suspected_gap", "s1", "2026-06-10T10:%02d:30-04:00" % i,
+                             signal="x", note="n"))
+            acts.append(self._tu("s1", "2026-06-10T10:%02d:31-04:00" % i,
+                                  tool="Edit", paths=["foo.py"]))
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        att = S.derive_attention_state(led, "s1", now_epoch=_t("2026-06-10T10:05:00-04:00"))
+        self.assertTrue(att["stuck"])
+        self.assertEqual(att["stuckCount"], 3)
+
+    def test_precedence_needsyou_over_stuck(self):
+        # The lane looped (3x Edit foo.py) THEN asked for help (a blocking-ask
+        # checkpoint after the tools, no work since) -> BOTH stuck and needsYou true,
+        # but kind resolves to needs-you (the single tone the board paints).
+        cps = [_cp("s1", "2026-06-10T10:03:00-04:00", cid="chk_q",
+                   asks=[{"question": "stuck — which approach?", "blocking": True}])]
+        acts = [
+            self._tu("s1", "2026-06-10T10:00:00-04:00", tool="Edit", paths=["foo.py"]),
+            self._tu("s1", "2026-06-10T10:01:00-04:00", tool="Edit", paths=["foo.py"]),
+            self._tu("s1", "2026-06-10T10:02:00-04:00", tool="Edit", paths=["foo.py"]),
+        ]
+        _write(self.tmp, cps, acts)
+        led = R.Ledger.from_dir(self.tmp)
+        att = S.derive_attention_state(led, "s1", now_epoch=_t("2026-06-10T10:04:00-04:00"))
+        self.assertTrue(att["stuck"])
+        self.assertTrue(att["needsYou"])
+        self.assertEqual(att["kind"], "needs-you")
+
+    def test_attention_failopen_on_corrupt_session(self):
+        # A session id with no records -> the all-false shape, never an exception.
+        _write(self.tmp, [], [])
+        led = R.Ledger.from_dir(self.tmp)
+        att = S.derive_attention_state(led, "ghost", now_epoch=_t(BASE))
+        self.assertFalse(att["needsYou"])
+        self.assertFalse(att["stuck"])
+        self.assertIsNone(att["kind"])
+
+
+# --------------------------------------------------------------------------- #
+# Cost rollups (#2) — fleet + story aggregation over per-lane cost objects
+# --------------------------------------------------------------------------- #
+def _tok(total):
+    return {"input": 0, "output": 0, "cacheRead": 0, "cacheCreation": 0, "total": total}
+
+
+class TestCostRollup(unittest.TestCase):
+    """fleet_cost / story_cost aggregate per-lane cost objects. The load-bearing logic:
+    usd sums ONLY priced lanes, unavailable (gemini/unpriced) lanes are counted not
+    summed, the per-provider split is right, and story accuracy is 'mixed' across
+    differing-accuracy providers. Per-lane fail-open keeps a read error from dropping a lane."""
+
+    def test_fleet_cost_sums_priced_and_counts_unavailable(self):
+        terms = [
+            {"cost": {"tokens": _tok(100), "usd": 0.5, "provider": "claude",
+                      "accuracy": "approximate", "priced": True}},
+            {"cost": {"tokens": _tok(200), "usd": 1.0, "provider": "codex",
+                      "accuracy": "exact", "priced": True}},
+            {"cost": {"tokens": None, "usd": None, "provider": "gemini",
+                      "accuracy": "unavailable", "priced": False}},
+            {"cost": None},   # a hard read miss — skipped entirely, not "unavailable"
+        ]
+        fc = S.fleet_cost(terms)
+        self.assertAlmostEqual(fc["usd"], 1.5)
+        self.assertEqual(fc["sessionsPriced"], 2)
+        self.assertEqual(fc["sessionsUnavailable"], 1)
+        self.assertAlmostEqual(fc["byProvider"]["claude"]["usd"], 0.5)
+        self.assertEqual(fc["byProvider"]["codex"]["tokens"], 200)
+        self.assertIsNone(fc["byProvider"]["gemini"]["usd"])
+        self.assertEqual(fc["tokens"]["total"], 300)
+
+    def test_story_cost_mixed_accuracy(self):
+        tmp = tempfile.mkdtemp()
+        cps = [_cp("s1", "2026-06-10T10:00:00-04:00", project="Mortar"),
+               _cp("s2", "2026-06-10T10:01:00-04:00", project="Mortar")]
+        _write(tmp, cps, [])
+        led = R.Ledger.from_dir(tmp)
+        story = S.story_id_for(led, "s1")
+        self.assertEqual(S.story_id_for(led, "s2"), story)   # same workstream
+
+        def fake(ledger, sid):
+            if sid == "s1":
+                return {"tokens": _tok(100), "usd": 0.5, "provider": "claude",
+                        "accuracy": "approximate", "priced": True}
+            if sid == "s2":
+                return {"tokens": _tok(200), "usd": 1.0, "provider": "codex",
+                        "accuracy": "exact", "priced": True}
+            return None
+
+        orig = S.derive_token_cost
+        S.derive_token_cost = fake
+        try:
+            sc = S.story_cost(led, story, "s1")
+        finally:
+            S.derive_token_cost = orig
+        self.assertEqual(sc["accuracy"], "mixed")
+        self.assertAlmostEqual(sc["usd"], 1.5)
+        self.assertEqual(sc["tokens"]["total"], 300)
+
+    def test_cost_failopen_when_reader_raises(self):
+        # A reader that throws must yield cost None (never break the lane / state).
+        import serve_cost as C
+        tmp = tempfile.mkdtemp()
+        _write(tmp, [_cp("s1", "2026-06-10T10:00:00-04:00")], [])
+        led = R.Ledger.from_dir(tmp)
+
+        def boom(*a, **k):
+            raise RuntimeError("transcript read exploded")
+
+        orig = C.cost_for_session
+        C.cost_for_session = boom
+        try:
+            self.assertIsNone(S.derive_token_cost(led, "s1"))
+        finally:
+            C.cost_for_session = orig
+
+    def test_build_state_carries_fleetcost_and_lane_keys(self):
+        # The /api/state envelope gains fleetCost; each lane gains attention + cost keys.
+        tmp = tempfile.mkdtemp()
+        cps = [_cp("s1", "2026-06-10T10:00:00-04:00")]
+        acts = [_act("tool_use", "s1", "2026-06-10T10:00:00-04:00", tool="Edit")]
+        _write(tmp, cps, acts)
+        led = R.Ledger.from_dir(tmp)
+        state = S.build_state(led, [], now_epoch=_t("2026-06-10T10:00:30-04:00"))
+        self.assertIn("fleetCost", state)
+        self.assertIn("tokens", state["fleetCost"])
+        self.assertTrue(state["terminals"])
+        lane = state["terminals"][0]
+        self.assertIn("attention", lane)
+        self.assertIn("cost", lane)              # None for a synthetic session (no transcript)
+        self.assertIn("needsYou", lane["attention"])
+
+    def test_priced_claude_lane_lands_usd_through_build_state(self):
+        # End-to-end: a real Claude transcript -> derive_token_cost -> per-lane cost +
+        # fleetCost, exercising the reader->pricer->stamp seam the unit tests isolate.
+        import serve_cost as C
+        tmp = tempfile.mkdtemp()
+        cps = [_cp("s1", "2026-06-10T10:00:00-04:00", project="Mortar")]
+        acts = [_act("tool_use", "s1", "2026-06-10T10:00:00-04:00", tool="Edit")]
+        _write(tmp, cps, acts)
+        proj = os.path.join(tmp, "proj")
+        os.makedirs(proj, exist_ok=True)
+        with open(os.path.join(proj, "s1.jsonl"), "w", encoding="utf-8") as f:
+            f.write(json.dumps({"requestId": "r1", "message": {"id": "m1",
+                "model": "claude-opus-4-8", "usage": {"input_tokens": 1000,
+                "output_tokens": 500, "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0}}}) + "\n")
+        led = R.Ledger.from_dir(tmp)
+        orig = C._claude_transcript_path
+        C._claude_transcript_path = lambda sid, cwd: os.path.join(proj, str(sid) + ".jsonl")
+        C._USAGE_CACHE.clear()
+        try:
+            state = S.build_state(led, [], now_epoch=_t("2026-06-10T10:00:30-04:00"))
+        finally:
+            C._claude_transcript_path = orig
+        lane = state["terminals"][0]
+        self.assertIsNotNone(lane["cost"])
+        self.assertEqual(lane["cost"]["provider"], "claude")
+        self.assertTrue(lane["cost"]["priced"])
+        self.assertGreater(lane["cost"]["usd"], 0)
+        self.assertEqual(state["fleetCost"]["sessionsPriced"], 1)
+        self.assertGreater(state["fleetCost"]["usd"], 0)
+
+    def test_fleet_cost_does_not_raise_on_malformed_cost(self):
+        # A malformed cost object (non-numeric usd / non-coercible tokens) must degrade
+        # to "unavailable", never raise out and cold-envelope the whole board.
+        terms = [{"cost": {"usd": "lots", "provider": "claude", "tokens": {"total": {"oops": 1}}}}]
+        fc = S.fleet_cost(terms)
+        self.assertEqual(fc["sessionsPriced"], 0)
+        self.assertEqual(fc["sessionsUnavailable"], 1)
+        self.assertEqual(fc["usd"], 0.0)
+
+    def test_build_focus_survives_storycost_failure(self):
+        # A story_cost exception must degrade only storyCost (-> None), never null the
+        # whole focus pane (tasks/stories/epic).
+        tmp = tempfile.mkdtemp()
+        cps = [_cp("s1", "2026-06-10T10:00:00-04:00", project="Mortar",
+                   decisions=[_decision("t", "c")])]
+        acts = [_act("tool_use", "s1", "2026-06-10T10:00:00-04:00", tool="Edit")]
+        _write(tmp, cps, acts)
+        led = R.Ledger.from_dir(tmp)
+
+        def boom(*a, **k):
+            raise RuntimeError("cost exploded")
+
+        orig = S.story_cost
+        S.story_cost = boom
+        try:
+            state = S.build_state(led, [], now_epoch=_t("2026-06-10T10:00:30-04:00"))
+        finally:
+            S.story_cost = orig
+        self.assertIsNotNone(state["focus"])
+        a = state["focus"]["activeStory"]
+        self.assertIsNone(a["storyCost"])
+        self.assertTrue(a["tasks"])   # the pane is still populated
 
 
 if __name__ == "__main__":

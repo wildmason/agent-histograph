@@ -130,14 +130,27 @@
             <span>histograph</span>
           </div>
 
-          <!-- ============ settings trigger (opens the theme picker modal) ============ -->
-          <ae-button
-            id="settings-btn"
-            class="hg-settings-btn"
-            variant="ghost"
-            size="sm"
-            aria-label="Settings"
-          >⚙</ae-button>
+          <!-- ============ titlebar actions (grouped right, adjacent) ============ -->
+          <div class="hg-titlebar__actions">
+            <!-- digest trigger ("while you were away") -->
+            <ae-button
+              id="digest-btn"
+              class="hg-digest-btn"
+              variant="ghost"
+              size="sm"
+              aria-label="While you were away — recap"
+              title="While you were away"
+            >◷</ae-button>
+
+            <!-- settings trigger (opens the theme picker modal) -->
+            <ae-button
+              id="settings-btn"
+              class="hg-settings-btn"
+              variant="ghost"
+              size="sm"
+              aria-label="Settings"
+            >⚙</ae-button>
+          </div>
         </header>
 
         <!-- calm connection strip (hidden unless the poll is failing) -->
@@ -215,6 +228,15 @@
       <div slot="footer">
         <ae-button variant="primary" id="settings-done">Done</ae-button>
       </div>
+    </ae-modal>
+
+    <!-- ============ digest modal ("while you were away") ============
+         Mirrors the settings-modal idiom: ae-modal opens a native dialog in the
+         top layer with close-on-click-outside for free dismissal. The body is
+         filled by render.js renderDigest(); the Copy/Done actions live inside it. -->
+    <ae-modal id="digest-modal" size="xl" close-on-click-outside labelledby="digest-title">
+      <h2 id="digest-title" slot="header">While you were away</h2>
+      <div id="digest-body" class="hg-digest-wrap"></div>
     </ae-modal>
 
     <!-- the controller. Pulls /api/state and drives render.js. -->

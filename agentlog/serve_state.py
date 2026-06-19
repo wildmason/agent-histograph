@@ -199,6 +199,100 @@ def status_line(sess_state):
 
 
 # --------------------------------------------------------------------------- #
+# attention state (#3): needs-you + stuck/loop — a channel ABOVE freshness
+# --------------------------------------------------------------------------- #
+# A loop is "the same tool+args repeated with no progress". Pinned by tests; expose
+# as constants so tuning after live observation is a one-line change.
+STUCK_WINDOW = 8        # how many recent tool_use calls the loop check looks back over
+STUCK_THRESHOLD = 3     # a signature seen >= this many times in the window -> "stuck"
+
+# unit separator — joins (tool, args) into one opaque signature string. Chosen so it
+# can never appear inside a tool name or a path/command and collide two distinct calls.
+_SIG_SEP = "\x1f"
+
+
+def _stuck_signature(rec):
+    """A stable signature for a tool_use record = (tool, FULL normalized args), so a
+    repeated identical action can be detected as a loop. Uses the full args — sorted
+    paths joined, else the redacted command, else the observe target — NOT
+    _activity_label's basename-only target, which would false-positive across
+    same-named files in different directories. Returns "" for a record with neither a
+    tool nor any args (it can't meaningfully participate in loop detection)."""
+    rec = rec or {}
+    tool = (rec.get("tool") or "").strip().lower()
+    paths = rec.get("paths")
+    cmd = rec.get("command")
+    obs = rec.get("target")
+    if isinstance(paths, list) and paths:
+        arg = "|".join(sorted(str(p or "").strip() for p in paths))
+    elif isinstance(cmd, str) and cmd.strip():
+        arg = cmd.strip()
+    elif isinstance(obs, str) and obs.strip():
+        arg = obs.strip()
+    else:
+        arg = ""
+    if not tool and not arg:
+        return ""
+    return tool + _SIG_SEP + arg
+
+
+def derive_attention_state(ledger, sid, *, now_epoch=None, sess_state=None,
+                           window=STUCK_WINDOW, threshold=STUCK_THRESHOLD):
+    """The lane's ATTENTION channel — orthogonal to, and rendered ABOVE, freshness:
+
+        needsYou — the lane is blocked on an open, un-acked blocking ask. Delegates
+                   to the read surface (session_state.status == 'waiting'), which is
+                   already idle- and ack-by-id-aware. NOTE: no raw transcript text is
+                   available at derive time, so "the turn ended in a question" is read
+                   as "the extractor recorded an open blocking ask" — accuracy is
+                   bounded by the extractor's ask-capture rate, not by this code.
+        stuck    — the lane keeps firing the SAME (tool, args) with no progress: one
+                   tool_use signature repeats >= `threshold` times within the most
+                   recent `window` tool_use records. Pure over the tool_use stream;
+                   meta/lifecycle records are excluded by construction (we look only
+                   at type == 'tool_use'), so they neither count nor shift the window.
+
+    Returns {kind, needsYou, stuck, stuckSignature, stuckCount}. `kind` is the single
+    resolved tone the board paints: 'needs-you' wins over 'stuck'; both-false -> None
+    (the object is still present with needsYou/stuck False). Fail-open: a read error
+    yields the all-false shape so a corrupt session can never break /api/state."""
+    needs_you = False
+    try:
+        ss = sess_state if sess_state is not None else \
+            ledger.session_state(sid, now_epoch=now_epoch)
+        needs_you = (ss or {}).get("status") == "waiting"
+    except Exception:
+        needs_you = False
+
+    stuck, sig, count = False, None, 0
+    try:
+        tools = [a for a in ledger._acts(sid)
+                 if isinstance(a, dict) and a.get("type") == "tool_use"]
+        win = tools[-window:] if window else tools
+        counts = {}
+        for a in win:
+            s = _stuck_signature(a)
+            if not s:
+                continue
+            counts[s] = counts.get(s, 0) + 1
+        if counts:
+            top_sig, top_count = max(counts.items(), key=lambda kv: kv[1])
+            if top_count >= threshold:
+                stuck, sig, count = True, top_sig, top_count
+    except Exception:
+        stuck, sig, count = False, None, 0
+
+    kind = "needs-you" if needs_you else ("stuck" if stuck else None)
+    return {
+        "kind": kind,
+        "needsYou": bool(needs_you),
+        "stuck": bool(stuck),
+        "stuckSignature": sig if stuck else None,
+        "stuckCount": count if stuck else 0,
+    }
+
+
+# --------------------------------------------------------------------------- #
 # story identity + state
 # --------------------------------------------------------------------------- #
 def _ledger_cache(ledger, name):
@@ -891,6 +985,141 @@ def working_now(ledger, sid, *, now_epoch=None):
 
 
 # --------------------------------------------------------------------------- #
+# token / cost (#2): derive-at-serve from each provider's own on-disk transcript
+# --------------------------------------------------------------------------- #
+def _session_cwd(ledger, sid):
+    """The working directory for a session, from its newest record that carries one
+    ("" when unknown). Used to locate the provider's on-disk transcript for cost."""
+    try:
+        cps = ledger._cps(sid)
+        acts = ledger._acts(sid)
+        for src in list(reversed(cps)) + list(reversed(acts)):
+            cwd = (src.get("cwd") or "").strip()
+            if cwd:
+                return cwd
+    except Exception:
+        pass
+    return ""
+
+
+def derive_token_cost(ledger, sid):
+    """Per-session token counts + estimated USD, derived OFFLINE from the provider's
+    own transcript (Claude ~/.claude/projects, Codex ~/.codex/sessions; Gemini has no
+    on-disk usage). Priced from a vendored model→price table. Strictly OBSERVATIONAL —
+    never a budget/quota gate.
+
+    Returns the cost object {tokens, usd, model, provider, accuracy, priced, reason}
+    (Gemini returns a NON-null object with tokens/usd None + accuracy 'unavailable' so
+    the UI can tell "not captured" apart from "$0 spent"), or None on a hard failure.
+    Fail-open: ANY error — including serve_cost not importing — yields None so the lane
+    still renders and /api/state is never broken. Per-lane reads are memoized on the
+    Ledger so the same session isn't re-read across the multiple derivations per poll."""
+    memo = _ledger_cache(ledger, "_cost_memo")
+    if memo is not None and sid in memo:
+        return memo[sid]
+    result = None
+    try:
+        import serve_cost as C
+        provider = provider_of(ledger, sid)
+        cwd = _session_cwd(ledger, sid)
+        result = C.cost_for_session(provider, sid, cwd)
+    except Exception:
+        result = None
+    if memo is not None:
+        memo[sid] = result
+    return result
+
+
+def _empty_token_sum():
+    return {"input": 0, "output": 0, "cacheRead": 0, "cacheCreation": 0, "total": 0}
+
+
+def _add_tokens(acc, t):
+    if not isinstance(t, dict):
+        return
+    for k in acc:
+        try:
+            acc[k] += int(t.get(k) or 0)
+        except (TypeError, ValueError):
+            pass
+
+
+def fleet_cost(terminals):
+    """Sum the per-lane cost objects into a fleet rollup (top-level `fleetCost`).
+    Strictly OBSERVATIONAL. `usd` sums only priced lanes; sessionsUnavailable counts the
+    rest (gemini + unpriced models) so the UI can footnote "+N unpriced" honestly rather
+    than implying $0."""
+    tokens = _empty_token_sum()
+    usd = 0.0
+    by = {
+        "claude": {"tokens": 0, "usd": 0.0},
+        "codex": {"tokens": 0, "usd": 0.0},
+        "gemini": {"tokens": None, "usd": None, "reason": "no usage in transcript"},
+    }
+    priced = 0
+    unavailable = 0
+    for t in terminals or []:
+        c = (t or {}).get("cost")
+        if not c:
+            continue
+        prov = c.get("provider")
+        tk = c.get("tokens")
+        if tk:
+            _add_tokens(tokens, tk)
+            if prov in ("claude", "codex"):
+                try:
+                    by[prov]["tokens"] += int(tk.get("total") or 0)
+                except (TypeError, ValueError):
+                    pass
+        # guard the usd add by TYPE (not just not-None): a malformed cost object must
+        # degrade only the rollup, never raise out of build_state and cold-envelope the
+        # whole board. bool is an int subclass, so exclude it explicitly.
+        u = c.get("usd")
+        if isinstance(u, (int, float)) and not isinstance(u, bool):
+            usd += u
+            if prov in ("claude", "codex"):
+                by[prov]["usd"] += u
+            priced += 1
+        else:
+            unavailable += 1
+    return {"tokens": tokens, "usd": usd, "byProvider": by,
+            "sessionsPriced": priced, "sessionsUnavailable": unavailable}
+
+
+def story_cost(ledger, story_id, focus_sid):
+    """Per-story cost rollup over every session mapping to the story. accuracy is the
+    single value when sessions agree, 'mixed' when they differ (e.g. an exact Codex lane
+    + an approximate Claude lane), 'unavailable' when no session has usage. None when no
+    session yields any cost object at all."""
+    sids = list(_sessions_for_story(ledger, story_id)) if story_id else []
+    if focus_sid and focus_sid not in sids:
+        sids.append(focus_sid)
+    tokens = _empty_token_sum()
+    usd = 0.0
+    accs = set()
+    any_cost = False
+    for s in sids:
+        c = derive_token_cost(ledger, s)
+        if not c:
+            continue
+        any_cost = True
+        _add_tokens(tokens, c.get("tokens"))
+        if c.get("usd") is not None:
+            usd += c["usd"]
+        accs.add(c.get("accuracy"))
+    if not any_cost:
+        return None
+    real = [a for a in accs if a and a != "unavailable"]
+    if not real:
+        accuracy = "unavailable"
+    elif len(real) == 1:
+        accuracy = real[0]
+    else:
+        accuracy = "mixed"
+    return {"tokens": tokens, "usd": usd, "accuracy": accuracy}
+
+
+# --------------------------------------------------------------------------- #
 # epics / roadmap
 # --------------------------------------------------------------------------- #
 def roadmap_progress(epic, ledger, *, now_epoch=None):
@@ -1045,6 +1274,29 @@ def last_work_ts(ledger, sid):
     return ts
 
 
+def last_activity_ts(ledger, sid):
+    """Newest timestamp of genuine AGENT ACTIVITY — a non-meta activity record (tool_use,
+    stop_boundary, intent/next, …). UNLIKE last_work_ts this EXCLUDES checkpoints: a
+    checkpoint is a post-hoc summary, and the SessionEnd-triggered close-out extraction
+    appends one dated a few seconds AFTER the terminal session_end. Counting that as work
+    would falsely 'resume' a just-quit lane (it reappeared within the extraction delay).
+    Only used to decide whether a session has truly resumed after a terminal end — a real
+    resume always writes a new activity record. Memoized per Ledger; fail-open to 0.0."""
+    memo = _ledger_cache(ledger, "_last_activity_memo")
+    if memo is not None and sid in memo:
+        return memo[sid]
+    ts = 0.0
+    try:
+        for a in ledger._acts(sid):
+            if isinstance(a, dict) and a.get("type") not in _META_ACT_TYPES:
+                ts = max(ts, R.parse_ts(a.get("ts")))
+    except Exception:
+        pass
+    if memo is not None:
+        memo[sid] = ts
+    return ts
+
+
 def first_work_ts(ledger, sid):
     """OLDEST timestamp of REAL work for a session — the lane's stable birth instant.
     Mirror of last_work_ts (same record set, same meta exclusions) but the MIN, so the
@@ -1095,8 +1347,12 @@ def session_ended_at(ledger, sid):
     if not ends:
         return None
     last_end = max(ends)
-    # resumed since the close (real work after it)? then it's live again.
-    return last_end if last_end >= last_work_ts(ledger, sid) else None
+    # resumed since the close? Only genuine new ACTIVITY counts — NOT a checkpoint. The
+    # SessionEnd-triggered close-out extraction appends a checkpoint dated a few seconds
+    # AFTER the session_end; comparing against last_work_ts (which counts checkpoints)
+    # would falsely resurrect a just-quit lane within the extraction delay. A real resume
+    # always writes a fresh activity record, so last_activity_ts is the correct gate.
+    return last_end if last_end >= last_activity_ts(ledger, sid) else None
 
 
 def dismissed_at(dismissed, term_id):
@@ -1179,6 +1435,12 @@ def _build_terminal(ledger, sid, epics, now_epoch):
         done, total, _ = roadmap_progress(e, ledger, now_epoch=now_epoch)
         epic = {"title": e.get("title") or "", "done": done, "total": total}
 
+    # attention (#3) reuses the session_state we already derived (no second scan).
+    attention = derive_attention_state(ledger, sid, now_epoch=now_epoch, sess_state=sess)
+    # cost (#2) is derived per-lane from the provider's own on-disk transcript; fully
+    # fail-open (cost=None) so a read/price miss can never drop the lane or break state.
+    cost = derive_token_cost(ledger, sid)
+
     return {
         "id": terminal_id(sid),
         "provider": provider_of(ledger, sid),
@@ -1191,6 +1453,8 @@ def _build_terminal(ledger, sid, epics, now_epoch):
         "annotation": "",
         "focused": False,
         "statusLine": status_line(sess),
+        "attention": attention,
+        "cost": cost,
     }, sess
 
 
@@ -1271,6 +1535,14 @@ def _build_focus(ledger, focus_sid, epics, now_epoch):
             if cps and isinstance(cps[0], dict):
                 started_at = _norm_ts(cps[0].get("captured_at"))
 
+        # cost is observational — a derivation failure must degrade just this figure,
+        # never null the whole focus pane (tasks/stories/epic). Mirrors the per-sibling-
+        # story isolation in the stories loop above.
+        try:
+            story_cost_val = story_cost(ledger, story_id, focus_sid)
+        except Exception:
+            story_cost_val = None
+
         return {
             "terminalId": terminal_id(focus_sid),
             "parkedEpicSeam": parked_epic_seam(ledger, focus_sid, epics),
@@ -1285,6 +1557,7 @@ def _build_focus(ledger, focus_sid, epics, now_epoch):
                 # the pinned orientation-header "now" line (the live edge, surfaced at
                 # the top so it stays in view as the transcript scrolls).
                 "nowLine": now_line(tasks, wn),
+                "storyCost": story_cost_val,
                 "tasks": tasks,
             },
         }
@@ -1346,4 +1619,5 @@ def build_state(ledger, epics, *, now_epoch=None, focus_terminal_id=None,
         "generatedAt": _iso(now) or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
         "terminals": terminals,
         "focus": focus,
+        "fleetCost": fleet_cost(terminals),
     }

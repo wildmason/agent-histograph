@@ -137,6 +137,13 @@ def load_prefs():
     z = ui.get("zoom")
     if isinstance(z, (int, float)) and not isinstance(z, bool):
         out["zoom"] = z
+    # lastSeen: the digest cursor (epoch). Persisted server-side so the "while you were
+    # away" gap survives a relaunch — the desktop app's ephemeral-port origin wipes
+    # localStorage every launch, which is exactly the overnight/closed-app case the
+    # digest most needs to cover.
+    ls = ui.get("lastSeen")
+    if isinstance(ls, (int, float)) and not isinstance(ls, bool):
+        out["lastSeen"] = ls
     return out
 
 
@@ -152,6 +159,8 @@ def save_prefs(partial):
             ui[k] = p[k]
     if isinstance(p.get("zoom"), (int, float)) and not isinstance(p.get("zoom"), bool):
         ui["zoom"] = p["zoom"]
+    if isinstance(p.get("lastSeen"), (int, float)) and not isinstance(p.get("lastSeen"), bool):
+        ui["lastSeen"] = p["lastSeen"]
     cfg["ui"] = ui
     _write_config(cfg)
     return load_prefs()

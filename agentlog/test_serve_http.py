@@ -627,5 +627,41 @@ class TestStateConditional(_Server):
         self.assertTrue(ga1 and ga2)
 
 
+class TestDigestApi(_Server):
+    """GET /api/digest (#1): parses ?since, delegates to serve_digest, is a one-shot
+    fetch (plain JSON, no ETag/304), and degrades to an empty shape — never a 500."""
+
+    def test_digest_route_parses_since_and_delegates(self):
+        status, headers, body = self._get("/api/digest?since=0")
+        self.assertEqual(status, 200)
+        self.assertIn("application/json", headers.get("Content-Type", ""))
+        dig = json.loads(body)
+        self.assertEqual(dig["since"], 0.0)            # echoed back
+        self.assertIsInstance(dig["projects"], list)
+        self.assertIn("totals", dig)
+        self.assertIn("empty", dig)
+
+    def test_digest_route_no_etag_and_no_store(self):
+        status, headers, body = self._get("/api/digest?since=0")
+        self.assertEqual(headers.get("Cache-Control"), "no-store")
+        self.assertNotIn("ETag", headers)              # not on the conditional 304 path
+
+    def test_digest_route_default_since_when_absent(self):
+        status, headers, body = self._get("/api/digest")
+        self.assertEqual(status, 200)
+        dig = json.loads(body)
+        self.assertGreater(dig["since"], 0)            # defaulted to a 24h window, not error
+
+    def test_digest_route_degrades_on_error(self):
+        orig = H.D.build_digest
+        H.D.build_digest = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
+        try:
+            status, headers, body = self._get("/api/digest?since=0")
+        finally:
+            H.D.build_digest = orig
+        self.assertEqual(status, 200)                  # degraded, not 500
+        self.assertTrue(json.loads(body)["empty"])
+
+
 if __name__ == "__main__":
     unittest.main()

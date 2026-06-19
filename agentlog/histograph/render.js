@@ -87,7 +87,15 @@ const STATUS_DOT = {
   stale: "hg-statusdot--stale",
   parked: "hg-statusdot--parked",
   done: "hg-statusdot--done",
+  stuck: "hg-statusdot--stuck",
 };
+
+// A lane is "stuck" (looping with no progress) when the backend's attention channel
+// says so. Orthogonal to status/freshness; rendered as its own dot + pill tone, and
+// only when the lane isn't already shouting needs-you (which outranks it).
+function isStuck(t) {
+  return !!(t && t.attention && t.attention.stuck);
+}
 
 function providerOf(p) {
   return PROVIDER[p] || PROVIDER.unknown;
@@ -191,6 +199,38 @@ function clock(iso) {
 
 function oneLine(text) {
   return String(text == null ? "" : text).replace(/\s+/g, " ").trim();
+}
+
+// Compact USD for the cost lane (#2). Sub-cent reads "<$0.01" (never "$0", which would
+// imply free); cents to 2dp, dollars to 1dp, big sums rounded with separators. "" for null.
+export function fmtUsd(v) {
+  if (v == null || Number.isNaN(v)) return "";
+  if (v === 0) return "$0";
+  if (v < 0.01) return "<$0.01";
+  if (v < 10) return "$" + v.toFixed(2);
+  if (v < 1000) return "$" + v.toFixed(1);
+  return "$" + Math.round(v).toLocaleString();
+}
+
+// Human token count: 12345 -> "12.3k", 2_300_000 -> "2.3M". "" for null.
+function fmtTokens(n) {
+  if (n == null || Number.isNaN(n)) return "";
+  if (n < 1000) return String(n);
+  if (n < 1e6) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+  return (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
+}
+
+// The tiny per-lane cost figure (#2) appended to a lane's line. Shown ONLY when the
+// lane is priced — an unavailable/unpriced lane shows nothing here (never a false $0);
+// the fleet header footnotes the unpriced count instead. Claude lanes are 'approximate'
+// so the tooltip says so. Returns null when there's no priced cost.
+function laneCost(term) {
+  const c = term && term.cost;
+  if (!c || c.usd == null) return null;
+  const est = c.accuracy === "approximate" ? "estimated · " : "";
+  const tk = c.tokens && c.tokens.total != null ? fmtTokens(c.tokens.total) + " tokens" : "";
+  const title = (est + tk + (c.model ? " · " + c.model : "")).trim();
+  return el("span", { class: "hg-trow__cost", title: title || null, text: fmtUsd(c.usd) });
 }
 
 const FA_EDIT_PATH = "M535.6 85.7C513.7 63.8 478.3 63.8 456.4 85.7L432 110.1L529.9 208L554.3 183.6C576.2 161.7 576.2 126.3 554.3 104.4L535.6 85.7zM236.4 305.7C230.3 311.8 225.6 319.3 222.9 327.6L193.3 416.4C190.4 425 192.7 434.5 199.1 441C205.5 447.5 215 449.7 223.7 446.8L312.5 417.2C320.7 414.5 328.2 409.8 334.4 403.7L496 241.9L398.1 144L236.4 305.7zM160 128C107 128 64 171 64 224L64 480C64 533 107 576 160 576L416 576C469 576 512 533 512 480L512 384C512 366.3 497.7 352 480 352C462.3 352 448 366.3 448 384L448 480C448 497.7 433.7 512 416 512L160 512C142.3 512 128 497.7 128 480L128 224C128 206.3 142.3 192 160 192L256 192C273.7 192 288 177.7 288 160C288 142.3 273.7 128 256 128L160 128z";
@@ -362,6 +402,10 @@ function lanePill(term, needsYou, quiet) {
   if (needsYou) {
     return el("span", { class: "hg-trow__pill hg-trow__pill--attn", text: "NEEDS YOU" });
   }
+  // a stuck (looping) lane shouts next — even one you're viewing, so it's not lost.
+  if (isStuck(term)) {
+    return el("span", { class: "hg-trow__pill hg-trow__pill--stuck", text: "STUCK" });
+  }
   if (term.focused) {
     return el(
       "span",
@@ -386,6 +430,7 @@ function lanePill(term, needsYou, quiet) {
 function renderTerminalRow(term, { onFocus, onDismiss, onAnnotate } = {}) {
   const prov = providerOf(term.provider);
   const needsYou = isNeedsYou(term);
+  const stuck = !needsYou && isStuck(term);   // needs-you outranks stuck for the dot/row
   const quiet = term.status === "stale" || term.status === "parked" || term.status === "done";
 
   // Identity = the PROJECT (what the lane is, in human terms). The internal term-N
@@ -406,7 +451,8 @@ function renderTerminalRow(term, { onFocus, onDismiss, onAnnotate } = {}) {
       "span",
       { class: "hg-trow__line" },
       el("span", { class: "hg-trow__name", text: name }),
-      el("span", { class: "hg-trow__task", text: taskText })
+      el("span", { class: "hg-trow__task", text: taskText }),
+      laneCost(term)   // tiny trailing $ figure (priced lanes only); truncates after task
     ),
     annotation
       ? el(
@@ -426,13 +472,14 @@ function renderTerminalRow(term, { onFocus, onDismiss, onAnnotate } = {}) {
         (term.focused ? " hg-trow--selected" : "") +
         (quiet ? " hg-trow--quiet" : "") +
         (needsYou ? " hg-trow--attn" : "") +
+        (stuck ? " hg-trow--stuck" : "") +
         (annotation ? " hg-trow--annotated" : ""),
       title: `${name} · ${taskText}` + (annotation ? ` · ${annotation}` : ""),
       attrs: {
         role: "button",
         tabindex: "0",
         "aria-pressed": term.focused ? "true" : "false",
-        "aria-label": `Focus ${name}` + (needsYou ? " — needs you" : ""),
+        "aria-label": `Focus ${name}` + (needsYou ? " — needs you" : stuck ? " — looping" : ""),
         "data-terminal": term.id,
       },
     },
@@ -440,7 +487,8 @@ function renderTerminalRow(term, { onFocus, onDismiss, onAnnotate } = {}) {
       "span",
       { class: "hg-trow__dot" },
       el("span", {
-        class: "hg-statusdot " + (STATUS_DOT[term.status] || "hg-statusdot--stale"),
+        class: "hg-statusdot " +
+          (stuck ? STATUS_DOT.stuck : (STATUS_DOT[term.status] || "hg-statusdot--stale")),
         attrs: { "aria-hidden": "true" },
       })
     ),
@@ -514,7 +562,7 @@ function renderColdState(ledger, onChangeLedger) {
     return el(
       "ae-empty-state",
       { attrs: { compact: true } },
-      el("span", { attrs: { slot: "icon" }, class: "hg-empty__glyph" }, "▚"),
+      el("span", { attrs: { slot: "icon", "aria-hidden": "true" }, class: "hg-empty__glyph" }, "▚"),
       el("span", { attrs: { slot: "title" } }, "No live terminals"),
       "Start an agent and it appears here within a few seconds."
     );
@@ -532,7 +580,7 @@ function renderColdState(ledger, onChangeLedger) {
     )
   );
   const children = [
-    el("span", { attrs: { slot: "icon" }, class: "hg-empty__glyph" }, "▚"),
+    el("span", { attrs: { slot: "icon", "aria-hidden": "true" }, class: "hg-empty__glyph" }, "▚"),
     el("span", { attrs: { slot: "title" } }, missing ? "Ledger folder not found" : "This ledger is empty"),
     detail,
   ];
@@ -569,11 +617,40 @@ function childByClass(parent, cls) {
   return null;
 }
 
-function buildTriageHead(needs, running, time) {
+// the fleet-total cost stat (#2): "· $X" with a per-provider/unpriced breakdown in the
+// tooltip, and a trailing "*" when some lanes are unpriced/unavailable so the number
+// reads as partial, never as the whole truth. null when nothing is priced yet (so the
+// header never shows a misleading "$0" while gemini/unpriced lanes burn untracked).
+function fleetCostStat(fc) {
+  if (!fc || !fc.sessionsPriced) return null;
+  const usd = fmtUsd(fc.usd);
+  if (!usd) return null;
+  const by = fc.byProvider || {};
+  const parts = [];
+  if (by.claude && by.claude.usd) parts.push(`Claude ${fmtUsd(by.claude.usd)} (est)`);
+  if (by.codex && by.codex.usd) parts.push(`Codex ${fmtUsd(by.codex.usd)}`);
+  let title = parts.join(" · ");
+  if (fc.sessionsUnavailable) {
+    const n = fc.sessionsUnavailable;
+    title += (title ? " · " : "") + `${n} lane${n === 1 ? "" : "s"} unpriced/unavailable`;
+  }
+  // label passed as a CHILD (not the `text` prop) so the optional trailing "*" flag
+  // composes after it instead of replacing it.
+  const span = el("span", { class: "hg-terms__stat hg-terms__stat--cost", title: title || null }, `· ${usd}`);
+  if (fc.sessionsUnavailable) {
+    span.append(el("span", { class: "hg-terms__cost-flag", attrs: { "aria-hidden": "true" }, text: "*" }));
+  }
+  return span;
+}
+
+function buildTriageHead(needs, running, stuck, fleetCost, time) {
   const head = el("div", { class: "hg-terms__head" },
     el("span", { class: "hg-terms__label", text: "terminals" }));
   if (needs) head.append(el("span", { class: "hg-terms__stat hg-terms__stat--attn", text: `· ${needs} need you` }));
+  if (stuck) head.append(el("span", { class: "hg-terms__stat hg-terms__stat--stuck", text: `· ${stuck} stuck` }));
   if (running) head.append(el("span", { class: "hg-terms__stat hg-terms__stat--run", text: `· ${running} running` }));
+  const cost = fleetCostStat(fleetCost);
+  if (cost) head.append(cost);
   if (time) head.append(el("span", { class: "hg-terms__time", text: time }));
   return head;
 }
@@ -598,16 +675,19 @@ export function renderTriage(mountEl, terminals, opts = {}) {
   const list = Array.isArray(terminals) ? terminals : [];
   const needs = list.filter(isNeedsYou).length;
   const running = list.filter((t) => t.status === "active" && !isNeedsYou(t)).length;
-  const headSig = `${needs}|${running}|${opts.time || ""}`;
+  const stuck = list.filter((t) => isStuck(t) && !isNeedsYou(t)).length;
+  const fc = opts.fleetCost || null;
+  const costSig = fc ? `${fc.usd}|${fc.sessionsPriced}|${fc.sessionsUnavailable}` : "";
+  const headSig = `${needs}|${stuck}|${running}|${costSig}|${opts.time || ""}`;
 
   // ---- header: reuse if unchanged, else swap in place (never disturbs the body) ----
   let head = childByClass(mountEl, "hg-terms__head");
   if (!head) {
-    head = buildTriageHead(needs, running, opts.time);
+    head = buildTriageHead(needs, running, stuck, fc, opts.time);
     head.setAttribute("data-sig", headSig);
     mountEl.append(head); // first build on an empty mount → head lands first
   } else if (head.getAttribute("data-sig") !== headSig) {
-    const fresh = buildTriageHead(needs, running, opts.time);
+    const fresh = buildTriageHead(needs, running, stuck, fc, opts.time);
     fresh.setAttribute("data-sig", headSig);
     mountEl.insertBefore(fresh, head);
     mountEl.removeChild(head);
@@ -800,6 +880,23 @@ function renderOrient(focus) {
 
   // the big active-story title (the hero line).
   wrap.append(el("div", { class: "hg-orient__story", text: a.title || "—" }));
+
+  // the story's cost (#2) — a faint figure under the title. Shown only when the
+  // workstream has a priced spend (> $0); an all-unavailable story shows nothing here
+  // (the fleet footnote carries the "unpriced" signal), never a misleading "$0".
+  const sc = a.storyCost;
+  if (sc && sc.usd) {
+    const tk = sc.tokens && sc.tokens.total != null ? fmtTokens(sc.tokens.total) + " tokens" : "";
+    const accNote = sc.accuracy === "approximate"
+      ? "estimated" : sc.accuracy === "mixed" ? "mixed precision" : "";
+    const costRow = el("div", {
+      class: "hg-orient__cost",
+      title: [tk, accNote].filter(Boolean).join(" · ") || null,
+    }, el("span", { class: "hg-orient__cost-figure", text: fmtUsd(sc.usd) }));
+    if (tk) costRow.append(el("span", { class: "hg-orient__cost-tokens", text: " · " + tk }));
+    if (accNote) costRow.append(el("span", { class: "hg-orient__cost-acc", text: " · " + accNote }));
+    wrap.append(costRow);
+  }
 
   // the live "now —" line: a pulsing green dot + the live edge when working; a
   // calm muted dot + the last thing done when idle. nowLine is backend-derived.
@@ -1311,7 +1408,7 @@ export function renderFocus(mountEl, focus, opts = {}) {
         el(
           "ae-empty-state",
           {},
-          el("span", { attrs: { slot: "icon" }, class: "hg-empty__glyph hg-empty__glyph--calm" }, "◇"),
+          el("span", { attrs: { slot: "icon", "aria-hidden": "true" }, class: "hg-empty__glyph hg-empty__glyph--calm" }, "◇"),
           el("span", { attrs: { slot: "title" } }, "Nothing in focus"),
           "Pick a terminal above to re-load its thread, or all your agents are quiet."
         )
@@ -1343,7 +1440,7 @@ export function renderFocus(mountEl, focus, opts = {}) {
         el(
           "ae-empty-state",
           { attrs: { compact: true } },
-          el("span", { attrs: { slot: "icon" }, class: "hg-empty__glyph" }, "○"),
+          el("span", { attrs: { slot: "icon", "aria-hidden": "true" }, class: "hg-empty__glyph" }, "○"),
           el("span", { attrs: { slot: "title" } }, "No decisions yet"),
           "The agent just picked this up — its first decision will land here."
         )
@@ -1370,6 +1467,323 @@ export function renderFocus(mountEl, focus, opts = {}) {
   // Auto-scroll policy (UX §4 "auto-scroll to newest", bounded by user intent).
   const follow = opts.fresh || (opts.changed && wasAtBottom);
   applyScroll(scroll, transcript, follow ? "bottom" : prevTop);
+}
+
+// ==========================================================================
+// DIGEST — the "while you were away" overnight sheet (#1)
+// ==========================================================================
+
+// each beat type -> its flag class + textual label. The label leads every row so the
+// signal is conveyed by TEXT (not color alone) for colorblind/AT readers.
+const DIGEST_FLAGS = {
+  waiting: { cls: "hg-digest__flag--waiting", label: "WAITING" },
+  milestone: { cls: "hg-digest__flag--milestone", label: "MILESTONE" },
+  reversal: { cls: "hg-digest__flag--reversal", label: "REVERSAL" },
+  decision: { cls: "hg-digest__flag--decision", label: "DECISION" },
+  stale: { cls: "hg-digest__flag--stale", label: "STALE" },
+};
+
+function baseName(p) {
+  const s = String(p == null ? "" : p).replace(/[\\/]+$/, "");
+  const i = Math.max(s.lastIndexOf("/"), s.lastIndexOf("\\"));
+  return i >= 0 ? s.slice(i + 1) : s;
+}
+
+// "Away 3h 12m" style gap from a seconds delta. "" for null/negative.
+function fmtGap(secs) {
+  if (secs == null || Number.isNaN(secs) || secs < 0) return "";
+  const m = Math.round(secs / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60), mm = m % 60;
+  if (h < 24) return mm ? `${h}h ${mm}m` : `${h}h`;
+  const d = Math.floor(h / 24);
+  return `${d}d ${h % 24}h`;
+}
+
+// One beat row: a fixed-width LABEL gutter (col 1) + a stacked body (col 2) holding the
+// primary line and an optional muted sub-line. The label leads (text, never color alone)
+// for AT/colorblind readers; the gutter is a consistent width across every row so the
+// rows line up, and the choice + rationale stack vertically instead of fighting for one
+// line (no two long strings sharing a row).
+function digestFlagRow(kind, text, sub) {
+  const f = DIGEST_FLAGS[kind] || DIGEST_FLAGS.decision;
+  const body = el("div", { class: "hg-digest__flag-body" },
+    el("span", { class: "hg-digest__flag-text", text: text || "" }));
+  if (sub) body.append(el("span", { class: "hg-digest__flag-sub", text: sub }));
+  return el(
+    "div",
+    { class: "hg-digest__flag " + f.cls },
+    el("span", { class: "hg-digest__flag-label", text: f.label }),
+    body
+  );
+}
+
+// the count of surfaced beats for a project (drives the rail badge; files excluded —
+// they're a footnote, not a beat).
+function digestBeatCount(p) {
+  const others = (p.decisions || []).filter((d) => !d.highClass).length;
+  return (p.waiting || []).length + (p.milestones || []).length +
+    (p.reversals || []).length + others + (p.newlyStale || []).length;
+}
+
+// a project's dominant tone — used for the rail dot so the most-urgent projects read at a
+// glance. waiting (needs you) outranks reversal/stale, which outrank a plain milestone.
+function digestProjectTone(p) {
+  if ((p.waiting || []).length) return "waiting";
+  if ((p.reversals || []).length || (p.newlyStale || []).length) return "warning";
+  if ((p.milestones || []).length) return "milestone";
+  return "decision";
+}
+
+// rail order: most-urgent first (waiting, then reversals+stale, then milestones, then
+// sheer volume), breaking ties by project name so the order is stable/deterministic.
+function digestCompare(a, b) {
+  const ka = [(a.waiting || []).length, (a.reversals || []).length + (a.newlyStale || []).length,
+    (a.milestones || []).length, digestBeatCount(a)];
+  const kb = [(b.waiting || []).length, (b.reversals || []).length + (b.newlyStale || []).length,
+    (b.milestones || []).length, digestBeatCount(b)];
+  for (let i = 0; i < ka.length; i++) if (ka[i] !== kb[i]) return kb[i] - ka[i];
+  return String(a.project || "").localeCompare(String(b.project || ""));
+}
+
+function digestWindowLine(dig) {
+  const gap = dig.now != null && dig.since != null ? fmtGap(dig.now - dig.since) : "";
+  const t = dig.totals || {};
+  const counts = [];
+  if (t.decisions) counts.push(`${t.decisions} decision${t.decisions === 1 ? "" : "s"}`);
+  if (t.reversals) counts.push(`${t.reversals} reversal${t.reversals === 1 ? "" : "s"}`);
+  if (t.waiting) counts.push(`${t.waiting} waiting`);
+  if (t.newlyStale) counts.push(`${t.newlyStale} stalled`);
+  const row = el("div", { class: "hg-digest__window" },
+    el("span", { class: "hg-digest__window-gap", text: gap ? `Away ${gap}` : "Since you last looked" }));
+  if (counts.length) row.append(el("span", { class: "hg-digest__window-counts", text: " · " + counts.join(" · ") }));
+  return row;
+}
+
+// One project's beats, painted into the content pane. The header keeps the project name +
+// providers; beats follow in priority order (waiting -> milestone -> reversal -> decision
+// -> stale), then the touched-files footnote.
+function digestPane(p) {
+  const pane = el("div", { class: "hg-digest__pane" });
+  const providers = (p.providers || []).join(" · ");
+  const head = el("div", { class: "hg-digest__pane-head" },
+    el("span", { class: "hg-digest__project", text: p.project || "?" }));
+  if (providers) head.append(el("span", { class: "hg-digest__providers", text: " · " + providers }));
+  pane.append(head);
+
+  for (const w of p.waiting || [])
+    pane.append(digestFlagRow("waiting", oneLine(w.question) || "needs input", w.provider || ""));
+  for (const m of p.milestones || [])
+    pane.append(digestFlagRow("milestone", oneLine(m.choice || m.topic), oneLine(m.topic)));
+  for (const r of p.reversals || [])
+    pane.append(digestFlagRow("reversal", oneLine(r.choice || r.topic),
+      r.supersededSummary ? "was: " + oneLine(r.supersededSummary) : ""));
+
+  const others = (p.decisions || []).filter((d) => !d.highClass);
+  const CAP = 8;
+  for (const d of others.slice(0, CAP))
+    pane.append(digestFlagRow("decision", oneLine(d.choice || d.topic), oneLine(d.topic)));
+  if (others.length > CAP)
+    pane.append(el("div", { class: "hg-digest__more", text: `+ ${others.length - CAP} more decisions` }));
+
+  for (const s of p.newlyStale || [])
+    pane.append(digestFlagRow("stale", "went quiet", s.provider || s.story || ""));
+
+  const files = p.filesChanged || [];
+  if (files.length) {
+    const fl = el("div", { class: "hg-digest__files" },
+      el("span", { class: "hg-digest__files-count", text: `${files.length} file${files.length === 1 ? "" : "s"} changed` }));
+    const list = el("div", { class: "hg-digest__files-list" });
+    for (const f of files.slice(0, 24)) list.append(el("span", { class: "hg-digest__file", text: baseName(f) }));
+    if (files.length > 24) list.append(el("span", { class: "hg-digest__file", text: `+${files.length - 24}` }));
+    fl.append(list);
+    pane.append(fl);
+  }
+  return pane;
+}
+
+// One rail entry — a role="tab" button: tone dot, project name, beat-count badge. The
+// base class (sans is-selected) is stashed on the node so the controller can toggle
+// selection without string-munging the className.
+function digestRailItem(p, idx, selected, panelId) {
+  const tone = digestProjectTone(p);
+  const base = "hg-digest__rail-item hg-digest__rail-item--" + tone;
+  const item = el("button", {
+    class: base + (selected ? " is-selected" : ""),
+    attrs: {
+      type: "button", role: "tab", id: "hg-digest-tab-" + idx,
+      "aria-selected": selected ? "true" : "false",
+      "aria-controls": panelId, tabindex: selected ? "0" : "-1",
+    },
+  },
+    el("span", { class: "hg-digest__rail-dot", attrs: { "aria-hidden": "true" } }),
+    el("span", { class: "hg-digest__rail-name", text: p.project || "?" }),
+    el("span", { class: "hg-digest__rail-count", attrs: { "aria-hidden": "true" }, text: String(digestBeatCount(p)) }));
+  item._baseClass = base;
+  return item;
+}
+
+// The vertical project rail (a role="tablist"). Click or arrow/Home/End selects; selection
+// is automatic-activation (moving focus swaps the panel), matching ae-tabs. `state.select`
+// is provided by the caller (it owns the panel mount + re-paint).
+function digestRail(projects, state, panelId) {
+  const rail = el("div", {
+    class: "hg-digest__rail hg-scroll",
+    attrs: { role: "tablist", "aria-orientation": "vertical", "aria-label": "Projects with activity" },
+  });
+  state.items = projects.map((p, i) => {
+    const it = digestRailItem(p, i, i === state.idx, panelId);
+    it.addEventListener("click", () => state.select(i));
+    rail.append(it);
+    return it;
+  });
+  rail.addEventListener("keydown", (ev) => {
+    const k = ev.key, n = projects.length;
+    let next = -1;
+    if (k === "ArrowDown" || k === "ArrowRight") next = (state.idx + 1) % n;
+    else if (k === "ArrowUp" || k === "ArrowLeft") next = (state.idx - 1 + n) % n;
+    else if (k === "Home") next = 0;
+    else if (k === "End") next = n - 1;
+    else return;
+    if (ev.preventDefault) ev.preventDefault();
+    state.select(next, true);
+  });
+  return rail;
+}
+
+function digestActions(dig, opts) {
+  const row = el("div", { class: "hg-digest__actions" });
+  const mk = el("ae-button", { attrs: { variant: "ghost", size: "sm" } }, "Copy Markdown");
+  mk.addEventListener("click", () => opts.onExport && opts.onExport("markdown", digestToMarkdown(dig)));
+  const ht = el("ae-button", { attrs: { variant: "ghost", size: "sm" } }, "Copy HTML");
+  ht.addEventListener("click", () => opts.onExport && opts.onExport("html", digestToHtml(dig)));
+  const done = el("ae-button", { attrs: { variant: "primary", size: "sm" } }, "Mark as read");
+  done.addEventListener("click", () => opts.onDismiss && opts.onDismiss());
+  row.append(mk, ht, done);
+  return row;
+}
+
+/**
+ * Render the "while you were away" digest into `mountEl` (the modal body). Pure DOM,
+ * textContent-only (CSP-safe). opts.onDismiss closes the sheet; opts.onExport(format,
+ * content) receives the serialized Markdown/HTML for clipboard/download.
+ */
+export function renderDigest(mountEl, digest, opts = {}) {
+  clear(mountEl);
+  const dig = digest || {};
+  const projects = (Array.isArray(dig.projects) ? dig.projects.slice() : []).sort(digestCompare);
+  const root = el("div", { class: "hg-digest" });
+  root.append(digestWindowLine(dig));
+
+  if (dig.empty || projects.length === 0) {
+    root.append(
+      el(
+        "ae-empty-state",
+        { class: "hg-digest__empty", attrs: { compact: true } },
+        el("span", { attrs: { slot: "icon", "aria-hidden": "true" }, class: "hg-digest__empty-glyph" }, "✓"),
+        el("span", { attrs: { slot: "title" } }, "Nothing moved while you were away"),
+        "No decisions, reversals, or blocked agents since you last looked."
+      )
+    );
+    root.append(digestActions(dig, opts));
+    mountEl.append(root);
+    return;
+  }
+
+  const panelId = "hg-digest-panel";
+  const main = el("div", { class: "hg-digest__main" });
+  const panelMount = el("div", { class: "hg-digest__panelwrap hg-scroll", attrs: { id: panelId } });
+
+  if (projects.length === 1) {
+    // single project — no rail, just the pane (a wide modal would over-stretch the lines,
+    // so the pane caps its own readable width in CSS).
+    main.className = "hg-digest__main hg-digest__main--single";
+    panelMount.append(digestPane(projects[0]));
+    main.append(panelMount);
+  } else {
+    // many projects — a vertical rail picks which one is visible (one pane at a time),
+    // most-urgent first. select() owns the panel re-paint + roving-tabindex bookkeeping.
+    const state = { idx: 0, items: [] };
+    state.select = (i, focusIt) => {
+      state.idx = i;
+      clear(panelMount);
+      const pane = digestPane(projects[i]);
+      pane.setAttribute("role", "tabpanel");
+      pane.setAttribute("tabindex", "0");
+      pane.setAttribute("aria-labelledby", "hg-digest-tab-" + i);
+      panelMount.append(pane);
+      for (let j = 0; j < state.items.length; j++) {
+        const sel = j === i, it = state.items[j];
+        it.className = it._baseClass + (sel ? " is-selected" : "");
+        it.setAttribute("aria-selected", sel ? "true" : "false");
+        it.setAttribute("tabindex", sel ? "0" : "-1");
+      }
+      if (focusIt && state.items[i] && state.items[i].focus) state.items[i].focus();
+    };
+    const rail = digestRail(projects, state, panelId);
+    main.append(rail, panelMount);
+    state.select(0);
+  }
+
+  root.append(main);
+  root.append(digestActions(dig, opts));
+  mountEl.append(root);
+}
+
+// ---- client-side export serializers (the same digest dict -> Markdown / HTML) ----
+function escMd(s) {
+  return String(s == null ? "" : s).replace(/[\\`*_{}\[\]()#+\-.!|]/g, "\\$&").replace(/\s+/g, " ").trim();
+}
+function escHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+export function digestToMarkdown(dig) {
+  const d = dig || {};
+  const gap = d.now != null && d.since != null ? fmtGap(d.now - d.since) : "";
+  const out = [`# While you were away${gap ? ` (away ${gap})` : ""}`, ""];
+  for (const p of d.projects || []) {
+    const provs = (p.providers || []).length ? ` — ${p.providers.join(", ")}` : "";
+    out.push(`## ${escMd(p.project)}${provs}`);
+    for (const w of p.waiting || []) out.push(`- **WAITING** ${escMd(w.question)}`);
+    for (const m of p.milestones || [])
+      out.push(`- **MILESTONE** ${escMd(m.choice || m.topic)}${m.topic && m.choice ? ` — ${escMd(m.topic)}` : ""}`);
+    for (const r of p.reversals || [])
+      out.push(`- **REVERSAL** ${escMd(r.choice || r.topic)}${r.supersededSummary ? ` (was: ${escMd(r.supersededSummary)})` : ""}`);
+    for (const dec of (p.decisions || []).filter((x) => !x.highClass))
+      out.push(`- ${escMd(dec.choice || dec.topic)}`);
+    for (const s of p.newlyStale || []) out.push(`- **STALE** ${escMd(s.story || s.terminalId)} went quiet`);
+    const files = p.filesChanged || [];
+    if (files.length)
+      out.push(`- ${files.length} files changed: ${files.slice(0, 20).map((f) => escMd(baseName(f))).join(", ")}${files.length > 20 ? " …" : ""}`);
+    out.push("");
+  }
+  if (!(d.projects || []).length) out.push("_Nothing moved while you were away._");
+  return out.join("\n");
+}
+
+export function digestToHtml(dig) {
+  const d = dig || {};
+  const gap = d.now != null && d.since != null ? fmtGap(d.now - d.since) : "";
+  const parts = [`<h1>While you were away${gap ? ` (away ${escHtml(gap)})` : ""}</h1>`];
+  for (const p of d.projects || []) {
+    const provs = (p.providers || []).length ? ` — ${escHtml(p.providers.join(", "))}` : "";
+    parts.push(`<h2>${escHtml(p.project)}${provs}</h2>`, "<ul>");
+    for (const w of p.waiting || []) parts.push(`<li><strong>WAITING</strong> ${escHtml(w.question)}</li>`);
+    for (const m of p.milestones || [])
+      parts.push(`<li><strong>MILESTONE</strong> ${escHtml(m.choice || m.topic)}</li>`);
+    for (const r of p.reversals || [])
+      parts.push(`<li><strong>REVERSAL</strong> ${escHtml(r.choice || r.topic)}${r.supersededSummary ? ` (was: ${escHtml(r.supersededSummary)})` : ""}</li>`);
+    for (const dec of (p.decisions || []).filter((x) => !x.highClass))
+      parts.push(`<li>${escHtml(dec.choice || dec.topic)}</li>`);
+    for (const s of p.newlyStale || []) parts.push(`<li><strong>STALE</strong> ${escHtml(s.story || s.terminalId)} went quiet</li>`);
+    const files = p.filesChanged || [];
+    if (files.length) parts.push(`<li>${files.length} files changed</li>`);
+    parts.push("</ul>");
+  }
+  if (!(d.projects || []).length) parts.push("<p><em>Nothing moved while you were away.</em></p>");
+  return parts.join("\n");
 }
 
 // ==========================================================================

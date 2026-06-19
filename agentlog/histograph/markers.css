@@ -157,6 +157,12 @@
 .hg-statusdot--done {
   background: var(--ae-color-border-strong);
 }
+/* stuck (looping, no progress): amber + halo, deliberately NON-pulsing so it reads
+   distinctly from the blinking needs-you danger dot — a different kind of attention. */
+.hg-statusdot--stuck {
+  background: var(--ae-color-warning);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--ae-color-warning) 18%, transparent);
+}
 
 /* age-tone colors (reused by the lane's age column: "hg-card__fresh--<tone>") */
 .hg-card__fresh--muted {
@@ -192,6 +198,22 @@
 }
 .hg-trow__pill--idle {
   color: var(--ae-color-warning);
+}
+/* stuck/looping lane — amber, same micro-label recipe as the others. */
+.hg-trow__pill--stuck {
+  color: var(--ae-color-warning);
+}
+
+/* per-lane cost figure (#2): a tiny neutral tabular $ at the end of the lane line.
+   NEVER an alarm tone (cost is information, not a freshness/attention signal). */
+.hg-trow__cost {
+  flex: 0 0 auto;
+  margin-left: var(--ae-space-2, 0.5rem);
+  font-family: var(--hg-mono);
+  font-size: 0.625rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ae-color-fg-subtle);
+  white-space: nowrap;
 }
 
 /* ==========================================================================
@@ -569,4 +591,47 @@
   height: 6px;
   background: var(--ae-color-fg-subtle);
   border-radius: var(--ae-radius-full);
+}
+
+/* ==========================================================================
+   DIGEST FLAG TONES (#1) — the "while you were away" beats. The label leads
+   every row (text, never color alone) for AT/colorblind readers; the tint just
+   reinforces. Roles match the trail's color map: waiting=danger, milestone=info
+   (the azure decision beat), reversal=warning (the amber stitch), stale=warning,
+   decision=fg-muted (neutral).
+   ========================================================================== */
+.hg-digest__flag-label {
+  font-family: var(--hg-mono);
+  font-size: 0.5625rem;
+  font-weight: var(--ae-font-weight-bold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  /* small uppercase label sitting in the grid gutter — nudge it down so it
+     reads as aligned with the cap height of the larger first body line. */
+  padding-top: 0.2em;
+  white-space: nowrap;
+}
+.hg-digest__flag--waiting .hg-digest__flag-label {
+  color: var(--ae-color-danger);
+}
+.hg-digest__flag--milestone .hg-digest__flag-label {
+  color: var(--ae-color-info);
+}
+.hg-digest__flag--reversal .hg-digest__flag-label {
+  color: var(--ae-color-warning);
+}
+.hg-digest__flag--stale .hg-digest__flag-label {
+  color: var(--ae-color-warning);
+}
+.hg-digest__flag--decision .hg-digest__flag-label {
+  color: var(--ae-color-fg-muted);
+}
+.hg-digest__file {
+  font-family: var(--hg-mono);
+  font-size: 0.625rem;
+  color: var(--ae-color-fg-subtle);
+}
+.hg-digest__files-count {
+  font-size: 0.6875rem;
+  color: var(--ae-color-fg-muted);
 }

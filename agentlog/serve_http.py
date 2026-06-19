@@ -35,12 +35,13 @@ import hashlib
 import threading
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse, unquote
+from urllib.parse import urlparse, unquote, parse_qs
 
 import agentlog_read as R
 import serve_state as S
 import serve_epics as E
 import serve_ledger as Lg
+import serve_digest as D
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 HISTOGRAPH_ROOT = os.path.join(_HERE, "histograph")
@@ -198,6 +199,43 @@ def _epics_payload(now_epoch=None):
         R.A.log("serve /api/epics degraded to empty: %s"
                 % traceback.format_exc().replace("\n", " | "))
         return {"epics": []}
+
+
+def _parse_since(query):
+    """Extract (after_epoch, project) from a /api/digest query string. `since` is a
+    float epoch (the client's last-seen baseline); absent/unparseable defaults to the
+    last 24h so the route always returns a sensible window rather than erroring."""
+    qs = parse_qs(query or "")
+    after = None
+    raw = (qs.get("since") or [None])[0]
+    if raw is not None:
+        try:
+            after = float(raw)
+        except (TypeError, ValueError):
+            after = None
+    if after is None:
+        after = time.time() - S.LIVE_WINDOW_SECS
+    project = (qs.get("project") or [None])[0]
+    return after, (project or None)
+
+
+def _digest_payload(after_epoch, project=None):
+    """The GET /api/digest envelope: what moved since `after_epoch`. Rides the same
+    already-parsed cached Ledger as /api/state (no extra disk read on the poll path) and
+    delegates to serve_digest.build_digest. Fail-open: degrades to an empty digest shape
+    (NOT a 500) so a derivation bug can never blank the board's away-summary."""
+    try:
+        led = _cached_ledger(A_dir())
+        return D.build_digest(led, after_epoch, now_epoch=time.time(), project=project)
+    except Exception:
+        R.A.log("serve /api/digest degraded to empty: %s"
+                % traceback.format_exc().replace("\n", " | "))
+        now = time.time()
+        return {"since": after_epoch, "now": now,
+                "generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
+                "empty": True, "projects": [],
+                "totals": {k: 0 for k in ("decisions", "milestones", "reversals",
+                                          "newlyStale", "waiting", "filesChanged")}}
 
 
 def _ledger_payload():
@@ -388,6 +426,11 @@ class HistographHandler(BaseHTTPRequestHandler):
             return self._send_state()
         if path == "/api/epics":
             return self._send_json(_epics_payload())
+        if path == "/api/digest":
+            # one-shot, event-driven fetch (window-focus-after-idle) — NOT a polled body,
+            # so it takes the plain JSON path (no ETag/304) with Cache-Control:no-store.
+            after, project = _parse_since(parsed.query)
+            return self._send_json(_digest_payload(after, project))
         if path == "/api/ledger":
             return self._send_json(_ledger_payload())
         if path == "/api/settings":

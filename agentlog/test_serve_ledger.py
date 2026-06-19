@@ -250,6 +250,26 @@ class TestPrefs(_Base):
         L.save_prefs({"zoom": True})
         self.assertNotIn("zoom", L.load_prefs())
 
+    def test_last_seen_round_trip(self):
+        # the digest cursor: "Mark as read" persists it here so the recap stays cleared
+        # across launches (the desktop's ephemeral-port origin wipes localStorage).
+        L.save_prefs({"lastSeen": 1750000000.5})
+        self.assertEqual(L.load_prefs()["lastSeen"], 1750000000.5)
+
+    def test_last_seen_merges_with_other_prefs(self):
+        # a lastSeen write must not clobber the saved theme, and vice-versa — both live in
+        # the same ui prefs blob, written from different controllers.
+        L.save_prefs({"theme": "editorial", "variant": "dark"})
+        L.save_prefs({"lastSeen": 1750000123})
+        p = L.load_prefs()
+        self.assertEqual(p["theme"], "editorial")
+        self.assertEqual(p["lastSeen"], 1750000123)
+
+    def test_last_seen_bool_rejected(self):
+        # True is an int subclass — must not slip through as an epoch cursor
+        L.save_prefs({"lastSeen": True})
+        self.assertNotIn("lastSeen", L.load_prefs())
+
 
 class TestDescribeActive(_Base):
     def test_describe_active_reflects_override_and_source(self):

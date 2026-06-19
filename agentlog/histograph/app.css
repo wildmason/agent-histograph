@@ -118,6 +118,14 @@ body {
   color: var(--ae-color-fg-muted);
 }
 
+/* the titlebar's right-hand action cluster — digest + settings sit adjacent (the bar is
+   space-between, so this group anchors to the right while the brand stays left). */
+.hg-titlebar__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ae-space-1);
+}
+
 .hg-brand__mark {
   color: var(--ae-color-info);
   font-weight: var(--ae-font-weight-bold);
@@ -237,6 +245,19 @@ body {
 }
 .hg-terms__stat--run {
   color: var(--ae-color-success);
+}
+.hg-terms__stat--stuck {
+  color: var(--ae-color-warning);
+}
+/* fleet-total cost (#2): neutral + tabular — information, not an alarm. The trailing
+   "*" flag marks the figure as partial when some lanes are unpriced/unavailable. */
+.hg-terms__stat--cost {
+  color: var(--ae-color-fg-muted);
+  font-feature-settings: var(--ae-font-feature-settings-numeric);
+}
+.hg-terms__cost-flag {
+  color: var(--ae-color-fg-subtle);
+  margin-left: 1px;
 }
 .hg-terms__time {
   margin-left: auto;
@@ -581,6 +602,17 @@ body {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+/* per-story cost (#2): a faint figure under the hero title. Neutral, tabular. */
+.hg-orient__cost {
+  margin-top: var(--ae-space-1);
+  font-family: var(--hg-mono);
+  font-size: var(--ae-font-size-xs);
+  font-feature-settings: var(--ae-font-feature-settings-numeric);
+  color: var(--ae-color-fg-subtle);
+}
+.hg-orient__cost-figure {
+  color: var(--ae-color-fg-muted);
 }
 .hg-orient__now {
   display: flex;
@@ -974,4 +1006,206 @@ html.hg-anim-paused .hg-orient__now--working .hg-orient__now-dot::after,
 html.hg-anim-paused .hg-statusdot--needs-you,
 html.hg-anim-paused .hg-roadmap__seg--active {
   animation-play-state: paused !important;
+}
+
+/* ==========================================================================
+   DIGEST (#1) — the "while you were away" modal sheet. A pinned window line on
+   top, a pinned action row on the bottom, and a two-pane middle (a vertical
+   project rail acting as tabs + one project's pane at a time). The window line
+   and actions stay put; only the pane scrolls.
+   ========================================================================== */
+.hg-digest-btn {
+  font-size: var(--ae-font-size-md);
+  line-height: 1;
+}
+.hg-digest {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ae-space-3);
+  /* fill the modal body so the rail/pane can own their own scroll regions. */
+  max-height: min(74vh, 40rem);
+  min-height: 0;
+}
+.hg-digest__window {
+  flex: 0 0 auto;
+  font-family: var(--hg-mono);
+  font-size: var(--ae-font-size-xs);
+  color: var(--ae-color-fg-muted);
+}
+.hg-digest__window-gap {
+  font-weight: var(--ae-font-weight-bold);
+  color: var(--ae-color-fg);
+}
+
+/* --- two-pane middle: rail + scrolling pane ------------------------------ */
+.hg-digest__main {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: var(--ae-space-4);
+  border-top: 1px solid var(--ae-color-border-subtle);
+  padding-top: var(--ae-space-3);
+}
+.hg-digest__rail {
+  flex: 0 0 13rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: var(--ae-space-2);
+  border-right: 1px solid var(--ae-color-border-subtle);
+}
+.hg-digest__rail-item {
+  display: flex;
+  align-items: center;
+  gap: var(--ae-space-2);
+  width: 100%;
+  padding: var(--ae-space-2) var(--ae-space-2);
+  border: 0;
+  border-radius: var(--ae-radius-md);
+  background: transparent;
+  color: var(--ae-color-fg-muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.hg-digest__rail-item:hover {
+  background: var(--ae-color-bg-subtle);
+  color: var(--ae-color-fg);
+}
+.hg-digest__rail-item.is-selected {
+  background: var(--ae-color-bg-subtle);
+  color: var(--ae-color-fg);
+  box-shadow: inset 2px 0 0 var(--ae-color-accent);
+}
+.hg-digest__rail-dot {
+  flex: 0 0 auto;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--ae-color-fg-subtle);
+}
+.hg-digest__rail-item--waiting .hg-digest__rail-dot {
+  background: var(--ae-color-danger);
+}
+.hg-digest__rail-item--warning .hg-digest__rail-dot {
+  background: var(--ae-color-warning);
+}
+.hg-digest__rail-item--milestone .hg-digest__rail-dot {
+  background: var(--ae-color-info);
+}
+.hg-digest__rail-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--ae-font-size-sm);
+}
+.hg-digest__rail-item.is-selected .hg-digest__rail-name {
+  font-weight: var(--ae-font-weight-bold);
+}
+.hg-digest__rail-count {
+  flex: 0 0 auto;
+  font-family: var(--hg-mono);
+  font-size: var(--ae-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--ae-color-fg-subtle);
+}
+
+.hg-digest__panelwrap {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-y: auto;
+  /* push the scrollbar out to the modal's right inner edge (cancel the body's
+     right padding) while keeping a comfortable gutter between the text and the
+     scrollbar (the padding-right). The thumb itself is .hg-scroll-styled. */
+  margin-right: calc(-1 * var(--ae-modal-padding, var(--ae-space-5)));
+  padding-right: var(--ae-modal-padding, var(--ae-space-5));
+}
+/* Chromium makes the overflow scroller keyboard-focusable (so arrow keys scroll the
+   recap). When it takes focus, use the design system's toned inset ring — matching the
+   rest of the board — instead of the heavy default UA outline. */
+.hg-digest__panelwrap:focus-visible {
+  outline: var(--ae-focus-ring-width) var(--ae-focus-ring-style) var(--ae-color-focus-ring);
+  outline-offset: calc(-1 * var(--ae-focus-ring-width));
+  border-radius: var(--ae-radius-md);
+}
+.hg-digest__pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ae-space-2);
+}
+.hg-digest__main--single .hg-digest__pane {
+  /* a lone project shouldn't stretch its lines across the whole wide modal —
+     cap the text, not the scroll panel (so the scrollbar still sits at the edge). */
+  max-width: 46rem;
+}
+.hg-digest__pane-head {
+  font-family: var(--hg-mono);
+  font-size: var(--ae-font-size-xs);
+  letter-spacing: var(--hg-tracking-eyebrow);
+  text-transform: uppercase;
+  margin-bottom: var(--ae-space-1);
+}
+.hg-digest__project {
+  font-weight: var(--ae-font-weight-bold);
+  color: var(--ae-color-fg);
+}
+.hg-digest__providers {
+  color: var(--ae-color-fg-subtle);
+}
+
+/* --- one beat: fixed label gutter + stacked body ------------------------- */
+.hg-digest__flag {
+  display: grid;
+  grid-template-columns: 4.75rem 1fr;
+  column-gap: var(--ae-space-3);
+  align-items: start;
+  font-size: var(--ae-font-size-sm);
+  padding: var(--ae-space-1) 0;
+}
+.hg-digest__flag-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.hg-digest__flag-text {
+  color: var(--ae-color-fg);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.hg-digest__flag-sub {
+  color: var(--ae-color-fg-subtle);
+  font-size: var(--ae-font-size-xs);
+  overflow-wrap: anywhere;
+}
+.hg-digest__more {
+  font-size: var(--ae-font-size-xs);
+  color: var(--ae-color-fg-subtle);
+  font-style: italic;
+  padding-left: calc(4.75rem + var(--ae-space-3));
+}
+.hg-digest__files {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ae-space-1);
+  margin-top: var(--ae-space-1);
+  padding-top: var(--ae-space-2);
+  border-top: 1px solid var(--ae-color-border-subtle);
+}
+.hg-digest__files-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ae-space-1) var(--ae-space-3);
+}
+.hg-digest__actions {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--ae-space-2);
+  padding-top: var(--ae-space-3);
+  border-top: 1px solid var(--ae-color-border-subtle);
 }
