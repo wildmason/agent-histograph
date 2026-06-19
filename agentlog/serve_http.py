@@ -168,6 +168,20 @@ def _state_payload(now_epoch=None):
         state = S.build_state(led, epics, now_epoch=now_epoch,
                               focus_terminal_id=focus_tid, dismissed=dismissed,
                               annotations=annotations)
+        # Make the focus STICKY. build_state only auto-selects the most-recently-active
+        # lane when there is no valid persisted pin; persist that auto-pick so the active
+        # terminal stops jumping to whichever lane worked most recently on the next poll
+        # (the reported "focus changes on its own" with two lanes both being worked — the
+        # default focus was re-derived every poll and ping-ponged between them). A held
+        # pin selects itself (chosen == focus_tid) and writes nothing, so there is no
+        # churn; when the focused lane dies, build_state falls to the next newest and this
+        # persists THAT, so focus moves once and then stays put. Fail-open.
+        try:
+            chosen = (state.get("focus") or {}).get("terminalId")
+            if chosen and chosen != focus_tid:
+                E.save_focus(chosen)
+        except Exception:
+            pass
         # which ledger dir produced this state (+ session count / source). The renderer's
         # empty-state names it and flags a likely misconfiguration ("reading X — no data;
         # capture may be writing elsewhere"), turning a silent blank board into a self-

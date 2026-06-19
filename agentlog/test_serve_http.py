@@ -209,6 +209,52 @@ class TestFocusPost(_Server):
         self.assertEqual(code, 413)
         self.assertIsNone(E.load_focus())   # nothing persisted from the rejected write
 
+    def _iso_ago(self, secs):
+        import datetime
+        return (datetime.datetime.now().astimezone()
+                - datetime.timedelta(seconds=secs)).isoformat()
+
+    def _write_lanes(self, cps, acts):
+        with open(os.path.join(self.tmp, "checkpoints.jsonl"), "w", encoding="utf-8") as f:
+            for c in cps:
+                f.write(json.dumps(c) + "\n")
+        with open(os.path.join(self.tmp, "activity.jsonl"), "w", encoding="utf-8") as f:
+            for a in acts:
+                f.write(json.dumps(a) + "\n")
+
+    def test_focus_is_sticky_and_does_not_follow_a_newer_lane(self):
+        # Regression (Matt: "the active terminal changes without my intervention" with two
+        # lanes both being worked). Without a pin the default focus was re-derived as the
+        # most-recently-active lane EVERY poll, so working in the other lane stole focus.
+        # Once auto-picked it must persist and stay put until the user picks another.
+        import serve_state as S
+        tA, tB = S.terminal_id("laneA"), S.terminal_id("laneB")
+        # A worked 120s ago, B 60s ago -> B is the most-recently-active lane.
+        self._write_lanes([_cp("laneA", self._iso_ago(120)), _cp("laneB", self._iso_ago(60))],
+                          [_act("laneA", self._iso_ago(120)), _act("laneB", self._iso_ago(60))])
+        focus1 = json.loads(self._get("/api/state")[2])["focus"]["terminalId"]
+        self.assertEqual(focus1, tB, "first poll auto-picks the most-recently-active lane")
+        self.assertEqual(E.load_focus(), tB, "the auto-pick is persisted (sticky)")
+        # A now does fresh work and becomes the most-recently-active lane.
+        self._write_lanes([_cp("laneA", self._iso_ago(120)), _cp("laneB", self._iso_ago(60))],
+                          [_act("laneA", self._iso_ago(120)), _act("laneB", self._iso_ago(60)),
+                           _act("laneA", self._iso_ago(1))])
+        focus2 = json.loads(self._get("/api/state")[2])["focus"]["terminalId"]
+        self.assertEqual(focus2, tB, "focus stays on B; it must NOT jump to the newer A")
+
+    def test_explicit_focus_overrides_stickiness(self):
+        # the user can still switch: a POST /api/focus wins over the persisted auto-pick
+        # and is itself honored on the next poll.
+        import serve_state as S
+        tA, tB = S.terminal_id("laneA"), S.terminal_id("laneB")
+        self._write_lanes([_cp("laneA", self._iso_ago(120)), _cp("laneB", self._iso_ago(60))],
+                          [_act("laneA", self._iso_ago(120)), _act("laneB", self._iso_ago(60))])
+        self._get("/api/state")                       # auto-picks + persists B
+        self._post("/api/focus", {"terminalId": tA})  # user clicks A
+        focus = json.loads(self._get("/api/state")[2])["focus"]["terminalId"]
+        self.assertEqual(focus, tA, "an explicit click overrides the sticky auto-pick")
+        self.assertEqual(E.load_focus(), tA)
+
     def test_cross_site_origin_is_forbidden(self):
         # a cross-site Origin (a malicious tab fetch()-ing 127.0.0.1) must be rejected
         # 403 — /api/focus is an unauthenticated state-mutating endpoint on a localhost
